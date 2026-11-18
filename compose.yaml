@@ -18,5 +18,28 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # Inside the compose network the database is reached as "db".
+      DATABASE_URL: postgres://ke:ke@db:5432/ke
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Migrations are applied before the server starts.
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+      exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000"
+    healthcheck:
+      # /admin/login/ exists today; #12 adds /api/v1/health.
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/admin/login/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
 volumes:
   db-data:

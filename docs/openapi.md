@@ -9,7 +9,7 @@ The API describes itself with drf-spectacular.
 
 ## What the schema says
 
-- **Sign-in.** `BearerAuthentication` is an HTTP bearer scheme (`bearerAuth`). Every view that uses it shows a lock; open views (`authentication_classes([])`) show none. Use "Authorize" with a dev token (`docs/auth.md`), then "Try it out".
+- **Sign-in.** `BearerAuthentication` is an HTTP bearer scheme (`bearerAuth`). Every view that uses it shows a lock; open views (`authentication_classes([])`) show none. Use "Authorize" with a dev token (`docs/auth.md`), then "Try it out". With `AUTH_MODE=entra` there is also an `oauth2` scheme (Microsoft sign-in, see `docs/auth.md`).
 - **Errors.** One shared `Error` component (`code`, `message`, `details`), and the 401, 403, 404 and 422 responses on every operation. Both live in `apps/core/api/schema.py` (`ApiSchema`); a view does not repeat them.
 - **Success bodies.** A function view declares its body with `@extend_schema(responses=Serializer)`. A generic view gets it from `serializer_class`.
 

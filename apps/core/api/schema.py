@@ -5,6 +5,7 @@ Both are added here, in one place, so no view repeats them. See docs/openapi.md.
 
 from typing import Any
 
+from django.conf import settings
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from drf_spectacular.openapi import AutoSchema
 from drf_spectacular.utils import OpenApiResponse
@@ -28,19 +29,59 @@ class ErrorSerializer(serializers.Serializer):  # type: ignore[type-arg]
     )
 
 
+def entra_authorize_urls() -> tuple[str, str]:
+    """The tenant's v2 authorize and token URLs."""
+    base = f"https://login.microsoftonline.com/{settings.ENTRA_TENANT_ID}/oauth2/v2.0"
+    return f"{base}/authorize", f"{base}/token"
+
+
+def entra_scope() -> str:
+    return f"api://{settings.ENTRA_CLIENT_ID}/{settings.ENTRA_REQUIRED_SCOPE}"
+
+
 class BearerAuthenticationScheme(OpenApiAuthenticationExtension):  # type: ignore[no-untyped-call]
-    """Every view that uses ``BearerAuthentication`` is closed by a bearer token."""
+    """Every view that uses ``BearerAuthentication`` is closed by a bearer token.
+
+    With ``AUTH_MODE=entra`` the same views can also be opened with Microsoft's
+    sign-in (OAuth2 authorization code), as an alternative to the pasted token.
+    With ``AUTH_MODE=dev`` the bearer scheme is the only one.
+    """
 
     target_class = "apps.identity.authentication.BearerAuthentication"
-    name = "bearerAuth"
 
-    def get_security_definition(self, auto_schema: Any) -> dict[str, str]:
-        return {
+    @property
+    def name(self) -> Any:  # type: ignore[override]
+        if settings.AUTH_MODE == "entra":
+            return ["bearerAuth", "oauth2"]
+        return "bearerAuth"
+
+    def get_security_requirement(self, auto_schema: Any) -> Any:
+        if settings.AUTH_MODE == "entra":
+            return [{"bearerAuth": []}, {"oauth2": [entra_scope()]}]
+        return {"bearerAuth": []}
+
+    def get_security_definition(self, auto_schema: Any) -> Any:
+        bearer = {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
             "description": "An Entra ID access token (a dev token in local development).",
         }
+        if settings.AUTH_MODE != "entra":
+            return bearer
+        authorize_url, token_url = entra_authorize_urls()
+        oauth2 = {
+            "type": "oauth2",
+            "description": "Sign in with Microsoft (authorization code with PKCE).",
+            "flows": {
+                "authorizationCode": {
+                    "authorizationUrl": authorize_url,
+                    "tokenUrl": token_url,
+                    "scopes": {entra_scope(): "Act as the signed-in person."},
+                }
+            },
+        }
+        return [bearer, oauth2]
 
 
 class ApiSchema(AutoSchema):

@@ -11,6 +11,8 @@ from pathlib import Path
 
 import environ
 
+from apps.core.logging import build_logging_config, configure_structlog
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -66,6 +68,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "django_structlog",
     "apps.core",
     "apps.identity",
 ]
@@ -75,6 +78,8 @@ INSTALLED_APPS = [
 # ---------------------------------------------------------------------------
 
 MIDDLEWARE = [
+    "apps.core.middleware.RequestIdMiddleware",
+    "apps.core.middleware.RequestLogMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -147,12 +152,10 @@ ENTRA_REQUIRED_SCOPE = env.str("ENTRA_REQUIRED_SCOPE", default="access_as_user")
 LOG_LEVEL = env.str("LOG_LEVEL", default="INFO")
 LOG_FORMAT = env.str("LOG_FORMAT", default="console")  # 'json' or 'console'
 
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "root": {"handlers": ["console"], "level": LOG_LEVEL},
-}
+# RequestIdMiddleware has already replaced an unfit X-Request-ID, so trust what is left.
+DJANGO_STRUCTLOG_TRUST_UPSTREAM_REQUEST_ID = True
+configure_structlog()
+LOGGING = build_logging_config(LOG_LEVEL, LOG_FORMAT)
 
 # ---------------------------------------------------------------------------
 # Security

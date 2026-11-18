@@ -1,0 +1,22 @@
+# One shared local PostgreSQL for every git worktree (same project name).
+name: knowledge-extractor-api
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ke
+      POSTGRES_PASSWORD: ke
+      POSTGRES_DB: ke
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ke -d ke"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:

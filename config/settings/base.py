@@ -82,14 +82,16 @@ MIDDLEWARE = [
 
 # ---------------------------------------------------------------------------
 # Database
-# Until the PostgreSQL PBI, the default is the generated SQLite file.
+# PostgreSQL from compose.yaml by default (see .env.example).
 # ---------------------------------------------------------------------------
 
 DATABASES = {
     'default': env.db(
-        'DATABASE_URL', default=f'sqlite:///{BASE_DIR / "db.sqlite3"}'
+        'DATABASE_URL',
+        default=f'postgres://ke:ke@localhost:{env.int("DB_PORT", default=5432)}/ke',
     ),
 }
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_PASSWORD_VALIDATORS = [

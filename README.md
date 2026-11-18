@@ -19,3 +19,22 @@ uv run python manage.py runserver
 ```
 
 The development server answers on http://127.0.0.1:8000/. Do not run `migrate` yet: the custom user model has to be in the first migration.
+
+## Database
+
+PostgreSQL runs through Docker Compose. The project name is fixed, so every git worktree shares one server.
+
+```sh
+docker compose up -d db      # start (waits for the health check with --wait)
+docker compose stop db       # stop, data is kept
+docker compose down          # remove the container, data is kept in the volume
+docker compose down -v       # reset: also deletes the data
+```
+
+Credentials are local only: user `ke`, password `ke`, database `ke`. The host port comes from `DB_PORT` (default 5432). `DATABASE_URL` defaults to this server; see `.env.example`.
+
+Check the connection:
+
+```sh
+uv run python manage.py shell -c "from django.db import connection; connection.ensure_connection()"
+```

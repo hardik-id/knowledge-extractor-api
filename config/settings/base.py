@@ -215,7 +215,9 @@ LOGGING = build_logging_config(LOG_LEVEL, LOG_FORMAT)
 # ---------------------------------------------------------------------------
 
 # Live updates: channel layer and the lifetime of a socket ticket.
-REDIS_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+# REDIS_PORT is the host port of the compose Redis; REDIS_URL wins when set.
+REDIS_PORT = env.int("REDIS_PORT", default=6379)
+REDIS_URL = env.str("REDIS_URL", default=f"redis://localhost:{REDIS_PORT}/0")
 WS_TICKET_TTL_SECONDS = env.int("WS_TICKET_TTL_SECONDS", default=30)
 
 # Documents: where the list and the content come from.

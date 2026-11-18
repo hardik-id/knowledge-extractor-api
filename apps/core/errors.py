@@ -22,6 +22,7 @@ ERRORS: dict[str, ErrorCode] = {
     "conflict": ErrorCode(409, "The request conflicts with the current state."),
     "validation_error": ErrorCode(422, "The request is not valid."),
     "server_error": ErrorCode(500, "Something went wrong."),
+    "not_ready": ErrorCode(503, "The service is not ready."),
 }
 
 

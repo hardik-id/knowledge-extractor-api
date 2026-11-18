@@ -6,10 +6,12 @@ from django.urls import path
 from rest_framework import exceptions, serializers
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import api_view, authentication_classes
+from rest_framework.generics import ListAPIView
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ApiError
+from apps.core.tests.models import Note
 from config.urls import handler404, handler500
 from config.urls import urlpatterns as real_patterns
 
@@ -74,7 +76,21 @@ def crash(request: Request) -> Response:
     raise RuntimeError("internal secret detail")
 
 
+class NoteSerializer(serializers.ModelSerializer):  # type: ignore[type-arg]
+    class Meta:
+        model = Note
+        fields = ["id", "text", "created_at", "updated_at"]
+
+
+class NoteList(ListAPIView):  # type: ignore[type-arg]
+    """A list endpoint on the default pagination."""
+
+    queryset = Note.objects.all()
+    serializer_class = NoteSerializer
+
+
 urlpatterns = [
+    path("api/test/notes", NoteList.as_view()),
     path("hello", hello),
     path("boom", boom),
     path("api/test/validate", validate),

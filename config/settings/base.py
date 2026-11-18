@@ -132,6 +132,7 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "EXCEPTION_HANDLER": "apps.core.api.exception_handler.exception_handler",
+    "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.DefaultPagination",
 }
 
 API_DOCS_ENABLED = env.bool("API_DOCS_ENABLED", default=True)

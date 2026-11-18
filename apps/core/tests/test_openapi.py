@@ -69,3 +69,42 @@ def test_docs_are_404_when_disabled(client: Client) -> None:
     finally:
         importlib.reload(root_urls)
         clear_url_caches()
+
+
+ENTRA = {
+    "AUTH_MODE": "entra",
+    "ENTRA_TENANT_ID": "tenant-1",
+    "ENTRA_CLIENT_ID": "client-1",
+}
+
+
+def test_dev_mode_has_no_oauth2_scheme(schema: dict[str, Any]) -> None:
+    assert list(schema["components"]["securitySchemes"]) == ["bearerAuth"]
+    assert schema["paths"]["/me"]["get"]["security"] == [{"bearerAuth": []}]
+
+
+def test_entra_mode_adds_the_authorization_code_scheme(client: Client) -> None:
+    with override_settings(**ENTRA):
+        response = client.get(
+            "/api/schema", HTTP_ACCEPT="application/vnd.oai.openapi+json"
+        )
+    schema = response.json()
+    flow = schema["components"]["securitySchemes"]["oauth2"]["flows"][
+        "authorizationCode"
+    ]
+    base = "https://login.microsoftonline.com/tenant-1/oauth2/v2.0"
+    assert flow["authorizationUrl"] == f"{base}/authorize"
+    assert flow["tokenUrl"] == f"{base}/token"
+    assert list(flow["scopes"]) == ["api://client-1/access_as_user"]
+    assert "bearerAuth" in schema["components"]["securitySchemes"]
+    assert schema["paths"]["/me"]["get"]["security"] == [
+        {"bearerAuth": []},
+        {"oauth2": ["api://client-1/access_as_user"]},
+    ]
+
+
+def test_oauth2_redirect_page_is_served_by_this_app(client: Client) -> None:
+    response = client.get("/api/oauth2-redirect.html?code=abc")
+    assert response.status_code == 302
+    assert "oauth2-redirect.html" in response["Location"]
+    assert "code=abc" in response["Location"]

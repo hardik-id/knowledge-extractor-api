@@ -18,7 +18,11 @@ Including another URLconf
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerSplitView
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerOauthRedirectView,
+    SpectacularSwaggerSplitView,
+)
 
 from apps.core.api import views as core_views
 
@@ -33,6 +37,12 @@ urlpatterns = [
                 "api/docs",
                 SpectacularSwaggerSplitView.as_view(url_name="schema"),
                 name="docs",
+            ),
+            # Where Microsoft sends the browser back to; Swagger UI reads the code here.
+            path(
+                "api/oauth2-redirect.html",
+                SpectacularSwaggerOauthRedirectView.as_view(),
+                name="docs-oauth2-redirect",
             ),
         ]
         if settings.API_DOCS_ENABLED

@@ -93,6 +93,26 @@ It cannot be switched on in production:
 - With `AUTH_MODE=entra` a dev token is refused (401): the dev issuer is not consulted at all.
 - `mint_dev_token` refuses to run unless `AUTH_MODE=dev`.
 
+## Sign-in from Swagger UI
+
+With `AUTH_MODE=entra`, "Authorize" in Swagger UI (`/api/docs`) offers Microsoft sign-in next to the pasted bearer token. It is an OAuth2 authorization-code flow with Proof Key for Code Exchange (PKCE) and no client secret, built from `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID`:
+
+- Authorize URL `https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/authorize`, token URL `.../oauth2/v2.0/token`.
+- Scope `api://<client-id>/<ENTRA_REQUIRED_SCOPE>` (`api://<client-id>/access_as_user` by default).
+- Swagger UI uses the app registration's client id itself.
+- The redirect page `/api/oauth2-redirect.html` is served by this app.
+
+With `AUTH_MODE=dev` the bearer scheme is the only one and the schema has no OAuth2 scheme.
+
+Add the redirect URI to the app registration, under Authentication, on the **single-page application** platform (not "Web": a Web redirect expects a client secret and the token request fails). Add one entry per place the API is served:
+
+```
+http://localhost:8000/api/oauth2-redirect.html
+https://<api-host>/api/oauth2-redirect.html
+```
+
+`docs/openapi.yaml` is generated with `AUTH_MODE=dev`, so the committed file has no OAuth2 scheme; the one served in entra mode has it.
+
 ## The app registration
 
 One registration serves the UI and the API; steps are in [auth-api.md](https://github.com/hardik-id/knowledge-extractor/blob/main/docs/auth-api.md), section 1. What this API depends on:

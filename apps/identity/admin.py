@@ -5,8 +5,9 @@ from .models import User
 
 
 @admin.register(User)
-class IdentityUserAdmin(UserAdmin):
-    fieldsets = UserAdmin.fieldsets + (
+class IdentityUserAdmin(UserAdmin):  # type: ignore[type-arg]  # generic only for stubs
+    fieldsets = (
+        *(UserAdmin.fieldsets or ()),
         ("Entra ID", {"fields": ("oid", "tid", "name", "preferred_username")}),
     )
     list_display = ("username", "name", "preferred_username", "oid", "tid", "is_staff")

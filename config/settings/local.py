@@ -7,3 +7,6 @@ SECRET_KEY = env.str("DJANGO_SECRET_KEY", default="django-insecure-local-throwaw
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 AUTH_MODE = env.str("AUTH_MODE", default="dev")
+
+# A UI dev server may run on any port.
+CORS_ALLOWED_ORIGIN_REGEXES = [r"^http://localhost:\d+$"]

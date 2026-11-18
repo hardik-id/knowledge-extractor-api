@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -10,5 +12,5 @@ def api_client() -> APIClient:
 
 
 @pytest.fixture
-def user(db):
+def user(db: None) -> Any:
     return UserFactory()

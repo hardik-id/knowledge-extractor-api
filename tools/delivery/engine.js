@@ -196,10 +196,10 @@ const preparePrompt = numbers => `Prepare a delivery run for the GitHub reposito
 1. Find the main checkout. ${input.repoDir ? `It should be ${input.repoDir}.` : `If your current directory is inside a git checkout whose \`origin\` is that repository, it is that checkout's top level (\`git rev-parse --show-toplevel\`). Otherwise look for \`./knowledge-extractor-api\` under your current directory.`} Confirm with \`git -C <dir> remote get-url origin\`. If you are in a linked worktree, use the main one (the first line of \`git worktree list\`). Report its absolute path.
 2. \`git -C <dir> fetch origin --prune\`. The checkout must be on \`main\` and \`git -C <dir> status --porcelain\` must be empty. If it is clean and behind, fast-forward it: \`git -C <dir> merge --ff-only origin/main\`. If it has changes or is on another branch, leave it alone and report that as a problem.
 3. Tools: \`uv --version\`, \`docker info\`, \`gh auth status\`, \`make --version\`. Report each one that fails as a problem.
-4. If \`<dir>/compose.yaml\` exists and has a \`db\` service: \`docker compose -f <dir>/compose.yaml up -d db\`, then wait until it reports healthy. This server is shared by every agent. A server that does not become healthy is a problem.
+4. If \`<dir>/compose.yaml\` exists and has a \`db\` service: \`docker compose -f <dir>/compose.yaml up -d db\`, then wait until it reports healthy. This server is shared by every agent. A server that does not become healthy is a problem. If there is no \`compose.yaml\` yet, skip this step: that is normal early in the project and is not a problem.
 5. For each of these issues, report its state and its newest pull request: ${numbers.join(', ')}. Use \`gh issue view <n> -R ${REPO} --json state\` and \`gh pr list -R ${REPO} --state all --search "PBI-<3-digit number> in:title" --json number,state,title\` (the title starts with "PBI-" and the number padded to three digits, for example PBI-007).
 
-\`ready\` is true when the checkout is clean, on main and up to date, every tool works, and the database (when there is one) is healthy.`
+\`ready\` is true when the checkout is clean, on main and up to date and every tool works. Only a \`db\` service that exists and does not become healthy makes it false; a missing \`compose.yaml\` does not. \`problems\` lists only what stops the run. Leave it empty when nothing does: no notes, no confirmations that things work.`
 
 const implementPrompt = (p, c, state) => `Implement ${tag(p)} ("${p.title}") for the GitHub repository ${REPO}. It is issue #${p.n}.
 ${rules()}

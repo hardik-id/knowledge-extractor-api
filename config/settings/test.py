@@ -8,6 +8,10 @@ SECRET_KEY = "django-insecure-test-only-key"
 DEBUG = False
 ALLOWED_HOSTS = ["testserver", "localhost"]
 AUTH_MODE = "dev"
+INSTALLED_APPS = [
+    *INSTALLED_APPS,
+    "apps.core.tests",
+]  # a small model for shared components
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # The test database name is unique per checkout, so parallel git worktrees never

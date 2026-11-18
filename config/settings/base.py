@@ -10,6 +10,8 @@ Sections are labelled so that later changes touch one section each.
 from pathlib import Path
 
 import environ
+from corsheaders.defaults import default_headers
+from django.utils.csp import CSP
 
 from apps.core.logging import build_logging_config, configure_structlog
 
@@ -68,6 +70,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "corsheaders",
     "django_structlog",
     "apps.core",
     "apps.identity",
@@ -80,6 +83,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "apps.core.middleware.RequestIdMiddleware",
     "apps.core.middleware.RequestLogMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -88,6 +92,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
 ]
 
 # ---------------------------------------------------------------------------
@@ -162,6 +167,29 @@ LOGGING = build_logging_config(LOG_LEVEL, LOG_FORMAT)
 # Security
 # ---------------------------------------------------------------------------
 
+# CORS: only the UI's origins, never '*', no cookies. See docs/security.md.
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"]
 )
+if "*" in CORS_ALLOWED_ORIGINS:
+    raise environ.ImproperlyConfigured("CORS_ALLOWED_ORIGINS must not contain '*'.")
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_HEADERS = [*default_headers, "x-request-id"]
+CORS_EXPOSE_HEADERS = ["ETag", "X-Request-ID"]
+
+# Security headers on every response (HSTS is set in production.py).
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+# Content-Security-Policy for the pages this service renders itself (admin,
+# later Swagger UI). Enforced, not report-only.
+SECURE_CSP = {
+    "default-src": [CSP.SELF],
+    "img-src": [CSP.SELF, "data:"],
+    "object-src": [CSP.NONE],
+    "base-uri": [CSP.SELF],
+    "form-action": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+}

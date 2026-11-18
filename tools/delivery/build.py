@@ -16,12 +16,27 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE.parent.parent / ".claude" / "workflows"
 
 PHASES = [
-    {"title": "Prepare", "detail": "find the checkout, check the tools, start the shared database"},
+    {
+        "title": "Prepare",
+        "detail": "find the checkout, check the tools, start the shared database",
+    },
     {"title": "Implement", "detail": "one agent per PBI, each in its own git worktree"},
-    {"title": "Review", "detail": "code review of the pull request by an agent that has not seen the work"},
-    {"title": "Test and validate", "detail": "clean checkout: run the checks, then every Done-when item against the running app"},
-    {"title": "Fix", "detail": "only when the review or the validation blocks; two rounds at most"},
-    {"title": "Merge", "detail": "one at a time: rebase, squash-merge, file the minor findings"},
+    {
+        "title": "Review",
+        "detail": "code review of the pull request by an agent that has not seen the work",
+    },
+    {
+        "title": "Test and validate",
+        "detail": "clean checkout: run the checks, then every Done-when item against the running app",
+    },
+    {
+        "title": "Fix",
+        "detail": "only when the review or the validation blocks; two rounds at most",
+    },
+    {
+        "title": "Merge",
+        "detail": "one at a time: rebase, squash-merge, file the minor findings",
+    },
     {"title": "Validate main", "detail": "full check of main after the merges"},
 ]
 
@@ -38,11 +53,18 @@ def js(value: object, level: int = 0) -> str:
     if isinstance(value, list):
         if not any(isinstance(v, (dict, list)) for v in value):
             return "[" + ", ".join(js(v) for v in value) + "]"
-        return "[\n" + "".join(f"{inner}{js(v, level + 1)},\n" for v in value) + pad + "]"
+        return (
+            "[\n" + "".join(f"{inner}{js(v, level + 1)},\n" for v in value) + pad + "]"
+        )
     if isinstance(value, dict):
         if not any(isinstance(v, (dict, list)) for v in value.values()):
             return "{ " + ", ".join(f"{k}: {js(v)}" for k, v in value.items()) + " }"
-        return "{\n" + "".join(f"{inner}{k}: {js(v, level + 1)},\n" for k, v in value.items()) + pad + "}"
+        return (
+            "{\n"
+            + "".join(f"{inner}{k}: {js(v, level + 1)},\n" for k, v in value.items())
+            + pad
+            + "}"
+        )
     raise TypeError(f"can't write {value!r}")
 
 
@@ -57,7 +79,9 @@ def main() -> None:
     for item in items.values():
         for dep in item["deps"]:
             if dep not in items or dep >= item["n"]:
-                sys.exit(f"plan.json: item {item['n']} depends on {dep}, which is unknown or comes later")
+                sys.exit(
+                    f"plan.json: item {item['n']} depends on {dep}, which is unknown or comes later"
+                )
 
     OUT.mkdir(parents=True, exist_ok=True)
     wanted = set()

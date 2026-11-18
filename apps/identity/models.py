@@ -19,8 +19,8 @@ class User(AbstractUser):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['oid', 'tid'],
+                fields=["oid", "tid"],
                 condition=models.Q(oid__isnull=False, tid__isnull=False),
-                name='identity_user_oid_tid_unique',
+                name="identity_user_oid_tid_unique",
             ),
         ]

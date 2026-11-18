@@ -1,0 +1,17 @@
+target-version = "py314"
+line-length = 88
+extend-exclude = ["**/migrations/*.py"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S"]
+# The formatter owns line length; it cannot split long strings.
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# Settings layers star-import the base module by design.
+"config/settings/*.py" = ["F403", "F405"]
+# Tests assert, and use throwaway credentials.
+"**/test_*.py" = ["S101", "S105", "S106"]
+"**/tests.py" = ["S101", "S105", "S106"]
+"**/tests/**" = ["S101", "S105", "S106"]
+"config/settings/test.py" = ["S105"]

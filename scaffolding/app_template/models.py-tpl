@@ -1,0 +1,14 @@
+from django.db import models
+
+from apps.core.models import OwnedModel
+
+
+class {{ camel_case_app_name }}(OwnedModel):
+    """A placeholder model: replace it with the app's real data.
+
+    ``OwnedModel`` gives a time-ordered UUID id, both timestamps and an
+    ``owner``; ``{{ camel_case_app_name }}.objects.visible_to(user)`` is how a
+    selector starts a query. Models hold data and invariants, nothing else.
+    """
+
+    name = models.CharField(max_length=255)

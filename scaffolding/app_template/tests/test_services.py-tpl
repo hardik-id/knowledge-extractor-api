@@ -1,0 +1,18 @@
+import pytest
+
+from apps.{{ app_name }} import selectors, services
+from apps.identity.tests.factories import UserFactory
+
+pytestmark = pytest.mark.django_db
+
+
+def test_create_belongs_to_the_user() -> None:
+    user = UserFactory()
+    item = services.create_{{ app_name }}(user, name="First")
+    assert item.owner == user
+    assert list(selectors.list_{{ app_name }}(user)) == [item]
+
+
+def test_selector_hides_other_peoples_rows() -> None:
+    services.create_{{ app_name }}(UserFactory(), name="Theirs")
+    assert not selectors.list_{{ app_name }}(UserFactory()).exists()

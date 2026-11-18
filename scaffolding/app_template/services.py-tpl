@@ -1,0 +1,11 @@
+"""Writes and business rules for the {{ app_name }} app.
+
+A service takes the acting user as its first argument.
+"""
+
+from apps.{{ app_name }}.models import {{ camel_case_app_name }}
+from apps.identity.models import User
+
+
+def create_{{ app_name }}(user: User, *, name: str) -> {{ camel_case_app_name }}:
+    return {{ camel_case_app_name }}.objects.create(owner=user, name=name)

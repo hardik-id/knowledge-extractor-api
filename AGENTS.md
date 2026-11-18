@@ -30,13 +30,13 @@ apps/<domain>/     one app per domain, added later
 docs/              one file per topic
 ```
 
-Planned: `apps/<domain>/api/`, `services.py` and `selectors.py` per app, `scaffolding/app_template` for `startapp` (#22), `.claude/skills/` (#23).
+Planned: `apps/<domain>/api/`, `services.py` and `selectors.py` per app, `.claude/skills/` (#23).
 
 ## The rules
 
 These are decisions, not suggestions.
 
-1. **Generators first.** `uv add` for dependencies, `manage.py startapp` for apps (with the template once #22 exists), `makemigrations` for migrations, `pre-commit autoupdate` for hook versions, `make schema` for the OpenAPI file. Hand-write only what no generator produces. Never type dependencies into `pyproject.toml`.
+1. **Generators first.** `uv add` for dependencies, `manage.py startapp` for apps (`make app name=<name>`, which uses the template), `makemigrations` for migrations, `pre-commit autoupdate` for hook versions, `make schema` for the OpenAPI file. Hand-write only what no generator produces. Never type dependencies into `pyproject.toml`.
 2. **Layout.** `config/` is wiring only. `apps/core` holds shared components and no domain rules. One app per domain under `apps/`.
 3. **Inside an app.** `api/` (serializers, views, urls) is thin: parse, call, serialize. Writes and business rules live in `services.py`, reads in `selectors.py`, and both take the acting user as an argument. Models hold data and invariants.
 4. **Between apps.** Apps import `apps.core`. They do not import each other's models or internals: they call the other app's services and selectors.

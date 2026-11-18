@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db test check
+.PHONY: install lint format typecheck run migrate db test check app
 
 install:
 	uv sync
@@ -39,3 +39,14 @@ schema-check:
 	else rm -f docs/openapi.check.yaml; echo "docs/openapi.yaml is out of date: run make schema"; exit 1; fi
 
 check: lint typecheck schema-check test
+
+# Usage: make app name=<name>. Creates apps/<name>/ from scaffolding/app_template.
+app:
+	@test -n "$(name)" || { echo "usage: make app name=<name>"; exit 1; }
+	@test ! -e apps/$(name) || { echo "apps/$(name) already exists"; exit 1; }
+	mkdir apps/$(name)
+	uv run python manage.py startapp --template scaffolding/app_template $(name) apps/$(name)
+	@echo
+	@echo "Two lines left to add by hand:"
+	@echo '  config/settings/base.py, INSTALLED_APPS:  "apps.$(name)",'
+	@echo '  config/api_v1.py, urlpatterns:            path("", include("apps.$(name).api.urls")),'

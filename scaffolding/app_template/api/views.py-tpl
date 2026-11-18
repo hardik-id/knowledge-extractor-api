@@ -1,0 +1,31 @@
+from typing import cast
+
+from drf_spectacular.utils import extend_schema
+from rest_framework.decorators import api_view
+from rest_framework.pagination import BasePagination
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+from apps.core.pagination import DefaultPagination
+from apps.{{ app_name }} import selectors, services
+from apps.{{ app_name }}.api.serializers import {{ camel_case_app_name }}Serializer
+from apps.identity.models import User
+
+
+# Placeholder endpoint, left out of the OpenAPI file so a fresh app passes
+# `make check`. Replace it with the real endpoints, then drop `exclude=True`
+# and run `make schema`.
+@extend_schema(exclude=True)
+@api_view(["GET", "POST"])
+def {{ app_name }}(request: Request) -> Response:
+    """List the caller's {{ app_name }} (GET) or create one (POST)."""
+    user = cast(User, request.user)
+    if request.method == "POST":
+        serializer = {{ camel_case_app_name }}Serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = services.create_{{ app_name }}(user, **serializer.validated_data)
+        return Response({{ camel_case_app_name }}Serializer(item).data, status=201)
+    paginator: BasePagination = DefaultPagination()
+    page = paginator.paginate_queryset(selectors.list_{{ app_name }}(user), request)
+    data = {{ camel_case_app_name }}Serializer(page, many=True).data
+    return paginator.get_paginated_response(data)

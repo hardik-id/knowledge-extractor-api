@@ -12,6 +12,8 @@
 //   merge: false      stop at "ready": reviewed and validated, not merged
 //   force: true       start even though a PBI outside the run is still open
 //   repoDir: "/path"  the main checkout, when it can't be found from the start folder
+//   apiDir, apiUrl    UI workflows only: the backend checkout and where it answers
+//   uiDir             API workflows only: the UI checkout, read as the contract
 // ─────────────────────────────────────────────────────────────────────────────
 
 const input = args || {}
@@ -21,7 +23,7 @@ const MAX_FIX_ROUNDS = PLAN.maxFixRounds
 const AUTO_MERGE = input.merge !== false
 
 const pad = n => String(n).padStart(3, '0')
-const tag = p => `PBI-${pad(p.n)}`
+const tag = p => `${PLAN.kind === 'ui' ? 'UI' : 'PBI'}-${pad(p.n)}`
 const clip = s => String(s || '').replace(/\s+/g, ' ').slice(0, 700)
 
 const ITEMS = input.only ? PLAN.items.filter(p => input.only.includes(p.n)) : PLAN.items
@@ -33,6 +35,7 @@ if (input.dryRun) {
   return {
     workflow: PLAN.name,
     repo: REPO,
+    kind: PLAN.kind,
     merges: AUTO_MERGE,
     mustBeMergedFirst: outsideDeps.map(n => `#${n}`),
     items: ITEMS.map(p => ({
@@ -166,16 +169,103 @@ const MAIN_SCHEMA = {
 // ── Where each PBI works: its own worktree, branch, database and port ────────
 
 let repoDir = input.repoDir || ''
+// For UI work: the backend the UI is tried against.
+const apiDir = input.apiDir || '<the knowledge-extractor-api checkout>'
+const apiUrl = input.apiUrl || 'http://localhost:8000'
+// For API work: the UI checkout, to read the contract from.
+const uiDir = input.uiDir || 'the knowledge-extractor folder next to the main checkout'
 
 const place = p => ({
   wt: `${repoDir}/.worktrees/pbi-${pad(p.n)}`,
   checkWt: `${repoDir}/.worktrees/pbi-${pad(p.n)}-check`,
-  branch: `pbi/${pad(p.n)}-${p.slug}`,
+  branch: `${KIND.branch}/${pad(p.n)}-${p.slug}`,
   db: `ke_pbi_${pad(p.n)}`,
   checkDb: `ke_pbi_${pad(p.n)}_check`,
-  port: 8100 + p.n,
-  checkPort: 8200 + p.n,
+  port: KIND.port + 100 + p.n,
+  checkPort: KIND.port + 1100 + p.n,
 })
+
+// ── What differs between the two repositories ────────────────────────────────
+
+const KINDS = {
+  // The Django API.
+  api: {
+    branch: 'pbi',
+    port: 8000,
+    folder: 'knowledge-extractor-api',
+    title: p => `${tag(p)}: ${p.title}`,
+    followUpLabels: `--label review-followup --label 'priority: low'`,
+    tools: '`uv --version`, `docker info`, `gh auth status`, `make --version`',
+    shared: dir => `If \`${dir}/compose.yaml\` exists, start the shared infrastructure it defines and wait until it is healthy: \`docker compose -f ${dir}/compose.yaml up -d --wait db\`, and the same for \`redis\` and \`otel-collector\` when the file defines them. Only those services: not \`api\`, not \`worker\`. They are shared by every agent. One that does not become healthy is a problem.`,
+    resources: c => `Database: ${c.db}   Port: ${c.port}`,
+    checkResources: c => `Database: ${c.checkDb}   Port: ${c.checkPort}`,
+    rules: () => [
+      `If \`AGENTS.md\` exists at the root of your worktree, read it first and follow it. The skills in \`.claude/skills/\` (add-app, add-endpoint, add-model, add-error-code, add-setting, verify) are the house recipes: read the one that fits before you do that kind of work.`,
+      `Generators before hand-written code: \`uv add\` for dependencies (never type them into pyproject.toml), \`make app name=<name>\` for a new app, \`makemigrations\` for migrations, \`make schema\` for the OpenAPI file, \`pre-commit autoupdate\` for hook versions. Hand-write only what no generator produces.`,
+      `The infrastructure services in \`compose.yaml\` (\`db\`, and \`redis\` and \`otel-collector\` once they exist) are one set shared by every agent in every worktree. Never stop, restart or reset them and never run \`docker compose down\`, unless the issue's own "Done when" says so. Use your own database and your own port, given below. Create the database with the server's own tools (for example \`docker compose -f ${repoDir}/compose.yaml exec -T db createdb -U ke <name>\`) and pass it as \`DATABASE_URL\` on the command line or in your worktree's \`.env\`. Run the app from your worktree with \`uv run\`, not through the compose \`api\` or \`worker\` services, unless the issue is about those.`,
+      `Git hooks are shared by all worktrees. Don't install or change them from a worktree (no \`pre-commit install\`, no \`make install\`). Run the hooks by hand instead: \`uv run pre-commit run --all-files\`.`,
+      `Stop every server and container you start, except the shared ones.`,
+      `The UI this API serves is checked out at ${uiDir} (read only for you). Its \`docs/*.md\`, \`src/services/contracts.ts\`, \`src/services/http/\` (what goes over the wire and what the parser requires) and \`src/services/mock/\` (the behaviour to mirror) are the contract. Where the issue and that code disagree, say so in the pull request.`,
+    ],
+    sync: '`uv sync`',
+    checks: '`make check`',
+    tryIt: c => `run the app on port ${c.port} with database ${c.db}, call it, run the commands it names`,
+    cleanChecks: '`uv sync --locked`. Then `make check` and `uv run python manage.py makemigrations --check --dry-run`',
+    validateIt: c => `start the app on port ${c.checkPort} with database ${c.checkDb}, call it with curl, run the command it names, open the file`,
+    strays: 'files that should not be in git (`.env`, keys, database files, editor folders), and for dependencies typed into `pyproject.toml` without the matching change in `uv.lock`',
+    cleanUp: c => `stop what you started, drop ${c.checkDb} if you created it`,
+    mergeCleanUp: c => `drop the databases ${c.db} and ${c.checkDb} if they exist`,
+    conventions: [
+      'Conventions: `AGENTS.md`; thin views, rules in services, reads in selectors, no imports of another app\'s internals; the error contract; settings from the environment.',
+      'Generators: was something written by hand that a generator produces (an app skeleton, migrations, dependency lines, hook versions, the OpenAPI file)?',
+      'Tests: do they test behaviour, against real PostgreSQL, and would they fail if the feature broke?',
+    ],
+    mainCheck: (wt, index) => `3. \`uv sync --locked\`, then \`make check\` and \`uv run python manage.py makemigrations --check --dry-run\`.
+4. Create the database ke_main_check_${index}, \`migrate\` it, start the app on port ${8090 + index} and call \`/api/v1/health\`. Stop the app.
+5. Clean up: drop the database, remove the worktree.`,
+  },
+
+  // The Next.js UI. Only the Knowledge Studio app is worked on.
+  ui: {
+    branch: 'studio',
+    port: 3000,
+    folder: 'knowledge-extractor',
+    title: p => p.title,
+    followUpLabels: `--label 'source: code-review' --label 'impact: low' --label 'track: studio'`,
+    tools: '`node --version`, `npm --version`, `gh auth status`',
+    shared: () => PLAN.needsApi === false
+      ? `Nothing to start: this work does not need the backend.`
+      : `The UI work is tried against the running backend: \`curl -fsS ${apiUrl}/api/v1/health\` must answer \`{"status":"ok"}\`. If it does not, that is a problem. Don't start, stop or rebuild the backend yourself.`,
+    resources: c => `Port for the UI: ${c.port}`,
+    checkResources: c => `Port for the UI: ${c.checkPort}`,
+    rules: () => [
+      `Read \`CLAUDE.md\` and \`AGENTS.md\` at the root of your worktree first and follow them: the design system, the \`src/services\` boundary, shared components instead of copies.`,
+      `Only the Knowledge Studio app is in scope. Don't change how the pipeline app behaves.`,
+      `Dependencies: \`npm ci\` in your own worktree. Never link or copy \`node_modules\` from another checkout: the build breaks.`,
+      `Port 3000 may be the owner's own dev server: never use it and never stop it. Run the UI on your own port, given below (\`npx next dev -p <port>\`). The backend accepts any \`http://localhost:<port>\` origin locally.`,
+      `The backend API runs at ${apiUrl}, from ${apiDir} (compose project \`knowledge-extractor-api\`). It is shared: never stop, rebuild or reset it. A dev bearer token for it: \`docker compose -f ${apiDir}/compose.yaml exec -T api python manage.py mint_dev_token\`. The settings that point the UI at it are in the issue.`,
+      `Stop every server and browser you start.`,
+    ],
+    sync: '`npm ci`',
+    checks: '`npm run lint`, `npx tsc --noEmit`, `npm test` and `npm run build`',
+    tryIt: c => `run the UI on port ${c.port} against the backend, do what the item says in it, run the commands it names`,
+    cleanChecks: '`npm ci`. Then `npm run lint`, `npx tsc --noEmit`, `npm test` and `npm run build`',
+    validateIt: c => `run the UI on port ${c.checkPort} against the backend, do what the item says in it, run the command it names, open the file`,
+    strays: 'files that should not be in git (`.env.local`, tokens, `node_modules`, build output), and for a changed `package.json` without the matching `package-lock.json`',
+    cleanUp: () => `stop what you started`,
+    mergeCleanUp: () => `stop anything of this PBI that still runs`,
+    conventions: [
+      'Conventions: `CLAUDE.md`; design tokens only, no raw colours; the store and components import `services`, never an implementation; one shared component instead of a copy or an `if` on the app; nothing that changes the pipeline app.',
+      'Contract: do `src/services/http`, `src/services/mock`, `contracts.ts` and the documents in `docs/` still say the same thing?',
+      'Tests: Node\'s own test runner (`src/**/*.test.ts`); do they test behaviour and would they fail if the feature broke?',
+    ],
+    mainCheck: (wt, index) => `3. \`npm ci\`, then \`npm run lint\`, \`npx tsc --noEmit\`, \`npm test\` and \`npm run build\`.
+4. Start the built UI on port ${3090 + index} (\`npx next start -p ${3090 + index}\`) and request \`/studio\`: it must answer 200. Stop it.
+5. Clean up: remove the worktree.`,
+  },
+}
+
+const KIND = KINDS[PLAN.kind]
 
 // ── What every agent is told ─────────────────────────────────────────────────
 
@@ -183,39 +273,36 @@ const rules = () => `
 Ground rules of this run:
 - The main checkout is ${repoDir}. Never edit files, commit or switch branches there: it stays on \`main\`. (Fast-forwarding it, when a step says so, is the one exception.) Work only in the worktree named below.
 - Your shell may not start in your worktree. Begin every command with \`cd <your worktree> &&\`, and give the file tools absolute paths inside it.
-- If \`AGENTS.md\` exists at the root of your worktree, read it first and follow it.
-- Generators before hand-written code: \`uv add\` for dependencies (never type them into pyproject.toml), \`django-admin startproject\`, \`manage.py startapp\`, \`makemigrations\`, \`pre-commit sample-config\` and \`autoupdate\`, \`manage.py spectacular\`. Hand-write only what no generator produces.
-- Once \`compose.yaml\` exists, its \`db\` service (PostgreSQL) is one server shared by every agent in every worktree. Never stop, restart or reset it and never run \`docker compose down\`, unless the issue's own "Done when" says so. Use your own database and your own port, given below. Create the database with the server's own tools (for example \`docker compose -f ${repoDir}/compose.yaml exec -T db createdb -U <user> <name>\`) and pass it as \`DATABASE_URL\` on the command line or in your worktree's \`.env\`.
-- Git hooks are shared by all worktrees. Don't install or change them from a worktree (no \`pre-commit install\`, no hook step of \`make install\`). Run the hooks by hand instead: \`uv run pre-commit run --all-files\`.
-- A check counts only once its configuration is in the repository: ruff with \`ruff.toml\`, mypy with \`mypy.ini\`, pytest with \`pytest.ini\` (before that, tests run with \`uv run python manage.py test\`). A tool that is installed but not configured yet is not a check: don't run it and don't report it.
-- Stop every server and container you start, except \`db\`.
+${KIND.rules().map(line => `- ${line}`).join('\n')}
 - No attribution anywhere: no "Co-Authored-By", no "Generated with", no tool or model names, in commits, pull requests, comments or issues.
-- Nothing secret goes into git: no \`.env\`, no keys, no tokens.`
+- Nothing secret goes into git: no \`.env\` files, no keys, no tokens.`
 
-const preparePrompt = numbers => `Prepare a delivery run for the GitHub repository ${REPO}. Report facts. Change only what a step tells you to.
+const preparePrompt = (items, others) => `Prepare a delivery run for the GitHub repository ${REPO}. Report facts. Change only what a step tells you to.
 
-1. Find the main checkout. ${input.repoDir ? `It should be ${input.repoDir}.` : `If your current directory is inside a git checkout whose \`origin\` is that repository, it is that checkout's top level (\`git rev-parse --show-toplevel\`). Otherwise look for \`./knowledge-extractor-api\` under your current directory.`} Confirm with \`git -C <dir> remote get-url origin\`. If you are in a linked worktree, use the main one (the first line of \`git worktree list\`). Report its absolute path.
+1. Find the main checkout. ${input.repoDir ? `It should be ${input.repoDir}.` : `If your current directory is inside a git checkout whose \`origin\` is that repository, it is that checkout's top level (\`git rev-parse --show-toplevel\`). Otherwise look for \`./${KIND.folder}\` under your current directory.`} Confirm with \`git -C <dir> remote get-url origin\`. If you are in a linked worktree, use the main one (the first line of \`git worktree list\`). Report its absolute path.
 2. \`git -C <dir> fetch origin --prune\`. The checkout must be on \`main\` and \`git -C <dir> status --porcelain\` must be empty. If it is clean and behind, fast-forward it: \`git -C <dir> merge --ff-only origin/main\`. If it has changes or is on another branch, leave it alone and report that as a problem.
-3. Tools: \`uv --version\`, \`docker info\`, \`gh auth status\`, \`make --version\`. Report each one that fails as a problem.
-4. If \`<dir>/compose.yaml\` exists and has a \`db\` service: \`docker compose -f <dir>/compose.yaml up -d db\`, then wait until it reports healthy. This server is shared by every agent. A server that does not become healthy is a problem. If there is no \`compose.yaml\` yet, skip this step: that is normal early in the project and is not a problem.
-5. For each of these issues, report its state and its newest pull request: ${numbers.join(', ')}. Use \`gh issue view <n> -R ${REPO} --json state\` and \`gh pr list -R ${REPO} --state all --search "PBI-<3-digit number> in:title" --json number,state,title\` (the title starts with "PBI-" and the number padded to three digits, for example PBI-007).
+3. Tools: ${KIND.tools}. Report each one that fails as a problem.
+4. ${KIND.shared('<dir>')}
+5. Report the state of each of these issues (\`gh issue view <n> -R ${REPO} --json state\`), and the newest pull request from its branch (\`gh pr list -R ${REPO} --state all --head <branch> --json number,state\`; \`pr\` is 0 and \`prState\` is NONE when there is none):
+${items.map(p => `   - #${p.n}, branch ${place(p).branch}`).join('\n')}${others.length ? `
+   And only the state of these issues (no pull request needed): ${others.map(n => `#${n}`).join(', ')}.` : ''}
 
-\`ready\` is true when the checkout is clean, on main and up to date and every tool works. Only a \`db\` service that exists and does not become healthy makes it false; a missing \`compose.yaml\` does not. \`problems\` lists only what stops the run. Leave it empty when nothing does: no notes, no confirmations that things work.`
+\`ready\` is true when the checkout is clean, on main and up to date, every tool works, and step 4 found no problem. \`problems\` lists only what stops the run. Leave it empty when nothing does: no notes, no confirmations that things work.`
 
 const implementPrompt = (p, c, state) => `Implement ${tag(p)} ("${p.title}") for the GitHub repository ${REPO}. It is issue #${p.n}.
 ${rules()}
 
 Your worktree: ${c.wt}
-Branch: ${c.branch}   Database: ${c.db}   Port: ${c.port}
+Branch: ${c.branch}   ${KIND.resources(c)}
 
 Steps:
 1. Read the whole issue: \`gh issue view ${p.n} -R ${REPO}\`. "Tasks" is what to do, "Generators" the commands to use, "Owns" the files this PBI may change freely, "Done when" what will be checked. Read an issue it depends on only when you need a decision from it.
 2. Worktree.${state.pr ? ` An earlier attempt left pull request #${state.pr} (${state.prState}): build on it when it is still useful.` : ''} If ${c.wt} exists, continue in it: fetch, and be on ${c.branch}. Otherwise \`git -C ${repoDir} fetch origin && git -C ${repoDir} worktree add ${c.wt} -b ${c.branch} origin/main\`. If the branch already exists on origin, check that out instead of creating it.
-3. When \`pyproject.toml\` exists: \`uv sync\`.
-4. Do the work. Stay inside what the issue asks: no extra features, nothing "for later". A file outside "Owns" gets the smallest possible change. Once the repository has a test setup, write tests with the change.
-5. Check your own work before you hand it over. Run \`make check\` when the Makefile has it, otherwise every check that is configured so far (\`uv run python manage.py check\`, ruff, mypy, the tests, \`uv run python manage.py makemigrations --check --dry-run\`). Then go through "Done when" yourself against the real thing: run the app on port ${c.port} with database ${c.db}, call it, run the commands it names.
+3. Install: ${KIND.sync}.
+4. Do the work. Stay inside what the issue asks: no extra features, nothing "for later". A file outside "Owns" gets the smallest possible change. Write tests with the change.
+5. Check your own work before you hand it over. Run ${KIND.checks}. Then go through "Done when" yourself against the real thing: ${KIND.tryIt(c)}.
 6. Commit with a plain message (imperative mood: what and why). Push: \`git push -u origin ${c.branch}\`.
-7. Open the pull request: \`gh pr create -R ${REPO} --base main --head ${c.branch} --title '${tag(p)}: ${p.title}' --body-file <file>\`. The body says what changed, how you checked it (commands and results), anything that differs from the issue and why, and ends with the line \`Closes #${p.n}\`.
+7. Open the pull request: \`gh pr create -R ${REPO} --base main --head ${c.branch} --title '${KIND.title(p)}' --body-file <file>\`. The body says what changed, how you checked it (commands and results), anything that differs from the issue and why, and ends with the line \`Closes #${p.n}\`.
 
 If the issue can't be done as written (a decision is missing, a tool or a dependency isn't there, a package has no release that fits), stop and return \`blocked\` with the reason. Don't guess, and don't work around it silently.
 
@@ -225,15 +312,15 @@ const verifyPrompt = (p, c, pr, round) => `Test and validate pull request #${pr}
 ${rules()}
 
 Your worktree: ${c.checkWt} (detached, yours alone)
-Database: ${c.checkDb}   Port: ${c.checkPort}
+${KIND.checkResources(c)}
 
 Steps:
 1. Read the issue (\`gh issue view ${p.n} -R ${REPO}\`): "Done when" is your checklist. Read the pull request (\`gh pr view ${pr} -R ${REPO}\`) for what the author says was done.
 2. Take a clean copy of exactly what is on GitHub: \`git -C ${repoDir} fetch origin\`; remove ${c.checkWt} if it is left over (\`git -C ${repoDir} worktree remove --force ${c.checkWt}\`); \`git -C ${repoDir} worktree add --detach ${c.checkWt} origin/${c.branch}\`.
-3. Test. \`uv sync --locked\` when \`uv.lock\` exists. Then \`make check\` when the Makefile has it, otherwise each check that is configured in this checkout (\`uv run python manage.py check\`, \`uv run ruff check .\`, \`uv run ruff format --check .\`, \`uv run mypy .\`, the tests, \`uv run python manage.py makemigrations --check --dry-run\`). Record every command, whether it passed, and the lines that show it.
-4. Validate. Take each "Done when" item in turn and do what it says against the real thing: start the app on port ${c.checkPort} with database ${c.checkDb}, call it with curl, run the command it names, open the file. Record the command and what you saw. Verdict per item: \`passed\` (you saw it work), \`failed\` (you saw it fail), \`not_verified\` (you could not check it here: say why). What the pull request claims, and tests you did not run, are not evidence.
-5. Also look for files that should not be in git (\`.env\`, keys, database files, editor folders), and for dependencies typed into \`pyproject.toml\` without the matching change in \`uv.lock\`. Either one is a failed check.
-6. Clean up: stop what you started, drop ${c.checkDb} if you created it, \`git -C ${repoDir} worktree remove --force ${c.checkWt}\`.
+3. Test: ${KIND.cleanChecks}. Record every command, whether it passed, and the lines that show it.
+4. Validate. Take each "Done when" item in turn and do what it says against the real thing: ${KIND.validateIt(c)}. Record the command and what you saw. Verdict per item: \`passed\` (you saw it work), \`failed\` (you saw it fail), \`not_verified\` (you could not check it here: say why). What the pull request claims, and tests you did not run, are not evidence.
+5. Also look for ${KIND.strays}. Either one is a failed check.
+6. Clean up: ${KIND.cleanUp(c)}, \`git -C ${repoDir} worktree remove --force ${c.checkWt}\`.
 7. Post one comment on the pull request (\`gh pr comment ${pr} -R ${REPO} --body-file <file>\`) headed "Test and validation": the checks, the "Done when" items with their verdicts, and one line of conclusion.
 
 The verdict is \`pass\` only when every check passed, no item failed, and each \`not_verified\` item is one that truly cannot be checked on this machine. Otherwise it is \`fail\`.`
@@ -248,12 +335,10 @@ Steps:
 2. Judge, in this order:
    - Does it do what the issue asks, all of it and nothing more? Is each "Done when" item believable from the code?
    - Is it correct? Edge cases, error paths, two requests at once, a second run.
-   - Security: sign-in and permissions, secrets, what gets logged, unsafe defaults, input that reaches a query, a shell or a path.
-   - Conventions: \`AGENTS.md\` once it exists; thin views, rules in services, reads in selectors; the error contract; settings from the environment.
-   - Generators: was something written by hand that a generator produces (the project or app skeleton, migrations, dependency lines, hook versions, the OpenAPI file)?
-   - Tests: do they test behaviour, against real PostgreSQL, and would they fail if the feature broke?
+   - Security: sign-in and permissions, secrets, what gets logged, unsafe defaults, input that reaches a query, a shell, a path or a model prompt.
+${KIND.conventions.map(line => `   - ${line}`).join('\n')}
    - Simplicity: options nobody asked for, unused code, an abstraction with one user.
-3. Sort what you find. Major: it must be fixed before merging (wrong or unsafe behaviour, a "Done when" item not met, no test for the main behaviour, a pattern others will copy that breaks a rule). Minor: worth tracking, not worth blocking.
+3. Sort what you find. Major: it must be fixed before merging (wrong or unsafe behaviour, a "Done when" item not met, no test for the main behaviour, a pattern others will copy that breaks a rule). Minor: worth tracking, not worth blocking. Keep the minors to the ones a person would want to act on: at most five.
 4. Post one comment on the pull request (\`gh pr comment ${pr} -R ${REPO} --body-file <file>\`) headed "Review": a short summary, then the majors, then the minors, each with its file and what to do.
 ${round ? `
 This is another look after fixes. These points blocked the pull request before:
@@ -266,7 +351,7 @@ const fixPrompt = (p, c, pr, blocking, round) => `Fix what blocks pull request #
 ${rules()}
 
 Your worktree: ${c.wt}
-Branch: ${c.branch}   Database: ${c.db}   Port: ${c.port}
+Branch: ${c.branch}   ${KIND.resources(c)}
 
 What blocks it:
 ${blocking}
@@ -274,7 +359,7 @@ ${blocking}
 Steps:
 1. In the worktree: \`git fetch origin\`, be on ${c.branch} and level with \`origin/${c.branch}\`. Read the issue when you need the context (\`gh issue view ${p.n} -R ${REPO}\`) and the comments on the pull request (\`gh pr view ${pr} -R ${REPO} --comments\`).
 2. Fix exactly these points. No other refactoring. If a point is wrong, change no code for it: say why, with evidence.
-3. Run the checks again (\`make check\`, or what is configured) and repeat the failed "Done when" items yourself.
+3. Run the checks again (${KIND.checks}) and repeat the failed "Done when" items yourself.
 4. Commit with a plain message, push, and post one comment on the pull request that lists each point and what you did about it.
 
 Hand back \`fixed\` when every point is fixed or disputed with evidence, otherwise \`blocked\` with the reason.`
@@ -283,15 +368,15 @@ const mergePrompt = (p, c, pr, minors) => `Merge pull request #${pr} for ${tag(p
 ${rules()}
 
 Worktree: ${c.wt}
-Branch: ${c.branch}   Database: ${c.db}
+Branch: ${c.branch}
 
 Steps:
-1. In the worktree: \`git fetch origin\`. If \`origin/main\` has commits the branch lacks, rebase the branch onto \`origin/main\`. Resolve conflicts by keeping what both sides meant: two entries added to the same list both stay. After a rebase that brought in new commits, run the checks again (\`make check\`, or what is configured) and repair what the combination broke. Push with \`git push --force-with-lease origin ${c.branch}\`.
-2. Merge: \`gh pr merge ${pr} -R ${REPO} --squash --delete-branch --subject '${tag(p)}: ${p.title} (#${pr})' --body 'Closes #${p.n}'\`. If GitHub refuses because main moved again, go back to step 1.
+1. In the worktree: \`git fetch origin\`. If \`origin/main\` has commits the branch lacks, rebase the branch onto \`origin/main\`. Resolve conflicts by keeping what both sides meant: two entries added to the same list both stay; a generated file (the lock file, the OpenAPI file, a migration number) is generated again, not merged by hand. After a rebase that brought in new commits, run the checks again (${KIND.checks}) and repair what the combination broke. Push with \`git push --force-with-lease origin ${c.branch}\`.
+2. Merge: \`gh pr merge ${pr} -R ${REPO} --squash --delete-branch --subject '${KIND.title(p)} (#${pr})' --body 'Closes #${p.n}'\`. If GitHub refuses because main moved again, go back to step 1.
 3. Issue #${p.n} must now be closed. If it is still open, close it with a comment that links the pull request.
-4. ${minors.length ? `File each of these minor review findings as its own issue (\`gh issue create -R ${REPO} --label review-followup --label 'priority: low'\`), with a clear title and a body that has the finding, the file and a link to pull request #${pr}:
+4. ${minors.length ? `File each of these minor review findings as its own issue (\`gh issue create -R ${REPO} ${KIND.followUpLabels}\`), with a clear title and a body that has the finding, the file and a link to pull request #${pr}:
 ${minors.map(m => `   - ${m.title}${m.file ? ` (${m.file})` : ''}: ${clip(m.detail)}`).join('\n')}` : 'The review had no minor findings to file.'}
-5. Clean up: \`git -C ${repoDir} worktree remove --force ${c.wt}\`, drop the databases ${c.db} and ${c.checkDb} if they exist. Then, when the main checkout is clean and on main, bring it up to date: \`git -C ${repoDir} fetch origin && git -C ${repoDir} merge --ff-only origin/main\`.
+5. Clean up: \`git -C ${repoDir} worktree remove --force ${c.wt}\`, ${KIND.mergeCleanUp(c)}. Then, when the main checkout is clean and on main, bring it up to date: \`git -C ${repoDir} fetch origin && git -C ${repoDir} merge --ff-only origin/main\`.
 
 If the rebase can't be resolved safely, or the checks fail after it and the repair is not small, don't merge: hand back \`blocked\` with the reason and leave the worktree as it is.`
 
@@ -299,20 +384,18 @@ const mainPrompt = merged => `Check that \`main\` of ${REPO} is healthy after th
 ${rules()}
 
 Your worktree: ${repoDir}/.worktrees/main-check-${PLAN.index} (detached)
-Database: ke_main_check_${PLAN.index}   Port: ${8090 + PLAN.index}
 
 Steps:
 1. \`git -C ${repoDir} fetch origin --prune\`. When the main checkout is clean and on main, fast-forward it: \`git -C ${repoDir} merge --ff-only origin/main\`.
 2. \`git -C ${repoDir} worktree add --detach ${repoDir}/.worktrees/main-check-${PLAN.index} origin/main\` (remove a left-over one first).
-3. \`uv sync --locked\`, then \`make check\` when the Makefile has it, otherwise each configured check (\`uv run python manage.py check\`, ruff, mypy, the tests, \`uv run python manage.py makemigrations --check --dry-run\`).
-4. When the project has migrations: create the database, \`migrate\` it, start the app on the port above, and call \`/api/v1/health\` when that route exists (otherwise a route that does). Stop the app.
-5. Clean up: drop the database, remove the worktree. Then look at \`git -C ${repoDir} worktree list\`: name the worktrees under \`.worktrees/\` that are still there. Leave them and the local branches alone.
+${KIND.mainCheck(`${repoDir}/.worktrees/main-check-${PLAN.index}`, PLAN.index)}
+6. Look at \`git -C ${repoDir} worktree list\`: name the worktrees under \`.worktrees/\` that are still there. Leave them and the local branches alone.
 
-\`ok\` is true when every check passed and the app answered on a route that exists. \`problems\` lists only what failed. A route or a tool that a later PBI adds is not a problem: don't list it.`
+\`ok\` is true when every check passed and the app answered. \`problems\` lists only what failed.`
 
 // ── The run ──────────────────────────────────────────────────────────────────
 
-const prep = await agent(preparePrompt([...ITEMS.map(p => p.n), ...outsideDeps]), {
+const prep = await agent(preparePrompt(ITEMS, outsideDeps), {
   label: 'prepare',
   phase: 'Prepare',
   model: STAGES.prepare.model,
@@ -410,7 +493,7 @@ async function deliver(p) {
     earlier = blockers(r, v)
     log(`${tag(p)}: fix round ${round} (${r.majors.length} major findings, validation ${v.verdict})`)
     // The first fix goes to the model that wrote the code; a second one goes to a stronger model.
-    const fixer = round === 1 ? p.implement : STAGES.fixEscalation
+    const fixer = round === 1 ? p.implement : p.escalate || STAGES.fixEscalation
     const fixed = await agent(fixPrompt(p, c, pr, earlier, round), {
       label: `fix ${tag(p)} (${round})`,
       phase: 'Fix',

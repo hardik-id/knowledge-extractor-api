@@ -1,8 +1,8 @@
 # Delivery: how the backlog gets built
 
-The backlog is GitHub issues. A PBI is one issue and one pull request, and its number is the issue number: PBI-007 is #7. The tracking issue for the foundation epic is #25.
+The backlog is GitHub issues. A PBI is one issue and one pull request, and its number is the issue number: PBI-007 is #7, PBI-142 is #142. Tracking issues: #25 for the foundation epic, #157 for the Studio epic.
 
-Agents build the PBIs through the workflows in `.claude/workflows/`. Each workflow delivers a few PBIs that belong together.
+Agents build the PBIs through the workflows in `.claude/workflows/`. Each workflow delivers a few PBIs that belong together. The same workflows deliver work in the UI repository (`hardik-id/knowledge-extractor`), where the items are that repository's issues.
 
 ## What happens to one PBI
 
@@ -13,64 +13,80 @@ implement ──► review ───────────┐
                      └─► fix ─────────┘   (only when blocked, two rounds at most)
 ```
 
-| Stage | Who | What |
-| --- | --- | --- |
-| Implement | Sonnet, effort by tier | Reads the issue, works in its own git worktree, uses the generators, runs the checks, opens the pull request |
-| Review | Sonnet; Opus for the `complex` tier | Has not seen the work. Judges the pull request against the issue: correctness, security, conventions, generators, tests, simplicity. Major findings block, minor ones don't |
-| Test and validate | Sonnet | Takes a clean checkout of the pull request. Runs every check, then does each "Done when" item against the running app and real PostgreSQL. Reports evidence, changes nothing |
-| Fix | Sonnet, then Opus for a second round | Only the points that block. After two rounds the PBI is marked blocked and the PBIs that wait for it are skipped |
-| Merge | Sonnet | One at a time: rebase onto `main`, checks again, squash-merge, file each minor finding as an issue (`review-followup`, `priority: low`), clean up |
+| Stage | What |
+| --- | --- |
+| Implement | Reads the issue, works in its own git worktree, uses the generators, runs the checks, opens the pull request |
+| Review | Has not seen the work. Judges the pull request against the issue: correctness, security, conventions, generators, tests, simplicity. Major findings block, minor ones don't |
+| Test and validate | Takes a clean checkout of the pull request. Runs every check, then does each "Done when" item against the running app. Reports evidence, changes nothing |
+| Fix | Only the points that block. After two rounds the PBI is marked blocked and the PBIs that wait for it are skipped |
+| Merge | One at a time: rebase onto `main`, checks again, squash-merge, file each minor finding as a low-priority issue, clean up |
 
 Review and validation run side by side. A workflow ends with a full check of `main`.
 
 A PBI starts as soon as the PBIs it depends on are merged, so a workflow has no idle waves.
 
-## The workflows
+## Who does what
+
+The model follows the PBI's tier (the `tier:` label).
+
+| Tier | Implement | Review | Second fix round |
+| --- | --- | --- | --- |
+| `simple`, `normal` | Sonnet | Sonnet | Opus |
+| `complex` | Sonnet, more effort | Opus | Opus |
+| `hard` | Opus | Opus | Fable |
+
+Sonnet tests and validates, and merges. Haiku does the preparation step.
+
+## The Studio epic
 
 | Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
 | --- | --- | --- |
-| `foundation-1-bootstrap` | #1 → #2 → #3 → #4 | nothing: it is first, alone |
-| `foundation-2-quality` | #5 → (#6 ∥ #7) | 1 |
-| `foundation-3-enablement` | #8 ∥ #9 | 1 |
-| `foundation-4-core` | #10 → (#11 ∥ #12) | 2 |
-| `foundation-5-platform` | (#13 → #14) ∥ #15 | 2 |
-| `foundation-6-auth` | #16 → ((#17 → #18) ∥ #19) | 4 and 5 |
-| `foundation-7-api-docs` | #20 → #21 | 6 |
-| `foundation-8-agent-kit` | #22 → #23 | 7 and 3 |
+| `studio-1-ground` | #135 ∥ #136 | nothing |
+| `studio-ui-1-apps` | UI #38 | nothing |
+| `studio-2-platform` | #137 ∥ #138 ∥ (#139 → #153) | 1 |
+| `studio-3-data` | #140 → (#141 ∥ (#142 → #143)) | 1 |
+| `studio-4-live` | #144 ∥ #145 ∥ (#148 → #151) | 2 and 3 |
+| `studio-5-assistant` | #146 → #147 | 4 |
+| `studio-6-extraction` | #149 → #150 → #152 | 4 |
+| `studio-7-stack` | #154 ∥ #155 ∥ #156 | 5 and 6 |
+| `studio-ui-2-backend` | UI #39 → UI #40 | 7, with the stack running (`make up`) |
 
-Workflows 2 and 3 can run at the same time, and so can 4 and 5. A workflow refuses to start while a PBI it depends on is still open.
+Workflows on the same line of "start it after" can run at the same time: 1 with ui-1, 2 with 3, 5 with 6. A workflow refuses to start while a PBI it depends on is still open.
 
-#24 (sign-in against a real Entra tenant) is done with the repository owner, not by a workflow.
+The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 
 ## Running one
 
-In Claude Code, ask for the workflow by name ("run the workflow foundation-2-quality") from a session started in this repository, or give the path of its file.
+In Claude Code, ask for the workflow by name from a session started in this repository, or give the path of its file.
 
 Options, passed as the workflow's arguments:
 
 | Option | Effect |
 | --- | --- |
 | `dryRun: true` | Print the plan. No agent starts |
-| `only: [6, 7]` | Deliver just these PBIs of the workflow |
+| `only: [146]` | Deliver just these PBIs of the workflow |
 | `merge: false` | Stop at "ready": reviewed and validated, not merged |
 | `force: true` | Start although a PBI outside the run is still open |
 | `repoDir: "/path"` | The main checkout, when the session starts somewhere else |
+| `uiDir: "/path"` | API workflows: the UI checkout, which agents read as the contract |
+| `apiDir`, `apiUrl` | UI workflows: the backend checkout, and where the running backend answers |
 
 Running a workflow again is safe. A closed issue is skipped, and an open pull request is picked up at review and validation.
 
 ## What every agent works with
 
-| For PBI-012 | Value |
+| For PBI-142 | Value |
 | --- | --- |
-| Worktree | `.worktrees/pbi-012` (validation uses `.worktrees/pbi-012-check`) |
-| Branch | `pbi/012-v1-health` |
-| Database | `ke_pbi_012` (validation: `ke_pbi_012_check`) |
-| Port | 8112 (validation: 8212) |
+| Worktree | `.worktrees/pbi-142` (validation uses `.worktrees/pbi-142-check`) |
+| Branch | `pbi/142-runs` (in the UI repository: `studio/039-studio-http`) |
+| Database | `ke_pbi_142` (validation: `ke_pbi_142_check`) |
+| Port | 8242 (validation: 9242). UI work: 3139 and 4139 |
 
-Two things are shared, so agents leave them alone:
+Some things are shared, so agents leave them alone:
 
-- **The PostgreSQL server** from `compose.yaml`. One server for every worktree; each agent has its own database on it. Nobody stops or resets it.
+- **The infrastructure in `compose.yaml`**: `db`, `redis`, `otel-collector`. One set for every worktree; each agent has its own database. Nobody stops or resets them. Agents run the app from their worktree, not through the compose `api` and `worker`.
 - **Git hooks.** They live in the main checkout and apply to every worktree. Agents run `uv run pre-commit run --all-files` by hand and never install hooks from a worktree.
+- **For UI work, the running backend** and port 3000, which may be a person's own dev server.
 
 The main checkout stays on `main` and clean. A workflow won't start otherwise.
 
@@ -85,4 +101,4 @@ python3 tools/delivery/build.py
 node tools/delivery/test_engine.mjs    # runs the workflows with fake agents
 ```
 
-A new epic is a new set of entries in `plan.json`: its PBIs under `items`, and one entry under `workflows` for each group that is delivered together.
+A new epic is a new set of entries in `plan.json`: its PBIs under `items`, and one entry under `workflows` for each group that is delivered together. An entry with `"kind": "ui"` is work in the UI repository.

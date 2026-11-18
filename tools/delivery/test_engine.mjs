@@ -1,6 +1,6 @@
 // Runs the generated workflows with fake agents: tests the order, the fix loop and the merge queue
 // without starting a real agent.   node tools/delivery/test_engine.mjs
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
@@ -46,7 +46,7 @@ const ok = {
   merge: { status: 'merged', commit: 'abc', followUps: [900] },
   main: { ok: true, checks: ['make check'], problems: [] },
 }
-const number = label => Number(label.match(/PBI-(\d+)/)[1])
+const number = label => Number(label.match(/(?:PBI|UI)-(\d+)/)[1])
 function happy(prepare, overrides = {}) {
   return (label, prompt, calls) => {
     if (label in overrides) return overrides[label]
@@ -183,8 +183,46 @@ const before = (calls, a, b) => {
   console.log('ok  not ready stops the run')
 }
 
+// 10. A UI workflow: its own repository, branch names, checks and labels; the backend it is tried against.
+{
+  const prepare = { repoDir: '/ui', ready: true, problems: [], issues: issues([39, 40, 38], [38]) }
+  const { result, calls } = await run('studio-ui-2-backend', { repoDir: '/ui', apiDir: '/api' }, happy(prepare))
+  assert.equal(result.status, 'done')
+  const prep = calls.find(c => c.label === 'prepare').prompt
+  assert.ok(prep.includes('hardik-id/knowledge-extractor.') && prep.includes('branch studio/039-studio-http'))
+  assert.ok(prep.includes('http://localhost:8000/api/v1/health'))
+  const build = calls.find(c => c.label === 'implement UI-039')
+  assert.equal(build.model, 'opus')
+  assert.ok(build.prompt.includes('npm ci') && build.prompt.includes('/ui/.worktrees/pbi-039'))
+  assert.ok(build.prompt.includes("--title 'Studio over HTTP against the Django API'"))
+  assert.ok(build.prompt.includes('docker compose -f /api/compose.yaml exec -T api python manage.py mint_dev_token'))
+  assert.ok(!build.prompt.includes('uv sync') && !build.prompt.includes('make check'))
+  assert.ok(calls.find(c => c.label === 'merge UI-039').prompt.includes("--label 'source: code-review'"))
+  before(calls, 'merge UI-039', 'implement UI-040')
+  console.log('ok  UI workflow')
+}
+
+// 11. The hard tier: a second fix round goes to the strongest model. UI work without a backend says so.
+{
+  const prepare = { repoDir: '/repo', ready: true, problems: [], issues: issues([146, 147, 137, 144, 145], [137, 144, 145]) }
+  const failing = { verdict: 'fail', summary: 'no events', checks: [], acceptance: [{ item: 'socket shows deltas', verdict: 'failed', evidence: 'nothing arrived' }] }
+  const overrides = { 'test and validate PBI-146': failing, 'test and validate PBI-146 (2)': failing }
+  const { result, calls } = await run('studio-5-assistant', {}, happy(prepare, overrides))
+  assert.equal(result.status, 'done')
+  assert.equal(calls.find(c => c.label === 'implement PBI-146').model, 'opus')
+  assert.equal(calls.find(c => c.label === 'fix PBI-146 (1)').model, 'opus')
+  assert.equal(calls.find(c => c.label === 'fix PBI-146 (2)').model, 'fable')
+  assert.ok(calls.find(c => c.label === 'implement PBI-146').prompt.includes('.claude/skills/'))
+  const ui = await run('studio-ui-1-apps', { dryRun: true }, () => assert.fail('no agent'))
+  assert.equal(ui.result.kind, 'ui')
+  const apps = await run('studio-ui-1-apps', { repoDir: '/ui' }, happy({ repoDir: '/ui', ready: true, problems: [], issues: issues([38]) }))
+  assert.ok(apps.calls.find(c => c.label === 'prepare').prompt.includes('does not need the backend'))
+  console.log('ok  hard tier, UI work without a backend')
+}
+
 // Every file parses and dry-runs.
-for (const name of ['foundation-1-bootstrap', 'foundation-2-quality', 'foundation-3-enablement', 'foundation-4-core', 'foundation-5-platform', 'foundation-6-auth', 'foundation-7-api-docs', 'foundation-8-agent-kit']) {
+for (const file of readdirSync(dir).filter(f => f.endsWith('.js')).sort()) {
+  const name = file.slice(0, -3)
   const { result } = await run(name, { dryRun: true }, () => assert.fail('no agent'))
   console.log(`    ${name}: ${result.items.map(i => i.pbi + (i.waitsFor.length ? `<-${i.waitsFor.join('+')}` : '')).join('  ')}   first: ${result.mustBeMergedFirst.join(' ') || '-'}`)
 }

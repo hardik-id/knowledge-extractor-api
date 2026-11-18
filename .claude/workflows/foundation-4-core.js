@@ -349,7 +349,7 @@ Steps:
 3. Issue #${p.n} must now be closed. If it is still open, close it with a comment that links the pull request.
 4. ${minors.length ? `File each of these minor review findings as its own issue (\`gh issue create -R ${REPO} --label review-followup --label 'priority: low'\`), with a clear title and a body that has the finding, the file and a link to pull request #${pr}:
 ${minors.map(m => `   - ${m.title}${m.file ? ` (${m.file})` : ''}: ${clip(m.detail)}`).join('\n')}` : 'The review had no minor findings to file.'}
-5. Clean up: \`git -C ${repoDir} worktree remove --force ${c.wt}\`, \`git -C ${repoDir} branch -D ${c.branch}\`, drop the databases ${c.db} and ${c.checkDb} if they exist. Then, when the main checkout is clean and on main, bring it up to date: \`git -C ${repoDir} fetch origin && git -C ${repoDir} merge --ff-only origin/main\`.
+5. Clean up: \`git -C ${repoDir} worktree remove --force ${c.wt}\`, drop the databases ${c.db} and ${c.checkDb} if they exist. Then, when the main checkout is clean and on main, bring it up to date: \`git -C ${repoDir} fetch origin && git -C ${repoDir} merge --ff-only origin/main\`.
 
 If the rebase can't be resolved safely, or the checks fail after it and the repair is not small, don't merge: hand back \`blocked\` with the reason and leave the worktree as it is.`
 
@@ -364,9 +364,9 @@ Steps:
 2. \`git -C ${repoDir} worktree add --detach ${repoDir}/.worktrees/main-check-${PLAN.index} origin/main\` (remove a left-over one first).
 3. \`uv sync --locked\`, then \`make check\` when the Makefile has it, otherwise each configured check (\`uv run python manage.py check\`, ruff, mypy, the tests, \`uv run python manage.py makemigrations --check --dry-run\`).
 4. When the project has migrations: create the database, \`migrate\` it, start the app on the port above, and call \`/api/v1/health\` when that route exists (otherwise a route that does). Stop the app.
-5. Clean up: drop the database, remove the worktree. Then look at \`git -C ${repoDir} worktree list\` and at the local \`pbi/*\` branches: remove those whose pull request is merged and whose worktree has no uncommitted change, and name the rest.
+5. Clean up: drop the database, remove the worktree. Then look at \`git -C ${repoDir} worktree list\`: name the worktrees under \`.worktrees/\` that are still there. Leave them and the local branches alone.
 
-\`ok\` is true only when every check passed and the app answered.`
+\`ok\` is true when every check passed and the app answered on a route that exists. \`problems\` lists only what failed. A route or a tool that a later PBI adds is not a problem: don't list it.`
 
 // ── The run ──────────────────────────────────────────────────────────────────
 

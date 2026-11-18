@@ -1,0 +1,16 @@
+"""Reads for the {{ app_name }} app.
+
+A selector takes the acting user and returns only what that user may see.
+"""
+
+from typing import cast
+
+from django.db.models import QuerySet
+
+from apps.{{ app_name }}.models import {{ camel_case_app_name }}
+from apps.identity.models import User
+
+
+def list_{{ app_name }}(user: User) -> QuerySet[{{ camel_case_app_name }}]:
+    # ``visible_to`` is typed for the OwnedModel base; this narrows it.
+    return cast(QuerySet[{{ camel_case_app_name }}], {{ camel_case_app_name }}.objects.visible_to(user))

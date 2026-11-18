@@ -1,0 +1,39 @@
+"""The placeholder endpoint at /api/v1/{{ app_name }}, through the API."""
+
+from typing import Any
+
+import pytest
+
+from apps.{{ app_name }}.tests.factories import {{ camel_case_app_name }}Factory
+
+pytestmark = pytest.mark.django_db
+
+URL = "/api/v1/{{ app_name }}"
+
+
+def test_lists_only_the_callers_own(api_client: Any, user: Any) -> None:
+    mine = {{ camel_case_app_name }}Factory(owner=user)
+    {{ camel_case_app_name }}Factory()
+    api_client.force_authenticate(user)
+    body = api_client.get(URL).json()
+    assert [item["id"] for item in body["items"]] == [str(mine.pk)]
+
+
+def test_creates_for_the_caller(api_client: Any, user: Any) -> None:
+    api_client.force_authenticate(user)
+    response = api_client.post(URL, {"name": "First"}, format="json")
+    assert response.status_code == 201
+    assert response.json()["name"] == "First"
+
+
+def test_invalid_input_is_422(api_client: Any, user: Any) -> None:
+    api_client.force_authenticate(user)
+    response = api_client.post(URL, {}, format="json")
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+def test_without_a_token_is_401(api_client: Any) -> None:
+    response = api_client.get(URL)
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthenticated"

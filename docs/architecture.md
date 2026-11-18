@@ -20,7 +20,7 @@ apps/core/     shared components, no domain rules
 apps/<domain>/ one app per domain
 ```
 
-Inside a domain app (the shape the app template will give, planned #22):
+Inside a domain app (the shape `make app name=<name>` gives, see `docs/new-app.md`):
 
 | Part | Job |
 | --- | --- |

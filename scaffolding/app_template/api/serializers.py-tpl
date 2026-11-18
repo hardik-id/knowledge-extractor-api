@@ -1,0 +1,10 @@
+from rest_framework import serializers
+
+from apps.{{ app_name }}.models import {{ camel_case_app_name }}
+
+
+class {{ camel_case_app_name }}Serializer(serializers.ModelSerializer[{{ camel_case_app_name }}]):
+    class Meta:
+        model = {{ camel_case_app_name }}
+        fields = ["id", "name", "created_at"]
+        read_only_fields = ["id", "created_at"]

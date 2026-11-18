@@ -210,6 +210,39 @@ configure_structlog()
 LOGGING = build_logging_config(LOG_LEVEL, LOG_FORMAT)
 
 # ---------------------------------------------------------------------------
+# Studio
+# Declared here so later PBIs read them from one place; nothing uses them yet.
+# ---------------------------------------------------------------------------
+
+# Live updates: channel layer and the lifetime of a socket ticket.
+REDIS_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+WS_TICKET_TTL_SECONDS = env.int("WS_TICKET_TTL_SECONDS", default=30)
+
+# Documents: where the list and the content come from.
+DOCUMENT_CATALOG = env.str("DOCUMENT_CATALOG", default="samples")  # samples | http
+DOCUMENT_CATALOG_URL = env.str("DOCUMENT_CATALOG_URL", default="")
+DOCUMENT_STORAGE = env.str("DOCUMENT_STORAGE", default="samples")  # samples | azure
+AZURE_STORAGE_ACCOUNT_URL = env.str("AZURE_STORAGE_ACCOUNT_URL", default="")
+
+# Assistant and extractor.
+ASSISTANT_AGENT = env.str("ASSISTANT_AGENT", default="scripted")  # scripted | openai
+EXTRACTOR = env.str("EXTRACTOR", default="scripted")
+LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure
+LLM_MODEL = env.str("LLM_MODEL", default="")
+OPENAI_API_KEY = env.str("OPENAI_API_KEY", default="")  # secret
+AZURE_OPENAI_ENDPOINT = env.str("AZURE_OPENAI_ENDPOINT", default="")  # no key
+
+# Telemetry (OpenTelemetry, exported over OTLP/HTTP).
+OTEL_SDK_DISABLED = env.bool("OTEL_SDK_DISABLED", default=True)
+OTEL_SERVICE_NAME = env.str("OTEL_SERVICE_NAME", default="knowledge-extractor-api")
+OTEL_EXPORTER_OTLP_ENDPOINT = env.str(
+    "OTEL_EXPORTER_OTLP_ENDPOINT", default="http://localhost:4318"
+)
+OTEL_RESOURCE_ATTRIBUTES = env.str(
+    "OTEL_RESOURCE_ATTRIBUTES", default="deployment.environment=local"
+)
+
+# ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
 

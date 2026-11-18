@@ -129,6 +129,15 @@ def test_unknown_api_url_is_json_404(
     assert response.json() == {"code": "not_found", "message": "Not found."}
 
 
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
+def test_unknown_api_url_is_404_for_every_method(
+    client: APIClient, method: str
+) -> None:
+    response = getattr(client, method)("/api/v1/nothing/here")
+    assert response.status_code == 404
+    assert response.json() == {"code": "not_found", "message": "Not found."}
+
+
 def test_unknown_url_outside_api_keeps_django_page(client: Client) -> None:
     response = client.get("/elsewhere")
     assert response.status_code == 404

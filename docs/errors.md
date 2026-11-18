@@ -28,7 +28,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 ```python
 from apps.core.errors import ApiError
 
-raise ApiError("conflict")                       # default message
+raise ApiError("conflict")  # default message
 raise ApiError("conflict", "Name already used.")  # own message
 raise ApiError("conflict", details={"name": ["taken"]})
 ```

@@ -17,7 +17,7 @@ def _json(error: ApiError) -> JsonResponse:
     return JsonResponse(error.body(), status=error.status)
 
 
-@api_view()
+@api_view(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 def api_not_found(request: Request, rest: str = "") -> Response:
     """Catch-all for unknown URLs under /api/, so debug mode cannot show its HTML page."""
     raise ApiError("not_found")

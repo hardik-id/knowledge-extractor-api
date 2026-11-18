@@ -1,4 +1,4 @@
-.PHONY: install lint format run migrate db check
+.PHONY: install lint format typecheck run migrate db check
 
 install:
 	uv sync
@@ -12,6 +12,9 @@ format:
 	uv run ruff format .
 	uv run ruff check --fix .
 
+typecheck:
+	uv run mypy .
+
 run:
 	uv run python manage.py runserver
 
@@ -21,4 +24,4 @@ migrate:
 db:
 	docker compose up -d --wait db
 
-check: lint
+check: lint typecheck

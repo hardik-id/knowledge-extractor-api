@@ -126,3 +126,20 @@ def test_no_token_and_no_query_string_is_logged(
     assert "request_finished" in text
     for secret in ("SECRET-TOKEN", "SECRET-TICKET", "Bearer", "ticket="):
         assert secret not in text
+
+
+@pytest.mark.parametrize("name", ["django.server", "uvicorn.access"])
+def test_access_loggers_that_print_the_query_string_are_silenced(name: str) -> None:
+    from apps.core.logging import build_logging_config
+
+    config = build_logging_config("INFO", "json")["loggers"][name]
+    assert config["handlers"] == ["null"]
+    assert config["propagate"] is False
+
+
+def test_the_servers_are_started_without_the_uvicorn_access_log() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    for name in ("Dockerfile", "compose.yaml"):
+        assert "--no-access-log" in (root / name).read_text()

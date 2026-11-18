@@ -34,6 +34,6 @@ Nothing else is needed: the request id is added from the context of the current 
 ## What is never logged
 
 - Tokens and the `Authorization` header. The middleware does not read it. Do not log it, and do not log request headers or bodies wholesale.
-- The query string. A WebSocket ticket will travel in one. The log line holds `request.path` only, and the `django.server` logger (runserver prints the full path) is switched off in favour of the request line.
+- The query string. A WebSocket ticket will travel in one. The log line holds `request.path` only, and the `django.server` logger (runserver prints the full path) and the `uvicorn.access` logger (`GET /path?query`) are switched off in favour of the request line. The Dockerfile and `compose.yaml` also start uvicorn with `--no-access-log`; keep that flag on any other command that starts it. Django applies `LOGGING` after uvicorn has set up its own config, so the `uvicorn.access` entry in `LOGGING` wins whichever way uvicorn is launched.
 
 Tests: `apps/core/tests/test_request_logging.py`.

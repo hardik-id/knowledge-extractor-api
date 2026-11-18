@@ -79,5 +79,8 @@ def build_logging_config(log_level: str, log_format: str) -> dict[str, Any]:
             # runserver logs the full path with the query string; our request
             # line replaces it.
             "django.server": {"handlers": ["null"], "propagate": False},
+            # uvicorn's access log is `GET /path?query`; same reason. The server
+            # is also started with --no-access-log; this covers other launchers.
+            "uvicorn.access": {"handlers": ["null"], "propagate": False},
         },
     }

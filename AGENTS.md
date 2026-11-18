@@ -21,6 +21,8 @@ docker compose up -d db                   # PostgreSQL, shared by every worktree
 
 `make check` fails when `docs/openapi.yaml` is out of date. A tool counts as a check only once its configuration is in the repository.
 
+A fresh worktree starts with `uv sync --locked`, never `make install` (it installs git hooks, which are shared). The shared service is `db` (`redis` and `otel-collector` join it once they exist in `compose.yaml`). Export `DATABASE_URL` for your own database before `make check`, `runserver` or `mint_dev_token`.
+
 Never run `docker compose down` or reset `db`: one server serves every worktree. Use your own database and pass it as `DATABASE_URL`.
 
 ## Layout
@@ -57,7 +59,7 @@ Load the one that fits the job; each lists its commands, what done looks like an
 These are decisions, not suggestions.
 
 1. **Generators first.** `uv add` for dependencies, `manage.py startapp` for apps (`make app name=<name>`, which uses the template), `makemigrations` for migrations, `pre-commit autoupdate` for hook versions, `make schema` for the OpenAPI file. Hand-write only what no generator produces. Never type dependencies into `pyproject.toml`.
-2. **Layout.** `config/` is wiring only. `apps/core` holds shared components and no domain rules. One app per domain under `apps/`.
+2. **Layout.** `config/` is wiring only. `apps/core` holds shared components and no domain rules. Infrastructure endpoints with no domain go in `apps/core/api`, next to `health.py`. One app per domain under `apps/`.
 3. **Inside an app.** `api/` (serializers, views, urls) is thin: parse, call, serialize. Writes and business rules live in `services.py`, reads in `selectors.py`, and both take the acting user as an argument. Models hold data and invariants.
 4. **Between apps.** Apps import `apps.core`. They do not import each other's models or internals: they call the other app's services and selectors.
 5. **API.** Under `/api/v1`, no trailing slash, snake_case JSON, lists as `{ "items": [...] }`. Every error is `{ "code", "message" }` with optional `details`, raised as `ApiError` with a registered code (`docs/errors.md`). A validation failure answers 422.

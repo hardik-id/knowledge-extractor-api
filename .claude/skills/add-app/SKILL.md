@@ -13,7 +13,7 @@ One app per domain. Never create the folder by hand: the template gives it the s
 2. Add the two lines it prints, by hand:
    - `config/settings/base.py`, `INSTALLED_APPS`: `"apps.<name>",`
    - `config/api_v1.py`, `urlpatterns`: `path("", include("apps.<name>.api.urls")),`
-3. Replace the placeholder model: delete `apps/<name>/migrations/0001_initial.py`, write the real model (see `add-model`), then `uv run python manage.py makemigrations <name>`.
+3. Replace the placeholder model: delete `apps/<name>/migrations/0001_initial.py`, write the real model (see `add-model`), then `uv run python manage.py makemigrations <name>`. Regenerating `0001_initial.py` is fine only because the app is new and unmerged: no database has applied it. This is not the migration editing that `add-model` warns about; once a migration is merged, never edit it.
 4. Replace the placeholder endpoint, service, selector and tests (see `add-endpoint`). Drop `@extend_schema(exclude=True)` and run `make schema`.
 5. `make check`.
 

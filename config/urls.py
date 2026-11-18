@@ -16,12 +16,13 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 
 from apps.core.api import views as core_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/v1/", include("config.api_v1")),
     # Keep last: unknown URLs under /api/ answer the JSON error contract.
     re_path(r"^api/(?P<rest>.*)$", core_views.api_not_found),
 ]

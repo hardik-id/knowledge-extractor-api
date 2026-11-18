@@ -35,8 +35,7 @@ services:
       exec uvicorn config.asgi:application --host 0.0.0.0 --port 8000
       --no-access-log"
     healthcheck:
-      # /admin/login/ exists today; #12 adds /api/v1/health.
-      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/admin/login/', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/api/v1/health', timeout=3)"]
       interval: 10s
       timeout: 5s
       start_period: 20s

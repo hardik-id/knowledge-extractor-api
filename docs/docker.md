@@ -11,7 +11,7 @@ The API ships as one image, built from `Dockerfile` (multi-stage, after the uv D
     cp .env.example .env
     docker compose up --build -d api
 
-This starts `db`, waits until it is healthy, applies migrations, starts the server and reports `api` healthy. The API listens on `http://localhost:8000` (`API_PORT` changes the host port); try `/admin/login/`.
+This starts `db`, waits until it is healthy, applies migrations, starts the server and reports `api` healthy. The API listens on `http://localhost:8000` (`API_PORT` changes the host port); try `/api/v1/health`.
 
 Stop only the API with `docker compose stop api`. The `db` service is shared by every worktree: do not run `docker compose down`.
 

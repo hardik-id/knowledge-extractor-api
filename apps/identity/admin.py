@@ -7,6 +7,6 @@ from .models import User
 @admin.register(User)
 class IdentityUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
-        ('Entra ID', {'fields': ('oid', 'tid', 'name', 'preferred_username')}),
+        ("Entra ID", {"fields": ("oid", "tid", "name", "preferred_username")}),
     )
-    list_display = ('username', 'name', 'preferred_username', 'oid', 'tid', 'is_staff')
+    list_display = ("username", "name", "preferred_username", "oid", "tid", "is_staff")

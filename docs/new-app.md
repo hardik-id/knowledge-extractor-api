@@ -8,7 +8,7 @@ make app name=documents
 
 This creates `apps/documents/` with `manage.py startapp --template`, then prints the two lines left to add by hand:
 
-```python
+```text
 # config/settings/base.py, INSTALLED_APPS
 "apps.documents",
 

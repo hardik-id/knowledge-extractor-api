@@ -4,6 +4,7 @@ from typing import Any
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.defaults import page_not_found, server_error
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
@@ -22,6 +23,7 @@ def _json(error: ApiError) -> JsonResponse:
     return JsonResponse(error.body(), status=error.status)
 
 
+@extend_schema(exclude=True)
 @api_view(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 @authentication_classes([])
 @permission_classes([AllowAny])

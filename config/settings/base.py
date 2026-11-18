@@ -70,6 +70,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     "corsheaders",
     "django_structlog",
     "apps.core",
@@ -139,9 +141,32 @@ REST_FRAMEWORK = {
         "apps.identity.authentication.BearerAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_SCHEMA_CLASS": "apps.core.api.schema.ApiSchema",
 }
 
+# ---------------------------------------------------------------------------
+# OpenAPI: schema at /api/schema, Swagger UI at /api/docs (docs/openapi.md).
+# SPECTACULAR_SETTINGS reads nothing from the environment, so docs/openapi.yaml
+# is the same on every machine.
+# ---------------------------------------------------------------------------
+
 API_DOCS_ENABLED = env.bool("API_DOCS_ENABLED", default=True)
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Knowledge Extractor API",
+    "VERSION": "v1",
+    "SERVERS": [{"url": "/api/v1"}],
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SCHEMA_PATH_PREFIX_TRIM": True,
+    "SERVE_INCLUDE_SCHEMA": False,
+    # The schema and Swagger UI are open; "Try it out" sends its own token.
+    "SERVE_AUTHENTICATION": [],
+    # Swagger UI's files come from drf-spectacular-sidecar, not a CDN.
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
+    "COMPONENT_SPLIT_REQUEST": True,
+}
 
 # ---------------------------------------------------------------------------
 # Sign-in

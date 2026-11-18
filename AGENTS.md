@@ -16,7 +16,7 @@ uv run python manage.py makemigrations --check --dry-run
 docker compose up -d db                   # PostgreSQL, shared by every worktree
 ```
 
-Planned: `make schema` (#20), mypy (#6). A tool counts as a check only once its configuration is in the repository.
+Planned: mypy (#6). `make schema` writes `docs/openapi.yaml`; `make check` fails when it is out of date. A tool counts as a check only once its configuration is in the repository.
 
 Never run `docker compose down` or reset `db`: one server serves every worktree. Use your own database and pass it as `DATABASE_URL`.
 

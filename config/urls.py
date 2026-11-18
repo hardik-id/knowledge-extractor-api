@@ -15,14 +15,29 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerSplitView
 
 from apps.core.api import views as core_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include("config.api_v1")),
+    # Without API_DOCS_ENABLED these two paths fall through to the catch-all: 404.
+    *(
+        [
+            path("api/schema", SpectacularAPIView.as_view(), name="schema"),
+            path(
+                "api/docs",
+                SpectacularSwaggerSplitView.as_view(url_name="schema"),
+                name="docs",
+            ),
+        ]
+        if settings.API_DOCS_ENABLED
+        else []
+    ),
     # Keep last: unknown URLs under /api/ answer the JSON error contract.
     re_path(r"^api/(?P<rest>.*)$", core_views.api_not_found),
 ]

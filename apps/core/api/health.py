@@ -2,6 +2,8 @@
 
 from django.db import connection
 from django.db.utils import Error as DatabaseError
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
@@ -14,6 +16,11 @@ from rest_framework.response import Response
 from apps.core.errors import ApiError
 
 
+class StatusSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    status = serializers.CharField()
+
+
+@extend_schema(responses=StatusSerializer)
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -22,6 +29,7 @@ def health(request: Request) -> Response:
     return Response({"status": "ok"})
 
 
+@extend_schema(responses=StatusSerializer)
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])

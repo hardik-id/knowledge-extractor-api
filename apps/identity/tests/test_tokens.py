@@ -565,7 +565,8 @@ def test_http_fetch_refuses_plain_http() -> None:
 
 
 @pytest.fixture
-def fresh_default_config() -> Iterator[Callable[[], TokenConfig]]:
+def fresh_default_config(settings: Any) -> Iterator[Callable[[], TokenConfig]]:
+    settings.AUTH_MODE = "entra"  # the test settings use dev
     tokens.default_config.cache_clear()
     yield tokens.default_config
     tokens.default_config.cache_clear()

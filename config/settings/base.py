@@ -157,6 +157,10 @@ if AUTH_MODE not in ("entra", "dev"):
 ENTRA_TENANT_ID = env.str("ENTRA_TENANT_ID", default="")
 ENTRA_CLIENT_ID = env.str("ENTRA_CLIENT_ID", default="")
 ENTRA_REQUIRED_SCOPE = env.str("ENTRA_REQUIRED_SCOPE", default="access_as_user")
+# Private key of the dev token issuer (AUTH_MODE=dev); created on first use.
+DEV_AUTH_KEY_PATH = Path(
+    env.str("DEV_AUTH_KEY_PATH", default=str(BASE_DIR / ".dev-keys" / "issuer.pem"))
+)
 
 # ---------------------------------------------------------------------------
 # Logging

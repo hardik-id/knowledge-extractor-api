@@ -54,8 +54,44 @@ After a token is accepted the person's id is bound to the log context as `user_i
 | `ENTRA_CLIENT_ID` | The app registration's client id. Tokens must have it as `aud` |
 | `ENTRA_REQUIRED_SCOPE` | The scope `scp` must contain. Default `access_as_user` |
 | `AUTH_MODE` | `entra` or `dev`. `dev` is refused in production |
+| `DEV_AUTH_KEY_PATH` | Where the dev issuer keeps its private key. Default `.dev-keys/issuer.pem` in the project. Dev mode only |
 
 None of them is a secret. Without `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` the validator refuses to start work and a signed-in request answers 500. The signing keys are fetched from the tenant's OpenID configuration and cached (see `tokens.py`).
+
+## Local development sign-in
+
+With `AUTH_MODE=dev` (the default of `config.settings.local`) nothing talks to Entra ID. Tokens are checked by the same validator as Entra's, against a local issuer (`apps/identity/dev_issuer.py`). Its issuer is `urn:knowledge-extractor:dev-issuer`, its audience `knowledge-extractor-api-dev` and its tenant id `de000000-0000-4000-8000-000000000000`; none of them is Microsoft's. The scope is `ENTRA_REQUIRED_SCOPE`.
+
+Mint a token:
+
+```sh
+uv run python manage.py mint_dev_token [--name "Ada Lovelace"] [--oid <uuid>] [--ttl 3600]
+```
+
+It prints the token and nothing else. It carries the claims an Entra token has: `oid`, `tid`, `name`, `preferred_username`, `scp`. Without `--oid` the person is always the same one; another `--oid` is another user. `--ttl` is in seconds (default 3600).
+
+With curl:
+
+```sh
+TOKEN=$(uv run python manage.py mint_dev_token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/me
+```
+
+For the UI, put the token in its `.env.local` and start it against this API:
+
+```sh
+NEXT_PUBLIC_AUTH_MODE=none
+NEXT_PUBLIC_BACKEND_MODE=http
+NEXT_PUBLIC_DEV_ACCESS_TOKEN=<the token>
+```
+
+The key pair is created on first use at `DEV_AUTH_KEY_PATH` (directory `0700`, file `0600`, ignored by git, never printed or logged). Delete the file to get a new key; every earlier token is then refused. A key file that others can read is refused.
+
+It cannot be switched on in production:
+
+- `config.settings.production` refuses to start with `AUTH_MODE=dev`.
+- With `AUTH_MODE=entra` a dev token is refused (401): the dev issuer is not consulted at all.
+- `mint_dev_token` refuses to run unless `AUTH_MODE=dev`.
 
 ## The app registration
 
@@ -68,5 +104,7 @@ One registration serves the UI and the API; steps are in [auth-api.md](https://g
 - No client secret, no implicit grant. The API holds no secret to talk to Entra ID.
 
 ## Tests
+
+The dev issuer, `mint_dev_token` and the production guard: `apps/identity/tests/test_dev_sign_in.py`.
 
 `apps/identity/tests/test_authentication.py`. Tokens are signed with a locally generated RSA key and go through the real validator, the real authentication class and a real PostgreSQL database. Only the source of the signing keys is local (`apps/identity/tests/conftest.py`).

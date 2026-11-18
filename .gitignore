@@ -222,3 +222,6 @@ __marimo__/
 
 # Git worktrees of the delivery agents (docs/delivery.md)
 .worktrees/
+
+# Private key of the local dev token issuer (docs/auth.md)
+.dev-keys/

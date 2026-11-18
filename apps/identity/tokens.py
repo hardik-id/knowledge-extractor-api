@@ -6,8 +6,8 @@ with one reason. It knows nothing about the web framework.
 
 Where the signing keys come from, who issued the token and which audience and
 scope it needs all arrive in one ``TokenConfig``. Django settings are read in
-``default_config`` only, so another issuer (a local one for development) needs
-a different ``TokenConfig`` and no change to the validation.
+``default_config`` only. Another issuer (the local one for development, in
+``dev_issuer.py``) is a different ``TokenConfig`` and no change to the validation.
 
 Nothing here logs a token or a key: a rejection logs its reason only.
 """
@@ -201,6 +201,10 @@ def default_config() -> TokenConfig:
     from django.conf import settings
     from django.core.exceptions import ImproperlyConfigured
 
+    if settings.AUTH_MODE == "dev":
+        from apps.identity.dev_issuer import default_dev_config
+
+        return default_dev_config()
     if not settings.ENTRA_TENANT_ID or not settings.ENTRA_CLIENT_ID:
         raise ImproperlyConfigured(
             "ENTRA_TENANT_ID and ENTRA_CLIENT_ID are required to validate tokens"

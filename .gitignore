@@ -221,3 +221,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Git worktrees of the delivery agents (docs/delivery.md)
+.worktrees/

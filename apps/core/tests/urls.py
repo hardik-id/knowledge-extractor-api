@@ -1,6 +1,7 @@
 """Test-only URLconf: the real routes plus views that raise each kind of error."""
 
 from collections.abc import Callable
+from typing import Any
 
 import structlog
 from django.http import HttpRequest, JsonResponse
@@ -18,7 +19,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ApiError
-from apps.core.tests.models import Note
+from apps.core.permissions import get_visible_or_404, require_can_change
+from apps.core.tests.models import Note, SharedNote
 from config.urls import handler404, handler500
 from config.urls import urlpatterns as real_patterns
 
@@ -116,7 +118,34 @@ class NoteList(ListAPIView):  # type: ignore[type-arg]
     serializer_class = NoteSerializer
 
 
+class SharedNoteSerializer(serializers.ModelSerializer):  # type: ignore[type-arg]
+    class Meta:
+        model = SharedNote
+        fields = ["id", "text", "shared"]
+
+
+@api_view(["GET"])
+def shared_note_list(request: Request) -> Response:
+    """Built only from the helpers: no ownership check of its own."""
+    rows = SharedNote.objects.visible_to(request.user)
+    return Response({"items": SharedNoteSerializer(rows, many=True).data})
+
+
+@api_view(["GET", "PATCH"])
+def shared_note_detail(request: Request, pk: str) -> Response:
+    """Built only from the helpers: no ownership check of its own."""
+    note = get_visible_or_404(SharedNote, request.user, pk)
+    if request.method == "PATCH":
+        require_can_change(note, request.user)
+        data: Any = request.data
+        note.text = data["text"]
+        note.save()
+    return Response(SharedNoteSerializer(note).data)
+
+
 urlpatterns = [
+    path("api/test/shared-notes", shared_note_list),
+    path("api/test/shared-notes/<str:pk>", shared_note_detail),
     path("api/test/notes", NoteList.as_view()),
     path("api/test/whoami", whoami),
     path("hello", hello),

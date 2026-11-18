@@ -27,4 +27,15 @@ db:
 test:
 	uv run pytest
 
-check: lint typecheck test
+# Fixed settings, so the file never depends on this machine's .env.
+SCHEMA_ENV = DJANGO_SETTINGS_MODULE=config.settings.test API_DOCS_ENABLED=true
+
+schema:
+	$(SCHEMA_ENV) uv run python manage.py spectacular --file docs/openapi.yaml --validate --fail-on-warn
+
+schema-check:
+	$(SCHEMA_ENV) uv run python manage.py spectacular --file docs/openapi.check.yaml --validate --fail-on-warn
+	@if diff -u docs/openapi.yaml docs/openapi.check.yaml; then rm -f docs/openapi.check.yaml; \
+	else rm -f docs/openapi.check.yaml; echo "docs/openapi.yaml is out of date: run make schema"; exit 1; fi
+
+check: lint typecheck schema-check test

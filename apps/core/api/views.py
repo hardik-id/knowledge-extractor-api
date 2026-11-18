@@ -4,7 +4,12 @@ from typing import Any
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.defaults import page_not_found, server_error
-from rest_framework.decorators import api_view
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
+from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -18,6 +23,8 @@ def _json(error: ApiError) -> JsonResponse:
 
 
 @api_view(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def api_not_found(request: Request, rest: str = "") -> Response:
     """Catch-all for unknown URLs under /api/, so debug mode cannot show its HTML page."""
     raise ApiError("not_found")

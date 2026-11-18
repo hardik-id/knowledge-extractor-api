@@ -40,7 +40,7 @@ These are decisions, not suggestions.
 2. **Layout.** `config/` is wiring only. `apps/core` holds shared components and no domain rules. One app per domain under `apps/`.
 3. **Inside an app.** `api/` (serializers, views, urls) is thin: parse, call, serialize. Writes and business rules live in `services.py`, reads in `selectors.py`, and both take the acting user as an argument. Models hold data and invariants.
 4. **Between apps.** Apps import `apps.core`. They do not import each other's models or internals: they call the other app's services and selectors.
-5. **API.** Under `/api/v1`, no trailing slash, snake_case JSON, lists as `{ "items": [...] }`. Every error is `{ "code", "message" }` with optional `details`, raised as `ApiError` with a registered code (planned, #10). A validation failure answers 422.
+5. **API.** Under `/api/v1`, no trailing slash, snake_case JSON, lists as `{ "items": [...] }`. Every error is `{ "code", "message" }` with optional `details`, raised as `ApiError` with a registered code (`docs/errors.md`). A validation failure answers 422.
 6. **Sign-in.** Every endpoint requires a signed-in person unless its code says otherwise. The person is `oid` together with `tid`. An id the person may not see answers 404, not 403.
 7. **Tests.** With every change, in pytest, against real PostgreSQL, with factories. Test behaviour through the API where there is one.
 8. **Workflow.** `make check` passes before a pull request (planned, #5). One PBI per pull request, on a branch `pbi/<nr>-<slug>`. Plain commit messages, no attribution lines. A feature's documentation goes in `docs/<topic>.md`, not in the README.

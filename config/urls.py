@@ -16,8 +16,15 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
+
+from apps.core.api import views as core_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Keep last: unknown URLs under /api/ answer the JSON error contract.
+    re_path(r"^api/(?P<rest>.*)$", core_views.api_not_found),
 ]
+
+handler404 = "apps.core.api.views.handler404"
+handler500 = "apps.core.api.views.handler500"

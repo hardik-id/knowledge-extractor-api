@@ -54,6 +54,8 @@ TEMPLATES = [
 # Apps
 # ---------------------------------------------------------------------------
 
+AUTH_USER_MODEL = 'identity.User'
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

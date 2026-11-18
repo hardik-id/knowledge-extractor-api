@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db check
+.PHONY: install lint format typecheck run migrate db test check
 
 install:
 	uv sync
@@ -24,4 +24,7 @@ migrate:
 db:
 	docker compose up -d --wait db
 
-check: lint typecheck
+test:
+	uv run pytest
+
+check: lint typecheck test

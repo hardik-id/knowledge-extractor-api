@@ -157,7 +157,11 @@ async def test_the_model_gets_the_rules_the_definition_the_documents_and_the_his
     instructions = call.system_instructions or ""
     assert "untrusted" in instructions
     assert "You propose, the person applies" in instructions
-    assert {t.name for t in call.tools} == {"propose_definition", "read_document"}
+    assert {t.name for t in call.tools} == {
+        "propose_definition",
+        "read_document",
+        "find_in_documents",
+    }
     earlier, long_turn, request = call.input
     assert earlier == {"role": "user", "content": "earlier"}
     assert len(long_turn["content"]) == HISTORY_CHARS

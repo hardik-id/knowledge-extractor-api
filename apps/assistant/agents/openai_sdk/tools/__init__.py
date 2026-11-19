@@ -16,6 +16,7 @@ from agents import Tool
 
 from apps.assistant.agents.openai_sdk.tools import (
     find_in_documents,
+    outline_document,
     preview_extraction,
     propose_definition,
     read_document,
@@ -26,4 +27,5 @@ TOOLS: list[Tool] = [
     find_in_documents.TOOL,
     preview_extraction.TOOL,
     propose_definition.TOOL,
+    outline_document.TOOL,
 ]

@@ -132,7 +132,17 @@ Its reply text is cut into deltas of three words each.
 - **`preview_extraction(definition, document_id)`** validates the definition as `propose_definition` does, runs `Workspace.preview` and summarises it: records per record type; per field the records where it was found, not found, or found but not anchored; up to three example values. Nothing is saved and it is not a proposal.
 - **`read_document(document_id)`** reads a sample of one of the run's documents, through `Workspace.read` (as the run's owner, only the run's own files).
 - **`find_in_documents(text)`** searches the run's documents for a literal phrase (2 to 100 characters, case does not matter, no patterns). Per matching document it gives the number of matches and up to 3 snippets of about 120 characters (12 in total, the first 50 documents searched), as untrusted data. No match is a plain answer, not an error.
+- **`outline_document(document_id)`** shows how one document is built without reading it: the front matter keys, the headings with their levels, the labelled lines (`**Label:** value`) by label with a count and one example, and the length. Lists are capped (60 headings, 20 labels, 30 keys) and say when they are cut. The parsing is the pure function `outline(text)` in `tools/_structure.py`.
 - **Propose, never apply.** The instructions explain the definition model (record types, fields, `quote` against `inferred`, value types, `multiple`, the output template) and the rule that the assistant proposes and the person applies. No tool saves anything.
+
+### What the agent can look at
+
+| Tool | Gives the model | Limits |
+| --- | --- | --- |
+| `read_document(document_id)` | the first 4,000 characters of one document | at most 4 reads per reply |
+| `outline_document(document_id)` | front matter keys, headings, labels with counts and an example, length | 60 headings, 20 labels, 30 keys; values clipped to 60 characters |
+
+Both wrap what comes from a document as untrusted data.
 
 ### The package
 
@@ -151,6 +161,8 @@ apps/assistant/agents/openai_sdk/
     _definition_schema.py  the schema of a definition
     propose_definition.py
     read_document.py
+    outline_document.py
+    _structure.py          outline(text): front matter, headings, labels (pure)
 ```
 
 ### Adding a tool

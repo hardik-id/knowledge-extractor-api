@@ -264,6 +264,10 @@ AZURE_STORAGE_ACCOUNT_URL = env.str("AZURE_STORAGE_ACCOUNT_URL", default="")
 
 # Assistant and extractor.
 ASSISTANT_AGENT = env.str("ASSISTANT_AGENT", default="scripted")  # scripted | openai
+# A reply still streaming this long after it began is closed (docs/assistant.md).
+ASSISTANT_REPLY_TIMEOUT_SECONDS = env.int(
+    "ASSISTANT_REPLY_TIMEOUT_SECONDS", default=300
+)
 EXTRACTOR = env.str("EXTRACTOR", default="scripted")
 LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure
 LLM_MODEL = env.str("LLM_MODEL", default="")

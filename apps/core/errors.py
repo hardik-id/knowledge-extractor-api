@@ -43,6 +43,8 @@ ERRORS: dict[str, ErrorCode] = {
         409, "Someone saved a newer version of this definition."
     ),
     "invalid_definition": ErrorCode(422, "The extraction definition is not valid."),
+    "assistant_busy": ErrorCode(409, "The assistant is still answering."),
+    "empty_message": ErrorCode(422, "Write a message first."),
     "conflict": ErrorCode(409, "The request conflicts with the current state."),
     "validation_error": ErrorCode(422, "The request is not valid."),
     "server_error": ErrorCode(500, "Something went wrong."),

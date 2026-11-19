@@ -35,6 +35,8 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `unsupported_source` | 422 | This source is not supported yet. |
 | `definition_conflict` | 409 | Someone saved a newer version of this definition. |
 | `invalid_definition` | 422 | The extraction definition is not valid. |
+| `assistant_busy` | 409 | The assistant is still answering. |
+| `empty_message` | 422 | Write a message first. |
 | `conflict` | 409 | The request conflicts with the current state. |
 | `validation_error` | 422 | The request is not valid. |
 | `server_error` | 500 | Something went wrong. |

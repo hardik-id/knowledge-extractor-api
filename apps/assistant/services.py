@@ -66,6 +66,21 @@ def send_message(user: User, run_id: Any, *, text: str, definition: Any) -> Mess
     return asked
 
 
+def clear_messages(user: User, run_id: Any) -> None:
+    """Remove every message of the run and announce ``assistant.cleared`` after the commit.
+
+    404 for a run that is not theirs, 409 ``assistant_busy`` while a reply is
+    still being written (a stale one is closed first).
+    """
+    run = runs.get_run(user, run_id)
+    close_stale_replies(user, run.pk)
+    with transaction.atomic():
+        if Message.objects.filter(run_id=run.pk, status=Status.STREAMING).exists():
+            raise _busy()
+        Message.objects.filter(run_id=run.pk).delete()
+        realtime.publish_run_event(run.pk, {"type": "assistant.cleared"})
+
+
 def _busy() -> ApiError:
     return ApiError("assistant_busy")
 

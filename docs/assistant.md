@@ -24,6 +24,7 @@ A run has one conversation. Each message is stored (`apps/assistant/models.py`, 
 | --- | --- | --- |
 | `GET /api/v1/runs/{run_id}/extraction/assistant/messages` | none | 200 `{ "messages": [message] }`, oldest first |
 | `POST /api/v1/runs/{run_id}/extraction/assistant/messages` | `{ "text", "definition" }` | 201, the stored **user** message (one object) |
+| `DELETE /api/v1/runs/{run_id}/extraction/assistant/messages` | none | 204, every message of the run removed; the run's sockets get `{ "type": "assistant.cleared" }` after the commit. Nothing else changes (not the definition, not the records). 409 `assistant_busy` while a reply is `streaming` (a stale one is closed first) |
 
 The POST body's `definition` is the draft on the person's screen, saved or not, without `version`. It goes through `validate_draft` and is kept with the person's message: the agent works from it, not from the last saved version. The text is stored without leading and trailing spaces.
 

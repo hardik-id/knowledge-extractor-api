@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "corsheaders",
     "django_structlog",
+    "django_tasks_db",
     "apps.core",
     "apps.identity",
     "apps.documents",
@@ -126,6 +127,15 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+
+# ---------------------------------------------------------------------------
+# Background jobs: Django Tasks with a database queue (docs/jobs.md).
+# The worker is `manage.py db_worker` (make worker); test.py runs jobs inline.
+# ---------------------------------------------------------------------------
+
+TASKS = {
+    "default": {"BACKEND": "django_tasks_db.DatabaseBackend"},
+}
 
 # ---------------------------------------------------------------------------
 # REST framework: JSON only, no browsable API.

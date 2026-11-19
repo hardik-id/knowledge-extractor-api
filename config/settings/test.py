@@ -20,3 +20,6 @@ _checkout = hashlib.sha256(str(BASE_DIR).encode()).hexdigest()[:8]
 DATABASES["default"]["TEST"] = {
     "NAME": f"test_{DATABASES['default']['NAME']}_{_checkout}"[:63],
 }
+
+# Jobs run inline, in the process that enqueues them (docs/jobs.md).
+TASKS = {"default": {"BACKEND": "django.tasks.backends.immediate.ImmediateBackend"}}

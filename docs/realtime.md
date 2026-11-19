@@ -72,6 +72,7 @@ The UI also stops on 4403 (not used by this API so far) and retries on any other
 | `type` | Shape | Sent by |
 | --- | --- | --- |
 | `cell` | `{ "type": "cell", "cell": { file_id, stage, status, execution_id, progress, error, output, updated_at } }`, the cell as in the snapshot | `runs.services.set_cell`, on every change |
+| `run.changed` | `{ "type": "run.changed" }` | `runs.services.replace_documents`, once the change of the run's documents is committed; the page fetches the snapshot again |
 | `extraction.changed` | `{ "type": "extraction.changed", "file_id", "revision" }` | the extraction app, when a file's revision changes (#149, #152) |
 | `assistant.delta` | `{ "type": "assistant.delta", "message_id", "text" }` | the assistant (#146) |
 | `assistant.proposal` | `{ "type": "assistant.proposal", "message_id", "proposal" }` | the assistant (#146) |

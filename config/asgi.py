@@ -14,7 +14,13 @@ import os
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 
+from apps.core.telemetry import setup_telemetry
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
+
+# Before the application loads, so the Django middleware is instrumented. Each
+# worker process imports this module itself, and so sets up its own SDK.
+setup_telemetry()
 
 # Django's own application first: it runs django.setup(), which the imports
 # below need.

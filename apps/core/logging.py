@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 import structlog
+from opentelemetry import trace
 from structlog.typing import EventDict, Processor, WrappedLogger
 
 
@@ -39,11 +40,26 @@ class RedactTicket(logging.Filter):
         return True
 
 
+def add_trace_context(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
+    """trace_id, span_id and trace_flags (lower-case hex) of the span the line is written in.
+
+    trace_flags is "01" for a sampled trace, "00" otherwise."""
+    span_context = trace.get_current_span().get_span_context()
+    if span_context.is_valid:
+        event_dict["trace_id"] = f"{span_context.trace_id:032x}"
+        event_dict["span_id"] = f"{span_context.span_id:016x}"
+        event_dict["trace_flags"] = f"{int(span_context.trace_flags) & 1:02x}"
+    return event_dict
+
+
 def _shared_processors() -> list[Processor]:
     return [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
+        add_trace_context,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
     ]
 

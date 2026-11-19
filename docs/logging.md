@@ -8,7 +8,7 @@ Every request has an id, and every log line written while it is served carries i
 
 ## Log lines
 
-[django-structlog](https://django-structlog.readthedocs.io/) is wired in `config/settings/base.py`; the structlog setup is in `apps/core/logging.py`. `RequestLogMiddleware` writes one line per request, `request_finished` (or `request_failed` for an unhandled exception), with `request_id`, `method`, `path`, `status`, `duration_ms` and `user_id` (the person, set once the token is accepted; see [auth.md](auth.md)). The `request_started` line is dropped.
+[django-structlog](https://django-structlog.readthedocs.io/) is wired in `config/settings/base.py`; the structlog setup is in `apps/core/logging.py`. `RequestLogMiddleware` writes one line per request, `request_finished` (or `request_failed` for an unhandled exception), with `request_id`, `method`, `path`, `status`, `duration_ms` and `user_id` (the person, set once the token is accepted; see [auth.md](auth.md)). The `request_started` line is dropped. A line written inside a trace also carries `trace_id`, `span_id` and `trace_flags` (see [observability.md](observability.md)).
 
 Settings:
 

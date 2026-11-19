@@ -9,4 +9,5 @@ urlpatterns = [
     path("", include("apps.runs.api.urls")),
     path("", include("apps.realtime.api.urls")),
     path("", include("apps.extraction.api.urls")),
+    path("", include("apps.assistant.api.urls")),
 ]

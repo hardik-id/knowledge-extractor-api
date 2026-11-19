@@ -37,3 +37,65 @@ class FakeDocuments:
 
     async def read(self, document_id: str) -> str:
         return self.texts[document_id]
+
+
+class FailingAgent:
+    """Starts a reply, then breaks."""
+
+    async def reply(
+        self,
+        text: str,
+        definition: Definition,
+        history: list[Message],
+        documents: RunDocuments,
+    ) -> AsyncIterator[AgentEvent]:
+        yield TextDelta("Let me see")
+        raise RuntimeError("the model is down")
+
+
+class SilentFailingAgent:
+    """Breaks before it says anything."""
+
+    async def reply(
+        self,
+        text: str,
+        definition: Definition,
+        history: list[Message],
+        documents: RunDocuments,
+    ) -> AsyncIterator[AgentEvent]:
+        raise RuntimeError("the model is down")
+        yield TextDelta("never")  # pragma: no cover
+
+
+class RecordingAgent:
+    """Remembers what it was given and reads every document; says how many it read."""
+
+    calls: list[dict[str, object]] = []
+
+    async def reply(
+        self,
+        text: str,
+        definition: Definition,
+        history: list[Message],
+        documents: RunDocuments,
+    ) -> AsyncIterator[AgentEvent]:
+        refs = await documents.list()
+        texts = [await documents.read(ref.id) for ref in refs]
+        RecordingAgent.calls.append(
+            {"text": text, "definition": definition, "history": history, "texts": texts}
+        )
+        yield TextDelta(f"I read {len(texts)} documents.")
+
+
+class BadProposalAgent:
+    """Proposes a definition that is not valid."""
+
+    async def reply(
+        self,
+        text: str,
+        definition: Definition,
+        history: list[Message],
+        documents: RunDocuments,
+    ) -> AsyncIterator[AgentEvent]:
+        yield TextDelta("Here you go.")
+        yield Proposal({"prompt": "x"}, [])

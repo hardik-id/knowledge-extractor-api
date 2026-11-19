@@ -21,6 +21,7 @@ from apps.assistant.agents.openai_sdk.tools import (
     propose_definition,
     read_document,
     summarize_records,
+    survey_documents,
 )
 
 TOOLS: list[Tool] = [
@@ -30,4 +31,5 @@ TOOLS: list[Tool] = [
     propose_definition.TOOL,
     outline_document.TOOL,
     summarize_records.TOOL,
+    survey_documents.TOOL,
 ]

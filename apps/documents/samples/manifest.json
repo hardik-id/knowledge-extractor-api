@@ -1,0 +1,62 @@
+[
+  {
+    "id": "enriched/engineering/architecture/architecture-decisions-2026.md",
+    "name": "architecture-decisions-2026.md",
+    "location": "enriched / engineering / architecture",
+    "modified_at": "2026-11-03T15:20:00Z"
+  },
+  {
+    "id": "enriched/engineering/architecture/platform-adrs.md",
+    "name": "platform-adrs.md",
+    "location": "enriched / engineering / architecture",
+    "modified_at": "2026-10-27T10:10:00Z"
+  },
+  {
+    "id": "enriched/engineering/operations/incident-runbook.md",
+    "name": "incident-runbook.md",
+    "location": "enriched / engineering / operations",
+    "modified_at": "2026-11-05T08:01:00Z"
+  },
+  {
+    "id": "enriched/engineering/standards/api-style-guide.md",
+    "name": "api-style-guide.md",
+    "location": "enriched / engineering / standards",
+    "modified_at": "2026-08-30T16:22:00Z"
+  },
+  {
+    "id": "enriched/hr/policies/leave-policy-2026.md",
+    "name": "leave-policy-2026.md",
+    "location": "enriched / hr / policies",
+    "modified_at": "2026-10-02T09:12:00Z"
+  },
+  {
+    "id": "enriched/hr/onboarding/onboarding-checklist.md",
+    "name": "onboarding-checklist.md",
+    "location": "enriched / hr / onboarding",
+    "modified_at": "2026-09-18T14:40:00Z"
+  },
+  {
+    "id": "enriched/finance/reporting/q3-revenue-by-region.md",
+    "name": "q3-revenue-by-region.md",
+    "location": "enriched / finance / reporting",
+    "modified_at": "2026-10-11T11:30:00Z"
+  },
+  {
+    "id": "enriched/legal/templates/supplier-contract-template.md",
+    "name": "supplier-contract-template.md",
+    "location": "enriched / legal / templates",
+    "modified_at": "2026-07-21T10:05:00Z"
+  },
+  {
+    "id": "enriched/product/planning/product-roadmap-2027.md",
+    "name": "product-roadmap-2027.md",
+    "location": "enriched / product / planning",
+    "modified_at": "2026-11-09T13:45:00Z"
+  },
+  {
+    "id": "enriched/it/compliance/security-awareness-training.md",
+    "name": "security-awareness-training.md",
+    "location": "enriched / it / compliance",
+    "modified_at": "2026-06-14T09:00:00Z"
+  }
+]

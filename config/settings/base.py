@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     "django_structlog",
     "apps.core",
     "apps.identity",
+    "apps.documents",
 ]
 
 # ---------------------------------------------------------------------------

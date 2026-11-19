@@ -151,7 +151,7 @@ def test_a_dotted_path_picks_a_class(settings: Any) -> None:
     check_settings()
 
 
-@pytest.mark.parametrize("value", ["gpt", "", "openai"])
+@pytest.mark.parametrize("value", ["gpt", "", "anthropic"])
 def test_an_unknown_value_stops_the_app(settings: Any, value: str) -> None:
     settings.ASSISTANT_AGENT = value
     with pytest.raises(ImproperlyConfigured, match="ASSISTANT_AGENT"):
@@ -160,10 +160,9 @@ def test_an_unknown_value_stops_the_app(settings: Any, value: str) -> None:
         get_agent()
 
 
-def test_openai_says_it_is_not_built(settings: Any) -> None:
+def test_openai_is_known(settings: Any) -> None:
     settings.ASSISTANT_AGENT = "openai"
-    with pytest.raises(ImproperlyConfigured, match="not built"):
-        check_settings()
+    check_settings()
 
 
 def test_a_dotted_path_that_does_not_import_stops_the_app(settings: Any) -> None:

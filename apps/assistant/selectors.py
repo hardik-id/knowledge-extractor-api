@@ -44,7 +44,11 @@ class OwnerDocuments:
 
 def run_documents(message: Message) -> OwnerDocuments:
     """The documents of the run ``message`` belongs to, read as the run's owner."""
-    run = message.run
+    return documents_of_run(message.run)
+
+
+def documents_of_run(run: Any) -> OwnerDocuments:
+    """The documents of ``run``, read as its owner."""
     refs = [
         DocumentRef(id=file.source_ref, name=file.name)
         for file in run.files.order_by("name", "id")

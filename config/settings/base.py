@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "apps.documents",
     "apps.runs",
     "apps.realtime",
+    "apps.extraction",
 ]
 
 # ---------------------------------------------------------------------------

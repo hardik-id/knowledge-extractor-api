@@ -25,6 +25,8 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `no_files` | 422 | A run needs at least one file. |
 | `mixed_sources` | 422 | A run cannot mix storage documents with files from other sources. |
 | `unsupported_source` | 422 | This source is not supported yet. |
+| `definition_conflict` | 409 | Someone saved a newer version of this definition. |
+| `invalid_definition` | 422 | The extraction definition is not valid. |
 | `conflict` | 409 | The request conflicts with the current state. |
 | `validation_error` | 422 | The request is not valid. |
 | `server_error` | 500 | Something went wrong. |

@@ -344,6 +344,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /runs/{run_id}/stages/extract/definition:
+    get:
+      operationId: runs_stages_extract_definition_retrieve
+      description: The run's extraction definition (GET), or save a new version of
+        it (PUT).
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Definition'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    put:
+      operationId: runs_stages_extract_definition_update
+      description: The run's extraction definition (GET), or save a new version of
+        it (PUT).
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveDefinitionRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Definition'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /ws-ticket:
     post:
       operationId: ws_ticket_create
@@ -395,6 +492,22 @@ components:
             $ref: '#/components/schemas/RunItemRequest'
       required:
       - items
+    Definition:
+      type: object
+      properties:
+        version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        prompt:
+          type: string
+        record_types: {}
+        output: {}
+      required:
+      - output
+      - prompt
+      - record_types
+      - version
     Document:
       type: object
       description: A listed document, as the UI's parser reads it.
@@ -453,6 +566,44 @@ components:
       required:
       - code
       - message
+    FieldRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          default: ''
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        value_type:
+          $ref: '#/components/schemas/ValueTypeEnum'
+        choices:
+          type: array
+          items:
+            type: string
+        multiple:
+          type: boolean
+          default: false
+      required:
+      - key
+      - mode
+      - name
+      - value_type
+    FormatEnum:
+      enum:
+      - json
+      - markdown
+      - csv
+      type: string
+      description: |-
+        * `json` - json
+        * `markdown` - markdown
+        * `csv` - csv
     Me:
       type: object
       properties:
@@ -469,6 +620,41 @@ components:
       - id
       - name
       - preferred_username
+    ModeEnum:
+      enum:
+      - quote
+      - inferred
+      type: string
+      description: |-
+        * `quote` - quote
+        * `inferred` - inferred
+    OutputRequest:
+      type: object
+      properties:
+        format:
+          $ref: '#/components/schemas/FormatEnum'
+        template:
+          type: string
+      required:
+      - format
+      - template
+    RecordTypeRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          default: ''
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldRequest'
+      required:
+      - fields
+      - name
     Run:
       type: object
       properties:
@@ -514,6 +700,26 @@ components:
       required:
       - source
       - source_ref
+    SaveDefinitionRequest:
+      type: object
+      description: 'The body of a save: the draft plus the version it was edited from.'
+      properties:
+        prompt:
+          type: string
+        record_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordTypeRequest'
+        output:
+          $ref: '#/components/schemas/OutputRequest'
+        base_version:
+          type: integer
+          minimum: 1
+      required:
+      - base_version
+      - output
+      - prompt
+      - record_types
     Status:
       type: object
       properties:
@@ -521,6 +727,18 @@ components:
           type: string
       required:
       - status
+    ValueTypeEnum:
+      enum:
+      - text
+      - date
+      - number
+      - choice
+      type: string
+      description: |-
+        * `text` - text
+        * `date` - date
+        * `number` - number
+        * `choice` - choice
     WsTicket:
       type: object
       properties:

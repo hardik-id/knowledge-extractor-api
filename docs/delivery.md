@@ -53,6 +53,16 @@ Sonnet tests and validates, and merges. Haiku does the preparation step.
 
 Workflows on the same line of "start it after" can run at the same time: 1 with ui-1, 2 with 3, 5 with 6. A workflow refuses to start while a PBI it depends on is still open.
 
+## The assistant epic
+
+Tracked in #272. The assistant's LLM agent becomes a package with tools that help a subject-matter expert see what can be extracted.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `assistant-1-structure` | #263 → #264 → #265 | nothing |
+| `assistant-2-tools` | (#266 → #267) ∥ #268 ∥ #269 ∥ #270 | 1 |
+| `assistant-3-guidance` | #271 | 2 |
+
 The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 
 ## Running one

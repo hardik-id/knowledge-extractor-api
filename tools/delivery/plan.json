@@ -32,7 +32,10 @@
     {"index": 17, "name": "studio-7-stack", "description": "PBI-154 ∥ 155 ∥ 156: telemetry for jobs and agents, the whole stack in compose with a guide, the Studio flow test", "whenToUse": "After studio-5-assistant and studio-6-extraction.", "items": [154, 155, 156]},
     {"index": 21, "kind": "ui", "needsApi": false, "name": "studio-ui-1-apps", "description": "UI-038: choose which apps the shell offers", "whenToUse": "Any time. Needs no backend.", "items": [38]},
     {"index": 22, "kind": "ui", "name": "studio-ui-2-backend", "description": "UI-039 → 040: Studio over HTTP against the Django API, then a walk-through in a browser", "whenToUse": "After studio-7-stack, with the backend stack running (make up).", "items": [39, 40]},
-    {"index": 18, "name": "studio-8-fixes", "description": "PBI-256: the test run must not read a local .env", "whenToUse": "After studio-7-stack.", "items": [256]}
+    {"index": 18, "name": "studio-8-fixes", "description": "PBI-256: the test run must not read a local .env", "whenToUse": "After studio-7-stack.", "items": [256]},
+    {"index": 31, "name": "assistant-1-structure", "description": "PBI-263 → 264 → 265: the agent as a package, the workspace it looks through, a budget and telemetry for tool calls", "whenToUse": "First of the assistant epic.", "items": [263, 264, 265]},
+    {"index": 32, "name": "assistant-2-tools", "description": "(PBI-266 → 267) ∥ 268 ∥ 269 ∥ 270: outline, survey, find, preview and record summary tools", "whenToUse": "After assistant-1-structure.", "items": [266, 267, 268, 269, 270]},
+    {"index": 33, "name": "assistant-3-guidance", "description": "PBI-271: guidance for helping a subject-matter expert, and tools by hand", "whenToUse": "After assistant-2-tools.", "items": [271]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -83,6 +86,15 @@
     {"kind": "ui", "n": 38, "slug": "offered-apps", "title": "Choose which apps the shell offers", "tier": "normal", "deps": []},
     {"kind": "ui", "n": 39, "slug": "studio-http", "title": "Studio over HTTP against the Django API", "tier": "hard", "deps": [38]},
     {"kind": "ui", "n": 40, "slug": "studio-browser-walk", "title": "Walk through Studio in a real browser against the backend", "tier": "hard", "deps": [39]},
-    {"n": 256, "slug": "tests-ignore-dotenv", "title": "The test run must not read a local .env", "tier": "normal", "deps": []}
+    {"n": 256, "slug": "tests-ignore-dotenv", "title": "The test run must not read a local .env", "tier": "normal", "deps": []},
+    {"n": 263, "slug": "agent-package", "title": "Assistant: the Agents SDK agent as a package, one job per module", "tier": "normal", "deps": []},
+    {"n": 264, "slug": "agent-workspace", "title": "Assistant: the workspace an agent can look at", "tier": "complex", "deps": [263]},
+    {"n": 265, "slug": "tool-budget-telemetry", "title": "Assistant: a budget and telemetry for tool calls", "tier": "normal", "deps": [264]},
+    {"n": 266, "slug": "tool-outline-document", "title": "Assistant tool: outline of a document", "tier": "normal", "deps": [265]},
+    {"n": 267, "slug": "tool-survey-documents", "title": "Assistant tool: survey of the documents of a run", "tier": "normal", "deps": [266]},
+    {"n": 268, "slug": "tool-find-in-documents", "title": "Assistant tool: find a phrase in the documents", "tier": "simple", "deps": [265]},
+    {"n": 269, "slug": "tool-preview-extraction", "title": "Assistant tool: preview what a definition would extract", "tier": "normal", "deps": [265]},
+    {"n": 270, "slug": "tool-summarize-records", "title": "Assistant tool: summary of the extracted records", "tier": "normal", "deps": [265]},
+    {"n": 271, "slug": "sme-guidance", "title": "Assistant: guidance for helping a subject-matter expert, and tools by hand", "tier": "normal", "deps": [265, 267, 268, 269, 270]}
   ]
 }

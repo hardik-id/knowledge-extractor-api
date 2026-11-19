@@ -19,6 +19,7 @@ ERRORS: dict[str, ErrorCode] = {
     "forbidden": ErrorCode(403, "You do not have permission to do this."),
     "not_found": ErrorCode(404, "Not found."),
     "method_not_allowed": ErrorCode(405, "Method not allowed."),
+    "document_not_found": ErrorCode(404, "Document not found."),
     "conflict": ErrorCode(409, "The request conflicts with the current state."),
     "validation_error": ErrorCode(422, "The request is not valid."),
     "server_error": ErrorCode(500, "Something went wrong."),

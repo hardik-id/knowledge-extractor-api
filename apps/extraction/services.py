@@ -264,3 +264,112 @@ def delete_record(
         record.delete()
 
     return change_extraction(user, run_id, file_id, revision, apply)
+
+
+def replace_field_values(
+    user: User,
+    run_id: Any,
+    file_id: Any,
+    record_id: Any,
+    field_id: str,
+    *,
+    revision: int,
+    values: list[dict[str, Any]],
+) -> Extraction:
+    """Replace all values of one field with ``values``.
+
+    A value sent back unchanged (same ``value``, same spans) as one the field has
+    keeps its id, origin and review. The others are new: ``human`` and ``accepted``.
+    Stored values that are not sent back are removed. No values at all resets the
+    field to one "not found" value a later run does not fill again.
+    """
+
+    def apply(change: Change) -> None:
+        record = change.record(record_id)
+        record_type = next(
+            (
+                t
+                for t in change.definition.record_types
+                if t["id"] == record.record_type_id
+            ),
+            None,
+        )
+        field = next(
+            (
+                f
+                for f in (record_type or {"fields": []})["fields"]
+                if f["id"] == field_id
+            ),
+            None,
+        )
+        if field is None:
+            raise ApiError("unknown_field")
+        inputs = values or [{"value": None, "spans": []}]
+        if not field["multiple"] and len(inputs) > 1:
+            raise ApiError(
+                "too_many_values", f'"{field["name"]}" takes a single value.'
+            )
+        stored = list(record.values.filter(field_id=field_id))
+        keep: list[FieldValue] = []
+        new: list[FieldValue] = []
+        for given in inputs:
+            wanted = [_plain_span(span) for span in given["spans"]]
+            same = next(
+                (
+                    v
+                    for v in stored
+                    if v not in keep
+                    and v.value == given["value"]
+                    and [_plain_span(s) for s in v.spans] == wanted
+                ),
+                None,
+            )
+            if same is not None:
+                keep.append(same)
+                continue
+            new.append(
+                FieldValue(
+                    record=record,
+                    field_id=field_id,
+                    value=given["value"],
+                    spans=[check_span(change.text(), span) for span in given["spans"]],
+                    origin=Origin.HUMAN,
+                    review=Review.ACCEPTED,
+                    anchored=True,
+                )
+            )
+        record.values.filter(field_id=field_id).exclude(
+            pk__in=[v.pk for v in keep]
+        ).delete()
+        FieldValue.objects.bulk_create(new)
+
+    return change_extraction(user, run_id, file_id, revision, apply)
+
+
+def _plain_span(span: Any) -> tuple[Any, Any, Any]:
+    get = span.get if isinstance(span, dict) else lambda _key: None
+    return (get("start"), get("end"), get("quote"))
+
+
+def review_value(
+    user: User,
+    run_id: Any,
+    file_id: Any,
+    record_id: Any,
+    value_id: Any,
+    *,
+    revision: int,
+    review: str,
+) -> Extraction:
+    """Accept or reject one value of a record. 404 ``value_not_found`` for an unknown one."""
+
+    def apply(change: Change) -> None:
+        record = change.record(record_id)
+        try:
+            value = record.values.get(pk=UUID(str(value_id)))
+        except FieldValue.DoesNotExist, ValueError:
+            raise ApiError("value_not_found") from None
+        value.review = review
+        value.save()
+
+    return change_extraction(user, run_id, file_id, revision, apply)

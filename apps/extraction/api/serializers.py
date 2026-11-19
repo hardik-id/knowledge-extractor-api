@@ -94,6 +94,20 @@ class UpdateRecordSerializer(serializers.Serializer):  # type: ignore[type-arg]
     use_as_example = serializers.BooleanField(required=False)
 
 
+class ReplaceFieldValuesSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The body of ``PUT .../records/{record_id}/fields/{field_id}``."""
+
+    revision = serializers.IntegerField(min_value=0)
+    values = ValueInputSerializer(many=True)
+
+
+class ReviewValueSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The body of ``PATCH .../records/{record_id}/values/{value_id}``."""
+
+    revision = serializers.IntegerField(min_value=0)
+    review = serializers.ChoiceField(Review.choices)
+
+
 class RevisionQuerySerializer(serializers.Serializer):  # type: ignore[type-arg]
     """The query of ``DELETE .../records/{record_id}``."""
 

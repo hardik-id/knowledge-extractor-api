@@ -231,6 +231,45 @@ def check_assistant_messages(value: Any) -> None:
         check_assistant_message(m, f"messages[{i}]")
 
 
+def check_project(value: Any, path: str = "project") -> None:
+    o = obj(value, path)
+    for key in ("id", "name", "description", "run_id", "created_at", "updated_at"):
+        string(o.get(key), f"{path}.{key}")
+    number(o.get("document_count"), f"{path}.document_count")
+    nullable(
+        o.get("configuration_version"),
+        lambda v: number(v, f"{path}.configuration_version"),
+    )
+
+
+def check_projects(value: Any) -> None:
+    o = obj(value, "response")
+    for i, item in enumerate(array(o.get("items"), "items")):
+        check_project(item, f"items[{i}]")
+    nullable(o.get("next"), lambda v: string(v, "next"))
+
+
+def check_version_entry(value: Any, path: str = "version") -> None:
+    o = obj(value, path)
+    number(o.get("version"), f"{path}.version")
+    string(o.get("note"), f"{path}.note")
+    string(o.get("created_at"), f"{path}.created_at")
+    number(o.get("record_type_count"), f"{path}.record_type_count")
+    number(o.get("field_count"), f"{path}.field_count")
+
+
+def check_versions(value: Any) -> None:
+    for i, v in enumerate(array(obj(value, "response").get("items"), "items")):
+        check_version_entry(v, f"items[{i}]")
+
+
+def check_saved_definition(value: Any) -> None:
+    """A definition with the note and time of its version."""
+    check_definition(value)
+    string(obj(value, "definition").get("note"), "definition.note")
+    string(obj(value, "definition").get("created_at"), "definition.created_at")
+
+
 # --- socket messages ------------------------------------------------------
 
 
@@ -261,6 +300,14 @@ def check_assistant_event(value: Any) -> None:
         check_proposal(o.get("proposal"), "message.proposal")
 
 
+def check_run_changed_message(value: Any) -> None:
+    one_of(obj(value, "message").get("type"), ("run.changed",), "message.type")
+
+
+def check_assistant_cleared_message(value: Any) -> None:
+    one_of(obj(value, "message").get("type"), ("assistant.cleared",), "message.type")
+
+
 def check_socket_message(value: Any) -> None:
     """Whatever the run socket may send, checked as the UI's parser for its type."""
     kind = obj(value, "message").get("type")
@@ -268,5 +315,9 @@ def check_socket_message(value: Any) -> None:
         check_cell_message(value)
     elif kind == "extraction.changed":
         check_extraction_changed_message(value)
+    elif kind == "run.changed":
+        check_run_changed_message(value)
+    elif kind == "assistant.cleared":
+        check_assistant_cleared_message(value)
     else:
         check_assistant_event(value)

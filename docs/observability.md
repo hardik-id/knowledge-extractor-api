@@ -64,6 +64,89 @@ For Splunk RUM the response carries `Server-Timing: traceparent;desc="00-<trace 
 
 Test: `test_no_span_and_no_log_line_holds_a_token_or_a_query_string`, `test_an_outgoing_call_records_no_query_string` and `test_an_exported_log_record_holds_no_query_string`.
 
+## Jobs, the assistant and extraction
+
+A trace does not stop where a request hands work to the worker. When a request enqueues a job, the current trace context (the W3C `traceparent`, and `tracestate` when there is one) is stored with the job; the worker restores it before the job runs, so the job's spans have the request's span as their parent and carry its trace id. Request and job are two processes (`knowledge-extractor-api`, `knowledge-extractor-worker`) and one trace.
+
+It is done once, in the job plumbing (`apps/core/jobs.py`): `enqueue_after_commit` adds the context to the job's arguments as `_trace`, and `@job()` (used in place of `@task()`) takes it off again and attaches it. A job's own code never sees it. A job enqueued with no active span, or directly with `.enqueue`, starts a trace of its own. Only the trace context travels, never baggage.
+
+Code: `apps/assistant/telemetry.py`, `apps/extraction/telemetry.py`, `apps/realtime/telemetry.py`. Tests: `test_telemetry.py` in each of those apps and `apps/core/tests/test_jobs.py`.
+
+### Spans
+
+One span per job, as a child of the request's span.
+
+`assistant.reply` (the reply job, `apps/assistant/tasks.py`):
+
+| Attribute | Meaning |
+| --- | --- |
+| `assistant.run_id` | the run (left out when the reply was gone or done, see `skipped`) |
+| `assistant.message_id` | the assistant message being written |
+| `assistant.agent` | the kind of agent: the built-in name (`scripted`), or the class name of an agent named by dotted path |
+| `assistant.outcome` | `done`, `failed` (the agent raised and the reply ended with the apology), `closed` (someone else ended the reply while it was written) or `skipped` (nothing to do) |
+| `assistant.deltas` | the number of text deltas the reply sent |
+| `assistant.proposed` | whether the reply proposed a definition |
+
+For an agent that talks to a language model, `apps.assistant.telemetry.model_call(system=..., model=...)` opens one client span per model call, named `chat <model>`, a child of `assistant.reply`, with OpenTelemetry's GenAI attributes: `gen_ai.operation.name`, `gen_ai.system`, `gen_ai.request.model` and, from `ModelCall.response(...)`, whatever the SDK reported: `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`. A count the SDK did not report is not set. The only agent today is the scripted one, which calls no model, so nothing uses the helper yet: the agent that does (`openai`, see [assistant.md](assistant.md)) wraps each call in it.
+
+`extraction.file` (the extraction job, `apps/extraction/services.py`, `run_extraction`):
+
+| Attribute | Meaning |
+| --- | --- |
+| `extraction.run_id` | the run (left out when the cell was gone) |
+| `extraction.file_id` | the run file |
+| `extraction.definition_version` | the definition version extracted with |
+| `extraction.extractor` | the kind of extractor: `scripted`, or the class name of one named by dotted path |
+| `extraction.records` | the number of records the extractor found (left out when it did not finish) |
+| `extraction.outcome` | `succeeded`, `failed` (the cell is `failed`, the records are as they were) or `skipped` (the cell no longer belongs to this execution) |
+
+A job that fails has span status `error` and the attribute `error.type` (the exception's class). It has no status description and no `exception` event: an exception's message can quote what the person wrote.
+
+### Metrics
+
+| Metric | Type | Attributes | Counts |
+| --- | --- | --- | --- |
+| `assistant.replies` | counter | `outcome`, `agent` | reply jobs, by how they ended |
+| `assistant.reply.duration` | histogram, `s` | `outcome`, `agent` | how long a reply job took |
+| `extraction.files` | counter | `outcome`, `extractor` | extraction jobs, by how they ended |
+| `extraction.file.duration` | histogram, `s` | `outcome`, `extractor` | how long an extraction job took |
+| `realtime.connections` | up-down counter | none | run sockets open now (a refused socket is not counted) |
+| `realtime.events.published` | counter | `type` | events handed to the channel layer, by event type (`cell`, `assistant.delta`, `extraction.changed`, `run.gone`, ...); a send that failed is not counted |
+
+Every attribute has a handful of values. No metric carries a run, a file, a user or a message.
+
+### What these never hold
+
+Message text, the assistant's reply, prompts, definitions and proposals, document text, records and their values, socket tickets and tokens are never an attribute, an event, a metric attribute or a log field of these spans and metrics. Spans and metrics hold ids, counts, kinds and outcomes. Test: `test_no_span_metric_or_log_line_holds_message_document_prompt_or_proposal_text` (assistant), `test_no_span_metric_or_log_line_holds_document_text_or_a_prompt` (extraction) and `test_no_metric_holds_a_run_a_file_or_a_ticket` (sockets). A log line written by a job carries the job's `trace_id` like any other.
+
+### Searches
+
+A chat message and everything the worker did for it share one trace id. From the `Server-Timing` header of the `POST` (see above), or from the `trace_id` of its log line:
+
+```
+index=main sourcetype=knowledge-extractor-api trace_id=<id>
+```
+
+The same search sorted by `service.name` splits it into what the API did and what the worker did:
+
+```
+index=main sourcetype=knowledge-extractor-api trace_id=<id> | stats count by service.name, logger
+```
+
+A reply that failed, and the trace to open for it:
+
+```
+index=main sourcetype=knowledge-extractor-api event=assistant_reply_failed | table _time message_id trace_id
+```
+
+An extraction that failed:
+
+```
+index=main sourcetype=knowledge-extractor-api "extraction failed" | table _time trace_id
+```
+
+In Splunk Observability Cloud, `trace_id` opens the trace in APM: the request's server span, then `assistant.reply` or `extraction.file` under it, with its database spans. Filter spans on `assistant.outcome=failed` or `extraction.outcome=failed`, and chart `assistant.reply.duration` and `extraction.file.duration` split by `outcome`.
+
 ## Trying it locally
 
 Run a collector that prints what it receives, on ports of your own (the `debug` exporter, `otlp` receiver on 4318), then:

@@ -13,7 +13,7 @@ Work that outlives a request (an agent's reply, an extraction) runs in a worker 
 
 ## Rules
 
-1. **Where.** A job lives in `apps/<app>/tasks.py`, a module-level function decorated with `@task`.
+1. **Where.** A job lives in `apps/<app>/tasks.py`, a module-level function decorated with `@job()` from `apps.core.jobs` (the `@task` of Django Tasks, plus restoring the request's trace context, see [observability.md](observability.md)).
 2. **Ids, not objects.** Arguments and the return value are plain JSON. The job loads what it needs by id, so it sees the current row, not a copy from enqueue time.
 3. **Safe to run twice.** A job can be delivered again after a crash. Check the state first and do nothing when the work is done.
 4. **After commit.** Enqueue with `enqueue_after_commit(task, *args)` from `apps.core.jobs`, never `task.enqueue` inside a transaction: the worker could pick the job up before the rows it needs are visible, and a rollback would leave a job for work that never happened.
@@ -25,12 +25,12 @@ Work that outlives a request (an agent's reply, an extraction) runs in a worker 
 # apps/runs/tasks.py
 import logging
 
-from django.tasks import task
+from apps.core.jobs import job
 
 logger = logging.getLogger(__name__)
 
 
-@task()
+@job()
 def extract(
     run_id: str,
 ) -> None: ...  # load the run by id, return if it is already done, do the work

@@ -18,6 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.identity.models import User
+from apps.realtime import telemetry
 from apps.realtime.models import WsTicket
 
 log = structlog.get_logger(__name__)
@@ -110,6 +111,7 @@ async def _asend(run_id: Any, message: dict[str, Any]) -> None:
         if layer is None:
             raise RuntimeError("no channel layer is configured")
         await layer.group_send(run_group(run_id), message)
+        telemetry.event_published(_kind(message))
     except Exception:
         log.exception("run_event_not_sent", run_id=str(run_id), kind=_kind(message))
 

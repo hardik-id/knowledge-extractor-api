@@ -39,3 +39,9 @@ def get_extractor() -> Extractor:
 def check_settings() -> None:
     """Raise ``ImproperlyConfigured`` when ``EXTRACTOR`` names no implementation."""
     _load()
+
+
+def extractor_kind() -> str:
+    """What kind of extractor the setting names, for telemetry: the built-in name, or the class name."""
+    value = settings.EXTRACTOR
+    return str(value if value in _BUILT_IN else value.rsplit(".", 1)[-1])

@@ -8,7 +8,7 @@ from channels.generic.websocket import (
 )
 
 from apps.core.errors import ApiError
-from apps.realtime import services
+from apps.realtime import services, telemetry
 from apps.runs import selectors as runs
 
 # The UI stops retrying on this close code: the run is not yours, or it is gone.
@@ -36,11 +36,14 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             return
         self.group = services.run_group(run.pk)
         await self.channel_layer.group_add(self.group, self.channel_name)
+        telemetry.connection_opened()
         await self.accept()
 
     async def disconnect(self, code: int) -> None:
         if self.group is not None:
             await self.channel_layer.group_discard(self.group, self.channel_name)
+            self.group = None
+            telemetry.connection_closed()
 
     async def receive(
         self, text_data: str | None = None, bytes_data: bytes | None = None

@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from apps.assistant.agents.base import Agent, AgentEvent, Message, Proposal, TextDelta
 from apps.assistant.agents.registry import check_settings, get_agent
 from apps.assistant.agents.scripted import ScriptedAgent, split_into_deltas
-from apps.assistant.tests.fakes import FakeAgent, FakeDocuments
+from apps.assistant.tests.fakes import FakeAgent, FakeWorkspace
 from apps.assistant.tests.test_scripted import adr, assert_valid, bare
 from apps.extraction.validation import validate_draft
 
@@ -52,7 +52,7 @@ async def collect(
     definition: Definition,
     history: list[Message] | None = None,
 ) -> list[AgentEvent]:
-    stream = agent.reply(text, definition, history or [], FakeDocuments())
+    stream = agent.reply(text, definition, history or [], FakeWorkspace())
     return [event async for event in stream]
 
 
@@ -132,10 +132,10 @@ async def test_a_fake_agent_implements_the_interface() -> None:
 
 @pytest.mark.asyncio
 async def test_documents_can_be_read_through_the_interface() -> None:
-    documents = FakeDocuments({"a.md": "alpha"})
-    [ref] = await documents.list()
+    workspace = FakeWorkspace({"a.md": "alpha"})
+    [ref] = await workspace.documents()
     assert ref.id == "a.md"
-    assert await documents.read(ref.id) == "alpha"
+    assert await workspace.read(ref.id) == "alpha"
 
 
 # the choice of agent

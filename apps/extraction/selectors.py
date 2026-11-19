@@ -15,7 +15,10 @@ from apps.extraction.defaults import (
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.extractors.base import RawRecord, RawValue
+from apps.extraction.extractors import get_extractor
+from apps.extraction.extractors.base import Definition, RawRecord, RawValue
+from apps.extraction.extractors.records import StoredRecord, stored_records
+from apps.extraction.merge import merge_extracted_records
 from apps.extraction.models import (
     DefinitionVersion,
     Extraction,
@@ -77,6 +80,36 @@ def get_extraction(user: User, run_id: Any, file_id: Any) -> Extraction:
         return Extraction.objects.prefetch_related("records__values").get(file=run_file)
     except Extraction.DoesNotExist:
         raise ApiError("extraction_not_found") from None
+
+
+def list_extractions(user: User, run_id: Any) -> list[Extraction]:
+    """The extractions of ``user``'s run, with their records and values, by file name.
+
+    Only files that have been extracted have one. Someone else's run is a 404.
+    """
+    run = runs.get_run(user, run_id)
+    return list(
+        Extraction.objects.filter(file__run_id=run.pk)
+        .select_related("file")
+        .prefetch_related("records__values")
+        .order_by("file__name", "file_id")
+    )
+
+
+def preview_records(
+    user: User, run_id: Any, text: str, draft: dict[str, Any]
+) -> list[StoredRecord]:
+    """The records an extraction of ``text`` with ``draft`` would store, storing nothing.
+
+    The configured extractor runs with the run's example records, its output is
+    checked as in a real execution (``stored_records``) and merged into an empty
+    extraction, so the order is the stored one. The draft is a definition without
+    a version (``validate_draft`` shape). Someone else's run is a 404.
+    """
+    run = runs.get_run(user, run_id)
+    definition = Definition(0, draft["prompt"], list(draft["record_types"]))
+    raw = get_extractor().extract(text, definition, example_records(run.pk))
+    return merge_extracted_records([], stored_records(text, raw))
 
 
 def input_text(run_file: RunFile) -> DocumentText:

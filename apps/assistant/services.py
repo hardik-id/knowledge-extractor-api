@@ -99,7 +99,7 @@ class Request:
     text: str
     definition: Definition
     history: list[Turn]
-    documents: selectors.OwnerDocuments
+    workspace: selectors.OwnerWorkspace
 
 
 def start_reply(message_id: Any) -> Request | None:
@@ -133,7 +133,7 @@ def start_reply(message_id: Any) -> Request | None:
         text=asked.text,
         definition=asked.definition or {},
         history=history,
-        documents=selectors.run_documents(message),
+        workspace=selectors.run_workspace(message),
     )
 
 

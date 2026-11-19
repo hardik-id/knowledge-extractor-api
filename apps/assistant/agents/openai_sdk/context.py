@@ -2,14 +2,14 @@
 
 from dataclasses import dataclass
 
-from apps.assistant.agents.base import DocumentRef, Proposal, RunDocuments
+from apps.assistant.agents.base import DocumentRef, Proposal, Workspace
 
 
 @dataclass
 class ReplyContext:
-    """The run's documents and what the tools have done so far in one reply."""
+    """The run's workspace and what the tools have done so far in one reply."""
 
-    documents: RunDocuments
+    workspace: Workspace
     refs: list[DocumentRef]
     proposal: Proposal | None = None
     reads: int = 0

@@ -41,10 +41,10 @@ The assistant proposes and the person applies: nothing here saves a definition. 
 
 ## The reply job
 
-`write_reply(message_id)` in `apps/assistant/tasks.py`. It loads the reply and the message it answers, then runs `get_agent().reply(text, definition, history, documents)`:
+`write_reply(message_id)` in `apps/assistant/tasks.py`. It loads the reply and the message it answers, then runs `get_agent().reply(text, definition, history, workspace)`:
 
 - `history` is the run's earlier messages, oldest first.
-- `documents` are the run's files. They are read through `documents.selectors`, as the run's owner; a document that is not one of the run's files cannot be read (`document_not_found`).
+- `workspace` is what the agent can look at: the run's documents, what was extracted from them and a dry run of the extractor (below), all as the run's owner.
 
 Each event of the agent is stored first and announced after, on the run's socket through `apublish_run_event` (`docs/realtime.md`), so a client that missed events reads the same from `GET`:
 
@@ -71,7 +71,7 @@ Every write changes the reply only while it is `streaming`. Once it is done (or 
 In `apps/assistant/agents/base.py`. An agent implements one method:
 
 ```python
-def reply(text, definition, history, documents) -> AsyncIterator[AgentEvent]
+def reply(text, definition, history, workspace) -> AsyncIterator[AgentEvent]
 ```
 
 | In | Meaning |
@@ -79,11 +79,35 @@ def reply(text, definition, history, documents) -> AsyncIterator[AgentEvent]
 | `text` | What the person wrote. |
 | `definition` | The definition on their screen, a validated draft (`apps/extraction/validation.py`), saved or not. Snake case, ids filled in. |
 | `history` | The conversation so far, oldest first, as `Message(role, text)`. |
-| `documents` | `RunDocuments`: `list()` and `read(document_id)`, the run's documents. |
+| `workspace` | `Workspace`: the read-only view of the run (next section). |
 
 Out: a stream of events. `TextDelta(text)` is new text, not the text so far, so the deltas joined are the reply. `Proposal(definition, reasons)` is a complete definition (not a patch) and `[{ path, reason }]`; there is at most one, after the deltas. The stream ends when the reply is complete. An agent never saves anything: applying a proposal is a normal save of the definition.
 
 Implement it as an `async def` that `yield`s. `apps/assistant/tests/fakes.py` has a fake agent in a few lines.
+
+## The workspace
+
+`Workspace` (`apps/assistant/agents/base.py`) is the one view of a run an agent has, and the only way a tool reaches data. All of it is async and read-only:
+
+| Call | Gives |
+| --- | --- |
+| `documents()` | the run's documents, `DocumentRef(id, name)`, by name |
+| `read(document_id)` | the text of one of them |
+| `extractions()` | one `FileRecords(document_id, name, definition_version, records)` for each file of the run that has been extracted, by file name |
+| `preview(definition, document_id)` | the `RecordView`s the configured extractor (`get_extractor()`) finds in that document with that definition |
+
+A `RecordView` is `(record_type_id, origin, review, values)`; a `ValueView` is `(field_id, value or None, origin, review, anchored)`. `origin` is `llm` or `human`, `review` is `suggested`, `accepted` or `rejected`. These are plain frozen dataclasses: no model instance reaches an agent, and nothing in the workspace writes.
+
+`extractions()` shows what is stored now: what a run of the extractor stored, and what people did after it (accepted, rejected, records added by hand), because a correction through the API changes the same rows.
+
+`preview` is a dry run. It validates the draft (`invalid_definition` when it is not valid), runs the extractor on the document's text with the run's example records, checks the result as a real execution does (`stored_records`) and merges it into an empty extraction, so it returns what an execution with the same definition and text would store for a file with no earlier records. Nothing is stored, no cell changes and nothing is announced. Work a person already did on the file is not merged in.
+
+Limits:
+
+- It is limited to the run and its owner. `OwnerWorkspace` (`apps/assistant/selectors.py`) reads through `apps.documents.selectors` and `apps.extraction.selectors`, as the run's owner. A document id that is not one of the run's documents is `document_not_found` for `read` and `preview`, even when the owner could open that document elsewhere.
+- It reads the database each time it is asked, so what an agent sees is as old as the call.
+- A preview runs the extractor once per call. With a model-backed extractor that costs a model call, so a tool should bound how often it asks.
+- `tests/fakes.py` has `FakeWorkspace` for tests of agents and tools.
 
 ## The scripted agent
 
@@ -105,7 +129,7 @@ Its reply text is cut into deltas of three words each.
 
 - **Text.** The model's streamed text becomes `TextDelta`s as it arrives. When the model speaks again after a tool call, the new text starts after a blank line.
 - **The proposal** is a call of the tool `propose_definition(definition, reasons)`. Its arguments are checked against a strict JSON schema (the shape of `validate_draft`: modes, value types and formats as enums) and then by `validate_draft`. An invalid proposal goes back to the model as the tool's answer, starting `Error:` and saying what is wrong (where it does not fit the schema, without echoing the values), so it can correct it in the next turn. The first valid proposal is kept and later calls are refused, so at most one reaches the person, after all the text. A record type or field with an empty `id` gets one from `validate_draft`; the instructions tell the model to keep the ids of what stays.
-- **`read_document(document_id)`** reads a sample of one of the run's documents, through `RunDocuments` (as the run's owner, only the run's own files).
+- **`read_document(document_id)`** reads a sample of one of the run's documents, through `Workspace.read` (as the run's owner, only the run's own files).
 - **Propose, never apply.** The instructions explain the definition model (record types, fields, `quote` against `inferred`, value types, `multiple`, the output template) and the rule that the assistant proposes and the person applies. No tool saves anything.
 
 ### The package
@@ -192,9 +216,9 @@ It prints the deltas as they stream, then the proposal as JSON (`validate_draft`
 
 ### Another framework
 
-Any framework plugs in behind the same interface: a class with `async def reply(text, definition, history, documents)` that yields `TextDelta`s and at most one `Proposal`, named by its dotted path in `ASSISTANT_AGENT` (or added to `_BUILT_IN` in the registry). With LangChain's deep agents, for example:
+Any framework plugs in behind the same interface: a class with `async def reply(text, definition, history, workspace)` that yields `TextDelta`s and at most one `Proposal`, named by its dotted path in `ASSISTANT_AGENT` (or added to `_BUILT_IN` in the registry). With LangChain's deep agents, for example:
 
-- build the agent with two tools in the same shape: `propose_definition` validates with `validate_draft`, keeps the first valid proposal in per-reply state and returns errors as text; `read_document` calls `documents.read` and caps the sample;
+- build the agent with two tools in the same shape: `propose_definition` validates with `validate_draft`, keeps the first valid proposal in per-reply state and returns errors as text; `read_document` calls `workspace.read` and caps the sample;
 - stream it (`astream_events` or `astream` with `stream_mode="messages"`) and yield a `TextDelta` for each text chunk of the model;
 - after the stream, yield the kept proposal;
 - keep the limits (a recursion limit for turns, a timeout around the stream), turn its tracing off unless it goes to our own collector, and end a failed or cut-off reply with a sentence rather than an exception.

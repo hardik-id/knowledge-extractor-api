@@ -1,7 +1,7 @@
 """The interface every assistant agent implements.
 
 An agent reads what the person wrote, the definition on their screen, the
-conversation so far and (when it wants to) the run's documents. It answers with
+conversation so far and (when it wants to) the run's workspace. It answers with
 a stream of events: any number of ``TextDelta`` and at most one ``Proposal``.
 The stream ends when the reply is complete. An agent never saves anything:
 applying a proposal is a normal save of the definition by the person.
@@ -55,15 +55,69 @@ class DocumentRef:
     name: str
 
 
-class RunDocuments(Protocol):
-    """The run's documents, as far as an agent may read them."""
+@dataclass(frozen=True)
+class ValueView:
+    """One value of a field of a record, as an agent sees it."""
 
-    async def list(self) -> list[DocumentRef]:
+    field_id: str
+    value: str | None  # None: nothing was found
+    origin: str  # "llm" or "human"
+    review: str  # "suggested", "accepted" or "rejected"
+    anchored: bool  # its quote was found in the text
+
+
+@dataclass(frozen=True)
+class RecordView:
+    """One record of a record type, as an agent sees it."""
+
+    record_type_id: str
+    origin: str  # "llm" or "human"
+    review: str  # "suggested", "accepted" or "rejected"
+    values: list[ValueView]
+
+
+@dataclass(frozen=True)
+class FileRecords:
+    """What was extracted from one document of the run."""
+
+    document_id: str
+    name: str
+    definition_version: int  # the definition version the records were extracted with
+    records: list[RecordView]
+
+
+class Workspace(Protocol):
+    """What an agent can look at: one read-only view of a run.
+
+    It is the only way a tool reaches data, and it is limited to this run and
+    its owner. Everything it returns is plain data (no model instance) and
+    nothing it offers writes anything.
+    """
+
+    async def documents(self) -> list[DocumentRef]:
         """The documents of the run."""
         ...
 
     async def read(self, document_id: str) -> str:
-        """The text of one document of the run."""
+        """The text of one document of the run.
+
+        A document that is not one of the run's is ``document_not_found``.
+        """
+        ...
+
+    async def extractions(self) -> list[FileRecords]:
+        """The records of every file of the run that has been extracted."""
+        ...
+
+    async def preview(
+        self, definition: Definition, document_id: str
+    ) -> list[RecordView]:
+        """The records the extractor finds in a document with ``definition``.
+
+        A dry run: nothing is stored and no cell changes. ``definition`` is a
+        draft (``prompt``, ``record_types``, ``output``). The records are as an
+        extraction would store them (suggested, by the model).
+        """
         ...
 
 
@@ -73,7 +127,7 @@ class Agent(Protocol):
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         """The reply to ``text`` as a stream of events.
 

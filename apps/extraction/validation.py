@@ -10,6 +10,7 @@ from apps.core.errors import ApiError
 MODES = ("quote", "inferred")
 VALUE_TYPES = ("text", "date", "number", "choice")
 FORMATS = ("json", "markdown", "csv")
+NOTE_MAX_LENGTH = 200
 
 
 class FieldSerializer(serializers.Serializer):  # type: ignore[type-arg]

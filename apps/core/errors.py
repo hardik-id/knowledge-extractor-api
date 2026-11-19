@@ -44,6 +44,9 @@ ERRORS: dict[str, ErrorCode] = {
         409, "Someone saved a newer version of this definition."
     ),
     "invalid_definition": ErrorCode(422, "The extraction definition is not valid."),
+    "definition_version_not_found": ErrorCode(
+        404, "This version of the definition was not found."
+    ),
     "assistant_busy": ErrorCode(409, "The assistant is still answering."),
     "empty_message": ErrorCode(422, "Write a message first."),
     "execution_in_progress": ErrorCode(409, "This stage is already running."),

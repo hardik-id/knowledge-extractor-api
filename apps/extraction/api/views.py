@@ -10,6 +10,7 @@ from apps.extraction import selectors, services
 from apps.extraction.api.serializers import (
     AddRecordSerializer,
     DefinitionSerializer,
+    DefinitionVersionListSerializer,
     ExecutionSerializer,
     ExtractionSerializer,
     ReplaceFieldValuesSerializer,
@@ -19,6 +20,7 @@ from apps.extraction.api.serializers import (
     StartExecutionSerializer,
     UpdateRecordSerializer,
     serialize_extraction,
+    summarize_version,
 )
 from apps.identity.models import User
 
@@ -36,11 +38,46 @@ def definition(request: Request, run_id: str) -> Response:
         base_version = body.get("base_version") if isinstance(body, dict) else None
         if not isinstance(base_version, int) or isinstance(base_version, bool):
             raise ApiError("validation_error", "base_version must be a number.")
+        note = body["note"] if isinstance(body, dict) and "note" in body else ""
+        if not isinstance(note, str):
+            raise ApiError("invalid_definition", "The note must be text.")
         saved = services.save_definition(
-            user, run_id, base_version=base_version, data=request.data
+            user, run_id, base_version=base_version, data=request.data, note=note
         )
         return Response(DefinitionSerializer(saved).data)
     return Response(DefinitionSerializer(selectors.get_definition(user, run_id)).data)
+
+
+@extend_schema(
+    operation_id="runs_extract_definition_versions_list",
+    responses=DefinitionVersionListSerializer,
+)
+@api_view(["GET"])
+def definition_versions(request: Request, run_id: str) -> Response:
+    """Every saved version of the definition, newest first."""
+    versions = selectors.list_definition_versions(cast(User, request.user), run_id)
+    return Response({"items": [summarize_version(v) for v in versions]})
+
+
+@extend_schema(
+    operation_id="runs_extract_definition_versions_read",
+    responses=DefinitionSerializer,
+)
+@api_view(["GET"])
+def definition_version(request: Request, run_id: str, version: int) -> Response:
+    """One saved version of the definition."""
+    found = selectors.get_definition_version_of(
+        cast(User, request.user), run_id, version
+    )
+    return Response(DefinitionSerializer(found).data)
+
+
+@extend_schema(request=None, responses=DefinitionSerializer)
+@api_view(["POST"])
+def restore_definition_version(request: Request, run_id: str, version: int) -> Response:
+    """Save a copy of an earlier version as the newest one."""
+    restored = services.restore_definition(cast(User, request.user), run_id, version)
+    return Response(DefinitionSerializer(restored).data)
 
 
 @extend_schema(request=StartExecutionSerializer, responses={202: ExecutionSerializer})

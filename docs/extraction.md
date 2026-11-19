@@ -124,3 +124,15 @@ succeeded / failed ──POST──> queued
 | Variable | Meaning |
 | --- | --- |
 | `EXECUTION_TIMEOUT_SECONDS` | After how long a `queued` or `running` cell counts as failed. Default 600 |
+
+## Extraction configuration and its versions
+
+The UI and the documents call the definition an "extraction configuration". The paths, the code and the error codes keep the word `definition`.
+
+Every save makes a new version; versions are never changed or deleted. A save may carry a `note` (up to 200 characters, longer is 422 `invalid_definition`), stored on the version. Both `GET` and `PUT .../stages/extract/definition` answer `note` and `created_at` besides the definition.
+
+- `GET .../definition/versions` answers `{ "items": [{ version, note, created_at, record_type_count, field_count }] }`, newest first.
+- `GET .../definition/versions/{version}` answers that version in the shape of the definition. An unknown version is 404 `definition_version_not_found`.
+- `POST .../definition/versions/{version}/restore` saves a copy of that version as the newest one, with the note `Restored from version N`, and answers it.
+
+All three are for the run's owner; someone else's run is 404 `run_not_found`.

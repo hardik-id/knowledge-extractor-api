@@ -1053,6 +1053,151 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /runs/{run_id}/stages/extract/definition/versions:
+    get:
+      operationId: runs_extract_definition_versions_list
+      description: Every saved version of the definition, newest first.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionVersionList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /runs/{run_id}/stages/extract/definition/versions/{version}:
+    get:
+      operationId: runs_extract_definition_versions_read
+      description: One saved version of the definition.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version
+        schema:
+          type: integer
+        required: true
+      tags:
+      - runs
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Definition'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /runs/{run_id}/stages/extract/definition/versions/{version}/restore:
+    post:
+      operationId: runs_stages_extract_definition_versions_restore_create
+      description: Save a copy of an earlier version as the newest one.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version
+        schema:
+          type: integer
+        required: true
+      tags:
+      - runs
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Definition'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /ws-ticket:
     post:
       operationId: ws_ticket_create
@@ -1137,10 +1282,47 @@ components:
           type: string
         record_types: {}
         output: {}
+        note:
+          type: string
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
       required:
+      - created_at
       - output
       - prompt
       - record_types
+      - version
+    DefinitionVersionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummary'
+      required:
+      - items
+    DefinitionVersionSummary:
+      type: object
+      properties:
+        version:
+          type: integer
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        record_type_count:
+          type: integer
+        field_count:
+          type: integer
+      required:
+      - created_at
+      - field_count
+      - note
+      - record_type_count
       - version
     Document:
       type: object
@@ -1680,6 +1862,9 @@ components:
         base_version:
           type: integer
           minimum: 1
+        note:
+          type: string
+          maxLength: 200
       required:
       - base_version
       - output

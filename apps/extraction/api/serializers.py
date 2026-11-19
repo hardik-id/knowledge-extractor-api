@@ -20,13 +20,43 @@ class DefinitionSerializer(serializers.ModelSerializer[DefinitionVersion]):
 
     class Meta:
         model = DefinitionVersion
-        fields = ["version", "prompt", "record_types", "output"]
+        fields = [
+            "version",
+            "prompt",
+            "record_types",
+            "output",
+            "note",
+            "created_at",
+        ]
+
+
+class DefinitionVersionSummarySerializer(serializers.Serializer):  # type: ignore[type-arg]
+    version = serializers.IntegerField()
+    note = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    record_type_count = serializers.IntegerField()
+    field_count = serializers.IntegerField()
+
+
+class DefinitionVersionListSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    items = DefinitionVersionSummarySerializer(many=True)
+
+
+def summarize_version(version: DefinitionVersion) -> dict[str, Any]:
+    return {
+        "version": version.version,
+        "note": version.note,
+        "created_at": version.created_at,
+        "record_type_count": len(version.record_types),
+        "field_count": sum(len(t["fields"]) for t in version.record_types),
+    }
 
 
 class SaveDefinitionSerializer(DraftSerializer):
     """The body of a save: the draft plus the version it was edited from."""
 
     base_version = serializers.IntegerField(min_value=1)
+    note = serializers.CharField(required=False, allow_blank=True, max_length=200)
 
 
 class SpanSerializer(serializers.Serializer):  # type: ignore[type-arg]

@@ -13,6 +13,7 @@ class DefinitionVersion(BaseModel):
     prompt = models.TextField()
     record_types = models.JSONField()
     output = models.JSONField()
+    note = models.CharField(max_length=200, blank=True, default="")
 
     class Meta:
         constraints = [

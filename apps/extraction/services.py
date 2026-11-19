@@ -31,7 +31,7 @@ from apps.extraction.models import (
     Review,
 )
 from apps.extraction.spans import check_span
-from apps.extraction.validation import validate_draft
+from apps.extraction.validation import NOTE_MAX_LENGTH, validate_draft
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors as runs
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 def save_definition(
-    user: User, run_id: Any, *, base_version: int, data: Any
+    user: User, run_id: Any, *, base_version: int, data: Any, note: str = ""
 ) -> DefinitionVersion:
     """Save ``data`` as the next version, if ``base_version`` is still the latest.
 
@@ -50,16 +50,43 @@ def save_definition(
     """
     current = selectors.get_definition(user, run_id)
     draft = validate_draft(data)
+    if len(note) > NOTE_MAX_LENGTH:
+        raise ApiError(
+            "invalid_definition",
+            f"The note can be at most {NOTE_MAX_LENGTH} characters.",
+            {"errors": {"note": [f"At most {NOTE_MAX_LENGTH} characters."]}},
+        )
     if base_version != current.version:
         raise _conflict(current.version)
     try:
         with transaction.atomic():
             return DefinitionVersion.objects.create(
-                run_id=current.run_id, version=current.version + 1, **draft
+                run_id=current.run_id, version=current.version + 1, note=note, **draft
             )
     except IntegrityError:
         latest = selectors.latest_version(current.run_id)
         raise _conflict(latest.version if latest else current.version) from None
+
+
+def restore_definition(user: User, run_id: Any, version: int) -> DefinitionVersion:
+    """Save a copy of an earlier version as the newest one, and say where it came from."""
+    source = selectors.get_definition_version_of(user, run_id, version)
+    for _ in range(3):  # a concurrent save takes the number: try the next
+        latest = selectors.latest_version(source.run_id)
+        number = (latest.version if latest else 0) + 1
+        try:
+            with transaction.atomic():
+                return DefinitionVersion.objects.create(
+                    run_id=source.run_id,
+                    version=number,
+                    prompt=source.prompt,
+                    record_types=source.record_types,
+                    output=source.output,
+                    note=f"Restored from version {source.version}",
+                )
+        except IntegrityError:
+            continue
+    raise ApiError("conflict")
 
 
 def _conflict(version: int) -> ApiError:

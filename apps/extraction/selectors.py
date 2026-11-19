@@ -69,6 +69,27 @@ def get_definition_version(run_id: Any, version: int) -> DefinitionVersion:
         raise ApiError("not_found", "Definition version not found.") from None
 
 
+def list_definition_versions(user: User, run_id: Any) -> list[DefinitionVersion]:
+    """The saved versions of ``user``'s run, newest first; the first read makes version 1."""
+    run_id = get_definition(user, run_id).run_id
+    return list(DefinitionVersion.objects.filter(run_id=run_id).order_by("-version"))
+
+
+def get_definition_version_of(
+    user: User, run_id: Any, version: int
+) -> DefinitionVersion:
+    """One saved version of ``user``'s run.
+
+    Someone else's run is 404 ``run_not_found``; an unknown version is 404
+    ``definition_version_not_found``.
+    """
+    run_id = get_definition(user, run_id).run_id  # also makes version 1 on a first read
+    try:
+        return DefinitionVersion.objects.get(run_id=run_id, version=version)
+    except DefinitionVersion.DoesNotExist:
+        raise ApiError("definition_version_not_found") from None
+
+
 def get_extraction(user: User, run_id: Any, file_id: Any) -> Extraction:
     """The extraction of one of ``user``'s run files, with its records and values.
 

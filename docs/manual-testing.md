@@ -82,18 +82,29 @@ call $API/documents/$DOC                   # read one: the Markdown text
 
 The text starts with `---` front matter, then `# Architecture decisions 2026`, and holds three decisions (`## ADR-012: ...` to `## ADR-014: ...`).
 
-### Create a run
+### Start a project
+
+A project is a name on a run. Start one, then set the documents of its run:
 
 ```sh
-RUN=$(call -d "{\"items\":[{\"source\":\"storage\",\"source_ref\":\"$DOC\"}]}" $API/runs)
+PROJECT=$(call -d '{"name":"Architecture decisions"}' $API/projects)
+echo "$PROJECT" | show
+PROJECT_ID=$(echo "$PROJECT" | pick id)
+RUN_ID=$(echo "$PROJECT" | pick run_id)
+call $API/projects | show                  # { "items": [ ... ], "next": null }, last activity first
+```
+
+The answer (201) has the project `id`, its `name`, `run_id`, `document_count` 0 and `configuration_version` null. The run is empty. Everything else goes through the run:
+
+```sh
+RUN=$(call -X PUT -d "{\"items\":[{\"source\":\"storage\",\"source_ref\":\"$DOC\"}]}" $API/runs/$RUN_ID/documents)
 echo "$RUN" | show
-RUN_ID=$(echo "$RUN" | pick id)
 FILE_ID=$(echo "$RUN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["files"][0]["id"])')
 ```
 
-The answer (201) has the run `id`, one entry in `files` and one entry in `cells` with `"stage": "extract"` and `"status": "pending"`.
+The answer has one entry in `files` and one entry in `cells` with `"stage": "extract"` and `"status": "pending"`. A watcher on the run (below) prints `run.changed` for this call. Sending the call again with other items replaces the documents; the configuration, the conversation and the records of the documents that stay are kept.
 
-### Definition
+### Definition (the extraction configuration)
 
 ```sh
 call $API/runs/$RUN_ID/stages/extract/definition | show
@@ -115,7 +126,7 @@ call -X PUT -d @draft.json $API/runs/$RUN_ID/stages/extract/definition | pick ve
 2
 ```
 
-Sending a `base_version` that is not the latest is a 409 `definition_conflict`.
+Sending a `base_version` that is not the latest is a 409 `definition_conflict`. A save may carry a `note` (add `"note": "Decisions only"` to `draft.json` to see it below); every save is a version.
 
 ### Watch the socket
 
@@ -125,7 +136,7 @@ Open a second terminal in this directory and leave it running while you do the n
 TOKEN=$(make -s token) uv run python scripts/watch_run.py <RUN_ID>
 ```
 
-Replace `<RUN_ID>` with the value of `$RUN_ID`. The script asks for a ticket, connects to `ws://localhost:8000/ws/runs/<RUN_ID>/` and prints one JSON line per event. `API_URL` (default `http://localhost:8000`) points it elsewhere. A close with code 4401 means the ticket was refused, 4404 that the run is not yours or is gone. Events sent while nobody listens are lost, so start the watcher first.
+Replace `<RUN_ID>` with the value of `$RUN_ID` (the project's `run_id`). The script asks for a ticket, connects to `ws://localhost:8000/ws/runs/<RUN_ID>/` and prints one JSON line per event. `API_URL` (default `http://localhost:8000`) points it elsewhere. A close with code 4401 means the ticket was refused, 4404 that the run is not yours or is gone. Events sent while nobody listens are lost, so start the watcher first.
 
 ### The assistant
 
@@ -185,10 +196,48 @@ revision 2 accepted
 
 The watcher prints `extraction.changed` with `"revision": 2`. The other corrections (add or delete a record, replace a field's values, accept or reject one value) are in [extraction.md](extraction.md) and the Swagger UI at http://localhost:8000/api/docs.
 
-Clean up the run when you are done:
+### Versions
+
+Every save of the configuration is a version. List them, read one, and restore one as the newest:
 
 ```sh
-call -X DELETE $API/runs/$RUN_ID -o /dev/null -w '%{http_code}\n'    # 204
+call $API/runs/$RUN_ID/stages/extract/definition/versions | show
+call $API/runs/$RUN_ID/stages/extract/definition/versions/1 | show
+call -X POST $API/runs/$RUN_ID/stages/extract/definition/versions/1/restore | python3 -c '
+import json,sys; d=json.load(sys.stdin); print(d["version"], d["note"])'
+```
+
+```
+3 Restored from version 1
+```
+
+The list is newest first and holds `version`, `note`, `created_at`, `record_type_count` and `field_count`. The project's `configuration_version` is now 3:
+
+```sh
+call $API/projects/$PROJECT_ID | show
+```
+
+### Clear the conversation
+
+```sh
+call -X DELETE $API/runs/$RUN_ID/extraction/assistant/messages -o /dev/null -w '%{http_code}\n'    # 204
+call $API/runs/$RUN_ID/extraction/assistant/messages | show                                        # { "messages": [] }
+```
+
+The watcher prints `assistant.cleared`. The configuration and the records stay.
+
+### Rename the project
+
+```sh
+call -X PATCH -d '{"name":"ADRs, second try","description":"Why we chose"}' $API/projects/$PROJECT_ID | show
+```
+
+### Clean up
+
+Delete the project; its run and everything on it go with it. (Deleting the run alone is refused: 409 `run_belongs_to_project`.)
+
+```sh
+call -X DELETE $API/projects/$PROJECT_ID -o /dev/null -w '%{http_code}\n'    # 204
 rm extraction.json draft.json message.json
 ```
 

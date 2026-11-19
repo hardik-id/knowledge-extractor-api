@@ -50,6 +50,7 @@ async def test_a_tool_is_added_by_one_module_and_one_line(
     assert {t.name for t in build_agent(ScriptedModel([])).tools} == {
         "read_document",
         "find_in_documents",
+        "preview_extraction",
         "propose_definition",
         "echo",
     }

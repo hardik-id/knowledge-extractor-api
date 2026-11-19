@@ -129,6 +129,7 @@ Its reply text is cut into deltas of three words each.
 
 - **Text.** The model's streamed text becomes `TextDelta`s as it arrives. When the model speaks again after a tool call, the new text starts after a blank line.
 - **The proposal** is a call of the tool `propose_definition(definition, reasons)`. Its arguments are checked against a strict JSON schema (the shape of `validate_draft`: modes, value types and formats as enums) and then by `validate_draft`. An invalid proposal goes back to the model as the tool's answer, starting `Error:` and saying what is wrong (where it does not fit the schema, without echoing the values), so it can correct it in the next turn. The first valid proposal is kept and later calls are refused, so at most one reaches the person, after all the text. A record type or field with an empty `id` gets one from `validate_draft`; the instructions tell the model to keep the ids of what stays.
+- **`preview_extraction(definition, document_id)`** validates the definition as `propose_definition` does, runs `Workspace.preview` and summarises it: records per record type; per field the records where it was found, not found, or found but not anchored; up to three example values. Nothing is saved and it is not a proposal.
 - **`read_document(document_id)`** reads a sample of one of the run's documents, through `Workspace.read` (as the run's owner, only the run's own files).
 - **`find_in_documents(text)`** searches the run's documents for a literal phrase (2 to 100 characters, case does not matter, no patterns). Per matching document it gives the number of matches and up to 3 snippets of about 120 characters (12 in total, the first 50 documents searched), as untrusted data. No match is a plain answer, not an error.
 - **Propose, never apply.** The instructions explain the definition model (record types, fields, `quote` against `inferred`, value types, `multiple`, the output template) and the rule that the assistant proposes and the person applies. No tool saves anything.
@@ -187,6 +188,7 @@ The SDK's own trace export to OpenAI is switched off (`set_tracing_disabled(True
 | What the person wrote | whole |
 | A sample of a document, only when the model calls `read_document` | the first 4,000 characters, at most 4 reads per reply |
 | Snippets, only when the model calls `find_in_documents` | the phrase 2 to 100 characters; 3 snippets per document, 12 in all, 50 documents |
+| What a definition would extract, only when the model calls `preview_extraction` | counts per field and up to 3 example values of 120 characters, at most 3 previews per reply |
 
 **Document text is untrusted input.** The instructions say so; a sample comes back between `<document>` and `</document>` with a note to treat it as data, and a `</document>` inside the text is broken up so it cannot close the element. Document text never reaches the instructions or the tools: the tools, the schema and the rule "propose, never apply" are fixed in code, and whatever a document says, the only way to change anything is a proposal the person must apply.
 

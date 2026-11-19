@@ -13,5 +13,6 @@ class ReplyContext:
     refs: list[DocumentRef]
     proposal: Proposal | None = None
     reads: int = 0
+    previews: int = 0  # previews run so far
     rejected: int = 0  # proposals sent back as errors
     tool_calls: int = 0  # every tool call of the reply, refused ones too

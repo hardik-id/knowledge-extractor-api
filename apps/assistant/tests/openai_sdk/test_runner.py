@@ -161,6 +161,7 @@ async def test_the_model_gets_the_rules_the_definition_the_documents_and_the_his
         "propose_definition",
         "read_document",
         "find_in_documents",
+        "preview_extraction",
     }
     earlier, long_turn, request = call.input
     assert earlier == {"role": "user", "content": "earlier"}

@@ -721,7 +721,7 @@ components:
           minLength: 1
         span:
           allOf:
-          - $ref: '#/components/schemas/SpanRequest'
+          - $ref: '#/components/schemas/SpanInputRequest'
           nullable: true
         fields:
           type: array
@@ -970,7 +970,7 @@ components:
           $ref: '#/components/schemas/ReviewEnum'
         span:
           allOf:
-          - $ref: '#/components/schemas/SpanRequest'
+          - $ref: '#/components/schemas/SpanInputRequest'
           nullable: true
         use_as_example:
           type: boolean
@@ -1111,8 +1111,10 @@ components:
       - end
       - quote
       - start
-    SpanRequest:
+    SpanInputRequest:
       type: object
+      description: 'A span a person sends: the quote is kept as sent, so it can equal
+        the text.'
       properties:
         start:
           type: integer
@@ -1120,7 +1122,6 @@ components:
           type: integer
         quote:
           type: string
-          minLength: 1
       required:
       - end
       - quote
@@ -1141,7 +1142,7 @@ components:
         spans:
           type: array
           items:
-            $ref: '#/components/schemas/SpanRequest'
+            $ref: '#/components/schemas/SpanInputRequest'
       required:
       - spans
       - value

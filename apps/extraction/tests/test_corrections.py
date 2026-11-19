@@ -109,7 +109,14 @@ def test_a_first_add_makes_the_extraction_at_revision_1(
     )
     assert field["spans"] == [title]
     other = [f for f in rec["fields"] if f["field_id"] != TITLE]
-    assert all(f["value"] is None for f in other)
+    assert other
+    assert all(
+        (f["value"], f["origin"], f["review"], f["anchored"])
+        == (None, "human", "accepted", True)
+        for f in other
+    )
+    assert all(not f["id"].startswith(f"{rec['id']}:") for f in other)
+    assert FieldValue.objects.count() == len(rec["fields"])
     assert published == [
         (
             file.run_id,
@@ -118,18 +125,52 @@ def test_a_first_add_makes_the_extraction_at_revision_1(
     ]
 
 
-def test_fields_left_out_store_nothing_and_an_empty_list_is_not_found(
-    client: Any, file: Any
-) -> None:
+def test_an_empty_list_of_values_is_one_not_found_value(client: Any, file: Any) -> None:
     body = new_record(fields=[{"field_id": STATUS, "values": []}])
     assert client.post(f"{base(file)}/records", body, format="json").status_code == 200
-    [value] = FieldValue.objects.all()
+    value = FieldValue.objects.get(field_id=STATUS)
     assert (value.field_id, value.value, value.origin, value.review) == (
         STATUS,
         None,
         Origin.HUMAN,
         Review.ACCEPTED,
     )
+
+
+def test_a_quote_and_a_value_keep_their_whitespace(client: Any, file: Any) -> None:
+    start = text().index("## ADR")
+    line_end = text().index("\n", start) + 1
+    quote = text()[start:line_end]
+    assert quote.endswith("\n")
+    line = {"start": start, "end": line_end, "quote": quote}
+    body = new_record(
+        span=line,
+        fields=[
+            {"field_id": TITLE, "values": [{"value": "  Ana \n", "spans": [line]}]}
+        ],
+    )
+    response = client.post(f"{base(file)}/records", body, format="json")
+    assert response.status_code == 200, response.json()
+    [rec] = response.json()["records"]
+    assert rec["span"] == line
+    [title] = [f for f in rec["fields"] if f["field_id"] == TITLE]
+    assert title["value"] == "  Ana \n"
+    assert title["spans"] == [line]
+    patch = client.patch(
+        f"{base(file)}/records/{rec['id']}",
+        {"revision": 1, "span": {"start": start, "end": line_end, "quote": quote}},
+        format="json",
+    )
+    assert patch.status_code == 200, patch.json()
+    assert patch.json()["records"][0]["span"] == line
+
+
+def test_an_empty_quote_is_checked_not_a_validation_error(
+    client: Any, file: Any
+) -> None:
+    body = new_record(span={"start": 0, "end": 0, "quote": ""})
+    response = client.post(f"{base(file)}/records", body, format="json")
+    assert response.status_code == 200, response.json()
 
 
 def test_a_second_add_raises_the_revision(client: Any, file: Any) -> None:

@@ -184,9 +184,9 @@ def add_record(
         values: list[FieldValue] = []
         for field in record_type["fields"]:
             given = [g for g in fields if g["field_id"] == field["id"]]
-            if given:  # a field left out stays empty
-                inputs = [value for g in given for value in g["values"]]
-                values.extend(_human_values(change, field, inputs))
+            # a field left out is one stored "not found": human, accepted
+            inputs = [value for g in given for value in g["values"]]
+            values.extend(_human_values(change, field, inputs))
         record = ExtractionRecord.objects.create(
             extraction=change.extraction,
             record_type_id=record_type_id,

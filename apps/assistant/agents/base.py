@@ -2,7 +2,8 @@
 
 An agent reads what the person wrote, the definition on their screen, the
 conversation so far and (when it wants to) the run's workspace. It answers with
-a stream of events: any number of ``TextDelta`` and at most one ``Proposal``.
+a stream of events: any number of ``TextDelta`` and ``ToolUsed`` and at most one
+``Proposal``.
 The stream ends when the reply is complete. An agent never saves anything:
 applying a proposal is a normal save of the definition by the person.
 """
@@ -38,7 +39,18 @@ class Proposal:
     reasons: list[Reason]
 
 
-AgentEvent = TextDelta | Proposal
+@dataclass(frozen=True)
+class ToolUsed:
+    """A tool the agent called: its name and how it ended (``ok``, ``error`` or ``refused``).
+
+    For a person watching in a terminal. The reply job ignores it.
+    """
+
+    name: str
+    outcome: str
+
+
+AgentEvent = TextDelta | Proposal | ToolUsed
 
 
 @dataclass(frozen=True)

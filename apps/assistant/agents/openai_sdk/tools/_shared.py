@@ -14,6 +14,7 @@ from agents.strict_schema import ensure_strict_json_schema
 from agents.tool_context import ToolContext
 
 from apps.assistant import telemetry
+from apps.assistant.agents.base import ToolUsed
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 
 log = structlog.get_logger(__name__)
@@ -65,6 +66,7 @@ def declare(
             state.tool_calls += 1
             if state.tool_calls > MAX_TOOL_CALLS:
                 call.finished(telemetry.REFUSED, 0)
+                state.used.append(ToolUsed(name, telemetry.REFUSED))
                 return error(
                     f"at most {MAX_TOOL_CALLS} tool calls per reply. "
                     "Work with what you have and answer."
@@ -76,12 +78,14 @@ def declare(
                     "assistant_tool_failed", tool=name, error=type(failure).__name__
                 )
                 call.finished(telemetry.ERROR, 0)
+                state.used.append(ToolUsed(name, telemetry.ERROR))
                 return error("this tool failed")
             if len(result) > MAX_RESULT_CHARS:
                 note = f"\n[The result was cut at {MAX_RESULT_CHARS} of {len(result)} characters.]"
                 result = clip(result, MAX_RESULT_CHARS) + note
             outcome = telemetry.ERROR if result.startswith("Error:") else telemetry.OK
             call.finished(outcome, len(result))
+            state.used.append(ToolUsed(name, outcome))
             return result
 
     return FunctionTool(

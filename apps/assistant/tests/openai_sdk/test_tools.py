@@ -52,6 +52,7 @@ async def test_a_tool_is_added_by_one_module_and_one_line(
         "find_in_documents",
         "preview_extraction",
         "propose_definition",
+        "outline_document",
         "echo",
     }
     model = ScriptedModel(

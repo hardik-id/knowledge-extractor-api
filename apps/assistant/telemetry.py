@@ -24,11 +24,17 @@ FAILED = "failed"  # the agent raised; the reply ended with the apology
 CLOSED = "closed"  # someone else closed the reply while it was written
 SKIPPED = "skipped"  # nothing to do: the reply was gone or done
 
+# How a tool call ended.
+OK = "ok"  # the tool answered
+ERROR = "error"  # the tool raised, or answered with an `Error:` text
+REFUSED = "refused"  # over the budget of tool calls: the tool did not run
+
 
 @dataclass(frozen=True)
 class _Instruments:
     replies: metrics.Counter
     duration: metrics.Histogram
+    tool_calls: metrics.Counter
 
 
 @lru_cache
@@ -44,6 +50,11 @@ def _instruments(provider: metrics.MeterProvider) -> _Instruments:
             "assistant.reply.duration",
             unit="s",
             description="How long a reply job took, by outcome and kind of agent.",
+        ),
+        tool_calls=meter.create_counter(
+            "assistant.tool.calls",
+            unit="{call}",
+            description="Tool calls of the agent, by tool and outcome.",
         ),
     )
 
@@ -149,3 +160,43 @@ def model_call(
         except BaseException as error:
             telemetry.fail_span(span, error)
             raise
+
+
+class ToolCall:
+    """One tool call, for its span: the outcome and the size of the result."""
+
+    def __init__(self, span: Span) -> None:
+        self.span = span
+        self.outcome = ERROR  # until the call says how it ended
+        self.size = 0
+
+    def finished(self, outcome: str, size: int) -> None:
+        self.outcome = outcome
+        self.size = size
+
+
+@contextmanager
+def tool_call(name: str) -> Iterator[ToolCall]:
+    """The `assistant.tool` span of one tool call, and its count when it ends.
+
+    Never the arguments or the result: the name of the tool, the outcome, the
+    number of characters returned. The duration is the span's own.
+    """
+    tracer = telemetry.get_tracer(SCOPE)
+    with tracer.start_as_current_span(
+        "assistant.tool",
+        attributes={"assistant.tool.name": name},
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        call = ToolCall(span)
+        try:
+            yield call
+        except BaseException as error:
+            telemetry.fail_span(span, error)
+            raise
+        finally:
+            span.set_attribute("assistant.tool.outcome", call.outcome)
+            span.set_attribute("assistant.tool.result_chars", call.size)
+            instruments = _instruments(telemetry.meter_provider())
+            instruments.tool_calls.add(1, {"tool": name, "outcome": call.outcome})

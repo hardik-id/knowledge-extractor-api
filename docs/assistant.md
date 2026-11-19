@@ -193,9 +193,13 @@ The SDK's own trace export to OpenAI is switched off (`set_tracing_disabled(True
 | Limit | Value | When it is reached |
 | --- | --- | --- |
 | Turns (model calls, tool round trips included) | 8 | the reply is cut off |
+| Tool calls (all tools together, refused ones too) | 12 | the call answers `Error:` and tells the model to work with what it has |
+| Result of a tool | 8,000 characters | the result is cut and ends with a note saying so |
 | Time per reply | 120 s (below `ASSISTANT_REPLY_TIMEOUT_SECONDS`) | the reply is cut off |
 
 A reply that is cut off ends with "I had to stop here because this reply took too long; please ask again, perhaps for less at once." A model or sign-in error (a wrong key, no network, no Azure identity) ends it with "I could not reach the language model, so I could not finish this reply." A valid proposal made before either still arrives. Either way the reply ends normally with `assistant.done`.
+
+Every tool is declared through `declare` in `tools/_shared.py`, which applies the two limits above on top of a tool's own, turns an exception a tool did not expect into `Error: this tool failed` (logged as `assistant_tool_failed` with the tool and the kind of the failure, never its message) and records an `assistant.tool` span and the `assistant.tool.calls` count (see [observability.md](observability.md)).
 
 ### Logs
 

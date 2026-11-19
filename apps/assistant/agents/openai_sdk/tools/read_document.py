@@ -1,12 +1,14 @@
 """read_document: a bounded sample of one of the run's documents, as untrusted data."""
 
-from agents import RunContextWrapper, function_tool
+from pydantic import ValidationError
 
 from apps.assistant.agents.openai_sdk.context import ReplyContext
+from apps.assistant.agents.openai_sdk.tools._definition_schema import Strict
 from apps.assistant.agents.openai_sdk.tools._shared import (
     NAME_CHARS,
     as_data,
     clip,
+    declare,
     error,
 )
 from apps.core.errors import ApiError
@@ -15,14 +17,18 @@ SAMPLE_CHARS = 4000  # of one document, per read
 MAX_READS = 4  # document reads per reply
 
 
-@function_tool(name_override="read_document", strict_mode=True)
-async def read_document(ctx: RunContextWrapper[ReplyContext], document_id: str) -> str:
-    """Read the beginning of one of the run's documents, as untrusted data.
+class ReadArgs(Strict):
+    document_id: str
 
-    Args:
-        document_id: The id of a document of this run, as listed in the request.
-    """
-    state = ctx.context
+
+async def _read(state: ReplyContext, arguments: str) -> str:
+    try:
+        document_id = ReadArgs.model_validate_json(arguments or "{}").document_id
+    except ValidationError:
+        return error(
+            "the arguments do not match the schema of read_document: "
+            "give document_id, an id from the list in the request."
+        )
     ref = next((r for r in state.refs if r.id == document_id), None)
     if ref is None:
         return error(
@@ -50,4 +56,12 @@ async def read_document(ctx: RunContextWrapper[ReplyContext], document_id: str) 
     )
 
 
-TOOL = read_document
+TOOL = declare(
+    name="read_document",
+    description=(
+        "Read the beginning of one of the run's documents, as untrusted data. "
+        "document_id is the id of a document of this run, as listed in the request."
+    ),
+    params_json_schema=ReadArgs.model_json_schema(),
+    handler=_read,
+)

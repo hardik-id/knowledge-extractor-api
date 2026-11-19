@@ -87,6 +87,8 @@ One span per job, as a child of the request's span.
 | `assistant.deltas` | the number of text deltas the reply sent |
 | `assistant.proposed` | whether the reply proposed a definition |
 
+`assistant.tool` (one tool call of the LLM agent, a child of `assistant.reply`; opened for every tool by `declare` in `tools/_shared.py`): `assistant.tool.name`, `assistant.tool.outcome` (`ok`; `error`, the tool raised or answered `Error:`; `refused`, over the budget of tool calls) and `assistant.tool.result_chars`. The duration is the span's. Never the arguments or the result.
+
 For an agent that talks to a language model, `apps.assistant.telemetry.model_call(system=..., model=...)` opens one client span per model call, named `chat <model>`, a child of `assistant.reply`, with OpenTelemetry's GenAI attributes: `gen_ai.operation.name`, `gen_ai.system`, `gen_ai.request.model` and, from `ModelCall.response(...)`, whatever the SDK reported: `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`. A count the SDK did not report is not set. The only agent today is the scripted one, which calls no model, so nothing uses the helper yet: the agent that does (`openai`, see [assistant.md](assistant.md)) wraps each call in it.
 
 `extraction.file` (the extraction job, `apps/extraction/services.py`, `run_extraction`):
@@ -108,6 +110,7 @@ A job that fails has span status `error` and the attribute `error.type` (the exc
 | --- | --- | --- | --- |
 | `assistant.replies` | counter | `outcome`, `agent` | reply jobs, by how they ended |
 | `assistant.reply.duration` | histogram, `s` | `outcome`, `agent` | how long a reply job took |
+| `assistant.tool.calls` | counter | `tool`, `outcome` | tool calls of the LLM agent, by tool and how they ended (`ok`, `error`, `refused`) |
 | `extraction.files` | counter | `outcome`, `extractor` | extraction jobs, by how they ended |
 | `extraction.file.duration` | histogram, `s` | `outcome`, `extractor` | how long an extraction job took |
 | `realtime.connections` | up-down counter | none | run sockets open now (a refused socket is not counted) |

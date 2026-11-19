@@ -2,9 +2,6 @@
 
 import json
 
-from agents import FunctionTool
-from agents.strict_schema import ensure_strict_json_schema
-from agents.tool_context import ToolContext
 from pydantic import ValidationError
 
 from apps.assistant.agents.base import Proposal
@@ -13,7 +10,7 @@ from apps.assistant.agents.openai_sdk.tools._definition_schema import (
     DefinitionArgs,
     Strict,
 )
-from apps.assistant.agents.openai_sdk.tools._shared import error
+from apps.assistant.agents.openai_sdk.tools._shared import declare, error
 from apps.core.errors import ApiError
 from apps.extraction.validation import validate_draft
 
@@ -44,8 +41,7 @@ def _definition_errors(err: ApiError) -> str:
     return f"{err.message} {json.dumps(details, ensure_ascii=False)}"
 
 
-async def _propose(ctx: ToolContext[ReplyContext], arguments: str) -> str:
-    state = ctx.context
+async def _propose(state: ReplyContext, arguments: str) -> str:
     if state.proposal is not None:
         return error(
             "a proposal was already accepted in this reply, and only one reaches "
@@ -82,14 +78,13 @@ async def _propose(ctx: ToolContext[ReplyContext], arguments: str) -> str:
     )
 
 
-TOOL = FunctionTool(
+TOOL = declare(
     name="propose_definition",
     description=(
         "Propose a complete definition to the person, with one reason for each change. "
         "The person decides whether to apply it. Call it at most once per reply, unless "
         "it answers with an error."
     ),
-    params_json_schema=ensure_strict_json_schema(ProposeArgs.model_json_schema()),
-    on_invoke_tool=_propose,
-    strict_json_schema=True,
+    params_json_schema=ProposeArgs.model_json_schema(),
+    handler=_propose,
 )

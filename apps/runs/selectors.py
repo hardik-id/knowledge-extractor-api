@@ -17,6 +17,14 @@ def get_run(user: User, run_id: Any) -> Run:
     return get_visible_or_404(Run, user, run_id, code="run_not_found")
 
 
+def get_any_run(run_id: Any) -> Run:
+    """The run, whoever owns it: for operator commands, never for a request. 404 when unknown."""
+    try:
+        return Run.objects.get(pk=UUID(str(run_id)))
+    except Run.DoesNotExist, ValueError:
+        raise ApiError("run_not_found") from None
+
+
 def get_run_file(user: User, run_id: Any, file_id: Any) -> RunFile:
     """A file of one of ``user``'s runs, otherwise 404 ``file_not_found``."""
     run = get_run(user, run_id)

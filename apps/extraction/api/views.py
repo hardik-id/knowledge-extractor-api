@@ -9,7 +9,9 @@ from apps.core.errors import ApiError
 from apps.extraction import selectors, services
 from apps.extraction.api.serializers import (
     DefinitionSerializer,
+    ExtractionSerializer,
     SaveDefinitionSerializer,
+    serialize_extraction,
 )
 from apps.identity.models import User
 
@@ -32,3 +34,13 @@ def definition(request: Request, run_id: str) -> Response:
         )
         return Response(DefinitionSerializer(saved).data)
     return Response(DefinitionSerializer(selectors.get_definition(user, run_id)).data)
+
+
+@extend_schema(responses=ExtractionSerializer)
+@api_view(["GET"])
+def extraction(request: Request, run_id: str, file_id: str) -> Response:
+    """The records extracted from one file of the run."""
+    user = cast(User, request.user)
+    return Response(
+        serialize_extraction(selectors.get_extraction(user, run_id, file_id))
+    )

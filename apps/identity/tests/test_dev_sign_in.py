@@ -4,7 +4,6 @@ Dev tokens go through the real validator, the real authentication class and a
 real database. The key lives in a temporary directory.
 """
 
-import os
 import shutil
 import stat
 import subprocess
@@ -22,6 +21,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from rest_framework.test import APIClient
 
+from apps.core.tests.process import process_env
 from apps.identity import dev_issuer, tokens
 from apps.identity.tokens import TokenError, TokenErrorReason, validate_access_token
 
@@ -180,8 +180,7 @@ def test_the_command_refuses_to_run_with_entra(key_file: Path, settings: Any) ->
 
 
 def import_production(**env: str) -> subprocess.CompletedProcess[str]:
-    clean = {k: v for k, v in os.environ.items() if k not in ("AUTH_MODE",)}
-    clean.update(
+    clean = process_env(
         DJANGO_SECRET_KEY="x" * 50,
         DJANGO_ALLOWED_HOSTS="example.com",
         DATABASE_URL="postgres://u:p@localhost/db",

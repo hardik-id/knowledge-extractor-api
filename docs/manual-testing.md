@@ -5,7 +5,7 @@ This page starts the whole stack and walks through every Studio call, first thro
 ## Start the stack
 
 ```sh
-cp .env.example .env     # once; .env is ignored by git
+cp .env.example .env     # once; .env is ignored by git, and only local runs (`uv run python manage.py ...`) read it, never the tests
 make up                  # docker compose up -d --build --wait
 ```
 

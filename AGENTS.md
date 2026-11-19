@@ -66,7 +66,7 @@ These are decisions, not suggestions.
 6. **Sign-in.** Every endpoint requires a signed-in person unless its code says otherwise. The person is `oid` together with `tid`. An id the person may not see answers 404, not 403.
 7. **Tests.** With every change, in pytest, against real PostgreSQL, with factories. Test behaviour through the API where there is one.
 8. **Workflow.** `make check` passes before a pull request. One PBI per pull request, on a branch `pbi/<nr>-<slug>`. Plain commit messages, no attribution lines. A feature's documentation goes in `docs/<topic>.md`, not in the README.
-9. **Settings.** They come from the environment through `config/settings`. A new variable is added to `.env.example` in the same change. No secrets in the repository.
+9. **Settings.** They come from the environment through `config/settings`. A new variable is added to `.env.example` in the same change. No secrets in the repository. Only local runs (`config.settings.local`) read `.env`; the test and production settings never do.
 
 ## Git
 

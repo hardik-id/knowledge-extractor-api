@@ -19,6 +19,7 @@ def test_the_agent_has_the_instructions_both_tools_and_the_model() -> None:
         "propose_definition",
         "read_document",
         "find_in_documents",
+        "preview_extraction",
     }
     assert built.model_settings.store is False
 

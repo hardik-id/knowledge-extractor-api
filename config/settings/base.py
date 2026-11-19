@@ -89,6 +89,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "apps.core.middleware.RequestIdMiddleware",
+    "apps.core.telemetry.TelemetryMiddleware",
     "apps.core.middleware.RequestLogMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -265,6 +266,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT = env.str(
 OTEL_RESOURCE_ATTRIBUTES = env.str(
     "OTEL_RESOURCE_ATTRIBUTES", default="deployment.environment=local"
 )
+# Logs go over OTLP only with "otlp" (the logs signal is not stable in Python yet).
+OTEL_LOGS_EXPORTER = env.str("OTEL_LOGS_EXPORTER", default="none")  # none | otlp
 
 # ---------------------------------------------------------------------------
 # Security
@@ -278,8 +281,16 @@ if "*" in CORS_ALLOWED_ORIGINS:
     raise environ.ImproperlyConfigured("CORS_ALLOWED_ORIGINS must not contain '*'.")
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = False
-CORS_ALLOW_HEADERS = [*default_headers, "x-request-id"]
-CORS_EXPOSE_HEADERS = ["ETag", "X-Request-ID"]
+# traceparent, tracestate and baggage let the browser agent continue a trace;
+# Server-Timing carries the trace id back to it (docs/observability.md).
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "x-request-id",
+    "traceparent",
+    "tracestate",
+    "baggage",
+]
+CORS_EXPOSE_HEADERS = ["ETag", "X-Request-ID", "Server-Timing"]
 
 # Security headers on every response (HSTS is set in production.py).
 SECURE_CONTENT_TYPE_NOSNIFF = True

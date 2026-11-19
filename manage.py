@@ -16,6 +16,10 @@ def main() -> None:
             "available on your PYTHONPATH environment variable? Did you "
             "forget to activate a virtual environment?"
         ) from exc
+    # Commands and the task worker are traced too. Off unless OTEL_SDK_DISABLED=false.
+    from apps.core.telemetry import setup_telemetry
+
+    setup_telemetry()
     execute_from_command_line(sys.argv)
 
 

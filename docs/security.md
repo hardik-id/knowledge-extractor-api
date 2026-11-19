@@ -5,8 +5,8 @@ All of it is configured in `config/settings/base.py` (section "Security") and `p
 ## CORS
 
 - Origins come from `CORS_ALLOWED_ORIGINS` (comma separated, default `http://localhost:3000`). A `*` stops startup. `CORS_ALLOW_ALL_ORIGINS` is off.
-- Allowed request headers: Django-CORS defaults plus `X-Request-ID` (so `Authorization` and `Content-Type` are included).
-- Exposed response headers: `ETag` and `X-Request-ID`.
+- Allowed request headers: Django-CORS defaults plus `X-Request-ID`, `traceparent`, `tracestate` and `baggage` (so `Authorization` and `Content-Type` are included).
+- Exposed response headers: `ETag`, `X-Request-ID` and `Server-Timing` (the trace id, see [observability.md](observability.md)).
 - No credentials: `Access-Control-Allow-Credentials` is never sent, because the UI sends a bearer token and no cookies.
 - The middleware sits right after the request id and log middleware, before everything else, so preflights and errors carry the headers too.
 

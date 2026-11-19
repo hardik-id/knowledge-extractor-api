@@ -8,6 +8,7 @@ SECRET_KEY = "django-insecure-test-only-key"
 DEBUG = False
 ALLOWED_HOSTS = ["testserver", "localhost"]
 AUTH_MODE = "dev"
+OTEL_SDK_DISABLED = True  # the telemetry tests build their own providers
 INSTALLED_APPS = [
     *INSTALLED_APPS,
     "apps.core.tests",

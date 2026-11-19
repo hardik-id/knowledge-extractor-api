@@ -235,10 +235,22 @@ LOGGING = build_logging_config(LOG_LEVEL, LOG_FORMAT)
 REDIS_PORT = env.int("REDIS_PORT", default=6379)
 REDIS_URL = env.str("REDIS_URL", default=f"redis://localhost:{REDIS_PORT}/0")
 WS_TICKET_TTL_SECONDS = env.int("WS_TICKET_TTL_SECONDS", default=30)
+# channels_redis waits on Redis for up to 5 s (brpop_timeout) each time a socket
+# listens, and redis-py 8 gives up on any read after 5 s by default: an idle socket
+# would die after 5 s. The read timeout stays above that wait; a connect gives up
+# after 5 s.
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [REDIS_URL]},
+        "CONFIG": {
+            "hosts": [
+                {
+                    "address": REDIS_URL,
+                    "socket_timeout": 10,
+                    "socket_connect_timeout": 5,
+                }
+            ]
+        },
     },
 }
 # The echo socket at /ws/test/ that proves the wiring; off outside the tests.

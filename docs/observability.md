@@ -74,3 +74,66 @@ OTEL_SDK_DISABLED=false OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:14318 \
 ```
 
 Call `GET /api/v1/me` and look for the server span, its PostgreSQL children and `http.server.duration`.
+
+## The collector in compose
+
+`otel-collector` in `compose.yaml` is the Splunk distribution of the OpenTelemetry Collector (`quay.io/signalfx/splunk-otel-collector`, tag pinned), configured in `deploy/otel-collector/config.yaml`. Like `db` it is one shared service for every worktree: `docker compose up -d --wait otel-collector`. OTLP listens on 4317 (gRPC) and 4318 (HTTP); the host ports are `OTEL_GRPC_PORT` and `OTEL_HTTP_PORT`.
+
+In compose, `api` and `worker` send to it with `OTEL_SDK_DISABLED=false`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` and `OTEL_LOGS_EXPORTER=otlp`. The worker's service name is `knowledge-extractor-worker`.
+
+Every signal passes `memory_limiter` and `batch`, and always goes to the `debug` exporter. A Splunk exporter joins a pipeline only when its variables are set in `.env` (compose builds the exporter lists; with no credentials the pipelines hold `debug` alone). Tokens come from `.env`, which git ignores, never from the repository.
+
+| Signal | Needs | Goes to |
+| --- | --- | --- |
+| traces | `SPLUNK_ACCESS_TOKEN`, `SPLUNK_REALM` | Splunk Observability Cloud, OTLP at `ingest.<realm>.observability.splunkcloud.com` |
+| metrics | `SPLUNK_ACCESS_TOKEN`, `SPLUNK_REALM` | Splunk Observability Cloud (`signalfx` exporter) |
+| logs | `SPLUNK_HEC_URL`, `SPLUNK_HEC_TOKEN` | Splunk Enterprise or Splunk Cloud, through HEC |
+
+`SPLUNK_HEC_INSECURE_SKIP_VERIFY` (default `false`) skips certificate checks of the HEC endpoint. `SPLUNK_INDEX` (default `main`; the HEC token must be allowed to write to it) and `SPLUNK_SOURCETYPE` (default `knowledge-extractor-api`) set the index and sourcetype of the log events.
+
+### Reading telemetry locally
+
+```sh
+docker compose logs -f otel-collector
+```
+
+One request to `/api/v1/me` shows as a trace (the server span and its PostgreSQL spans), as `http.server.duration` and `http.server.active_requests`, and as a log record carrying the same `trace_id` as the trace. The container has no shell or curl, so its healthcheck runs `otelcol validate` on the configuration: healthy means the configuration is valid and the process is up. To check a configuration by hand:
+
+```sh
+docker compose run --rm --no-deps --entrypoint /otelcol otel-collector validate --config=/etc/otelcol/config.yaml
+```
+
+Run the app on the host against it with `OTEL_SDK_DISABLED=false` and `OTEL_LOGS_EXPORTER=otlp` (the endpoint default is `http://localhost:4318`).
+
+### What to search for in Splunk
+
+Log events arrive in `SPLUNK_INDEX` with `sourcetype=SPLUNK_SOURCETYPE`. Search on the fields `trace_id`, `span_id`, `service.name` and `deployment.environment`:
+
+```
+index=main sourcetype=knowledge-extractor-api trace_id=<id>
+```
+
+In Splunk Observability Cloud, the same trace id opens the trace in APM, and `service.name` and `deployment.environment` pick the service and environment.
+
+### Trying HEC with a local Splunk
+
+Starting Splunk accepts its licence: that is the owner's step, not an agent's. The commands:
+
+```sh
+docker run -d --name splunk -p 8000:8000 -p 8088:8088 \
+  -e SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com \
+  -e SPLUNK_START_ARGS=--accept-license \
+  -e SPLUNK_PASSWORD=<a password you choose> \
+  -e SPLUNK_HEC_TOKEN=<a token you choose> \
+  splunk/splunk:latest
+```
+
+Then in `.env`:
+
+```
+SPLUNK_HEC_URL=https://host.docker.internal:8088/services/collector
+SPLUNK_HEC_TOKEN=<the same token>
+SPLUNK_HEC_INSECURE_SKIP_VERIFY=true
+```
+
+`host.docker.internal` resolves inside the collector container on Docker Desktop; on Linux add `extra_hosts: ["host.docker.internal:host-gateway"]` to the service in a `compose.override.yaml`. HEC starts with a self-signed certificate, hence the skip-verify switch (local use only). Run `docker compose up -d otel-collector`, call the API, and search `index=main` in Splunk Web on port 8000.

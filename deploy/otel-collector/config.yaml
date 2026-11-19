@@ -1,0 +1,72 @@
+# OpenTelemetry Collector (Splunk distribution) for the API. See docs/observability.md.
+#
+# Every signal arrives over OTLP and goes to the debug exporter. The Splunk
+# exporters are defined here but only join a pipeline when compose sets the
+# *_EXPORTERS lists below (it adds them when the credentials are present).
+# The ${env:NAME:-default} defaults keep the file valid with no Splunk variables.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  debug:
+    verbosity: detailed
+
+  # Traces to Splunk Observability Cloud (OTLP over HTTP).
+  otlphttp/splunk_o11y:
+    traces_endpoint: https://ingest.${env:SPLUNK_REALM:-us0}.observability.splunkcloud.com/v2/trace/otlp
+    headers:
+      X-SF-Token: ${env:SPLUNK_ACCESS_TOKEN:-unset}
+
+  # Metrics to Splunk Observability Cloud.
+  signalfx/splunk_o11y:
+    access_token: ${env:SPLUNK_ACCESS_TOKEN:-unset}
+    realm: ${env:SPLUNK_REALM:-us0}
+
+  # Logs to Splunk Enterprise or Splunk Cloud through HEC.
+  splunk_hec/logs:
+    endpoint: ${env:SPLUNK_HEC_URL:-http://localhost:8088/services/collector}
+    token: ${env:SPLUNK_HEC_TOKEN:-unset}
+    index: ${env:SPLUNK_INDEX:-main}
+    sourcetype: ${env:SPLUNK_SOURCETYPE:-knowledge-extractor-api}
+    source: ${env:SPLUNK_SOURCE:-otel}
+    disable_compression: false
+    tls:
+      insecure_skip_verify: ${env:SPLUNK_HEC_INSECURE_SKIP_VERIFY:-false}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: ${env:TRACES_EXPORTERS:-[debug]}
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: ${env:METRICS_EXPORTERS:-[debug]}
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: ${env:LOGS_EXPORTERS:-[debug]}
+  telemetry:
+    metrics:
+      level: none

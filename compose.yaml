@@ -28,16 +28,52 @@ services:
       timeout: 3s
       retries: 10
 
+  # Splunk distribution of the OpenTelemetry Collector (docs/observability.md).
+  # Always prints what it receives (debug); forwards to Splunk when the
+  # credentials are in .env. Shared by every worktree, like db.
+  otel-collector:
+    image: quay.io/signalfx/splunk-otel-collector:0.165.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      SPLUNK_ACCESS_TOKEN: ${SPLUNK_ACCESS_TOKEN:-unset}
+      SPLUNK_REALM: ${SPLUNK_REALM:-us0}
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-http://localhost:8088/services/collector}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-unset}
+      SPLUNK_HEC_INSECURE_SKIP_VERIFY: ${SPLUNK_HEC_INSECURE_SKIP_VERIFY:-false}
+      SPLUNK_INDEX: ${SPLUNK_INDEX:-main}
+      SPLUNK_SOURCETYPE: ${SPLUNK_SOURCETYPE:-knowledge-extractor-api}
+      # Placeholders keep the file valid when a variable is empty. An exporter joins a pipeline only when its credentials are set.
+      TRACES_EXPORTERS: "[debug${SPLUNK_ACCESS_TOKEN:+${SPLUNK_REALM:+, otlphttp/splunk_o11y}}]"
+      METRICS_EXPORTERS: "[debug${SPLUNK_ACCESS_TOKEN:+${SPLUNK_REALM:+, signalfx/splunk_o11y}}]"
+      LOGS_EXPORTERS: "[debug${SPLUNK_HEC_URL:+${SPLUNK_HEC_TOKEN:+, splunk_hec/logs}}]"
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./deploy/otel-collector:/etc/otelcol:ro
+    # The image has no shell or curl; validating the configuration is the only probe it allows.
+    healthcheck:
+      test: ["CMD", "/otelcol", "validate", "--config=/etc/otelcol/config.yaml"]
+      interval: 15s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+
   api:
     build: .
     env_file: .env
     environment:
       # Inside the compose network the database is reached as "db".
       DATABASE_URL: postgres://ke:ke@db:5432/ke
+      OTEL_SDK_DISABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_LOGS_EXPORTER: otlp
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
       db:
+        condition: service_healthy
+      otel-collector:
         condition: service_healthy
     # Migrations are applied before the server starts.
     command: >
@@ -57,6 +93,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://ke:ke@db:5432/ke
+      OTEL_SDK_DISABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_SERVICE_NAME: knowledge-extractor-worker
     depends_on:
       db:
         condition: service_healthy

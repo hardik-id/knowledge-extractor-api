@@ -20,6 +20,11 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `not_found` | 404 | Not found. |
 | `method_not_allowed` | 405 | Method not allowed. |
 | `document_not_found` | 404 | Document not found. |
+| `run_not_found` | 404 | Run not found. |
+| `file_not_found` | 404 | File not found. |
+| `no_files` | 422 | A run needs at least one file. |
+| `mixed_sources` | 422 | A run cannot mix storage documents with files from other sources. |
+| `unsupported_source` | 422 | This source is not supported yet. |
 | `conflict` | 409 | The request conflicts with the current state. |
 | `validation_error` | 422 | The request is not valid. |
 | `server_error` | 500 | Something went wrong. |

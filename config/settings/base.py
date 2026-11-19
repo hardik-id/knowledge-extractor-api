@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.identity",
     "apps.documents",
+    "apps.runs",
 ]
 
 # ---------------------------------------------------------------------------

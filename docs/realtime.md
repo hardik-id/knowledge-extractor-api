@@ -102,6 +102,8 @@ Add a `path(...)` to `websocket_urlpatterns` in `apps/realtime/routing.py` and w
 
 `CHANNEL_LAYERS["default"]` is `channels_redis` on `REDIS_URL` (the compose `redis` service). Under pytest it is the in-memory layer.
 
+A listening socket waits on Redis for up to 5 s at a time (`brpop_timeout` in `channels_redis`), and redis-py 8 gives up on a read after 5 s by default. So the layer's host sets `socket_timeout` to 10 s: without it an idle socket is dropped after 5 s with `redis.exceptions.TimeoutError`. A connect gives up after 5 s (`socket_connect_timeout`). `apps/realtime/tests/test_redis_layer.py` holds a socket idle past that wait on the real Redis; it is skipped when Redis is not running.
+
 ## The test route
 
 `/ws/test/` is a test-only socket that says who signed in (`{"type": "hello", "user_id": ...}`) and echoes JSON. It exists only when `REALTIME_TEST_ROUTE=true` (on in the test settings, off otherwise), so it proves the wiring without being part of the API.

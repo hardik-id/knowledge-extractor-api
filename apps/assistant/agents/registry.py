@@ -40,3 +40,9 @@ def get_agent() -> Agent:
 def check_settings() -> None:
     """Raise ``ImproperlyConfigured`` when the setting names no agent."""
     _load()
+
+
+def agent_kind() -> str:
+    """What kind of agent the setting names, for telemetry: the built-in name, or the class name."""
+    value = settings.ASSISTANT_AGENT
+    return str(value if value in _BUILT_IN else value.rsplit(".", 1)[-1])

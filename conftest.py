@@ -5,6 +5,8 @@ from rest_framework.test import APIClient
 
 from apps.identity.tests.factories import UserFactory
 
+pytest_plugins = ["apps.core.tests.otel"]
+
 
 @pytest.fixture
 def api_client() -> APIClient:

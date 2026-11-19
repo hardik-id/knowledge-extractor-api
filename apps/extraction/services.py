@@ -16,9 +16,9 @@ from django.db import IntegrityError, transaction
 
 from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
-from apps.extraction import selectors, tasks
+from apps.extraction import selectors, tasks, telemetry
 from apps.extraction.api.serializers import serialize_extraction
-from apps.extraction.extractors import get_extractor
+from apps.extraction.extractors import extractor_kind, get_extractor
 from apps.extraction.extractors.base import Definition
 from apps.extraction.extractors.records import StoredRecord, stored_records
 from apps.extraction.merge import merge_extracted_records
@@ -461,28 +461,38 @@ def run_extraction(file_id: str, execution_id: str, definition_version: int) -> 
     leaves the records as they were and the cell ``failed`` with ``{code,
     message}``. A cell that no longer belongs to this execution (run again,
     released after the timeout, the run deleted) means the job does nothing.
+
+    The job's span is ``extraction.file`` (docs/observability.md).
     """
-    with transaction.atomic():
-        cell = runs.cell_for_update(file_id, EXTRACT)
-        if cell is None or not _belongs(cell, execution_id, QUEUED):
-            return
-        run_cells.set_cell(
-            cell.file, EXTRACT, status=RUNNING, execution_id=execution_id
-        )
-    try:
-        _extract(cell.file, execution_id, definition_version)
-    except Exception as error:
-        logger.exception(
-            "extraction failed: file %s, execution %s", file_id, execution_id
-        )
-        _fail(file_id, execution_id, error)
+    with telemetry.file_span(file_id, definition_version, extractor_kind()) as file:
+        with transaction.atomic():
+            cell = runs.cell_for_update(file_id, EXTRACT)
+            if cell is None or not _belongs(cell, execution_id, QUEUED):
+                file.outcome = telemetry.SKIPPED
+                return
+            file.started(cell.file.run_id)
+            run_cells.set_cell(
+                cell.file, EXTRACT, status=RUNNING, execution_id=execution_id
+            )
+        try:
+            file.records = _extract(cell.file, execution_id, definition_version)
+            if file.records is None:
+                file.outcome = telemetry.SKIPPED
+        except Exception as error:
+            logger.exception(
+                "extraction failed: file %s, execution %s", file_id, execution_id
+            )
+            file.failed(error)
+            _fail(file_id, execution_id, error)
 
 
 def _belongs(cell: Any, execution_id: str, *statuses: str) -> bool:
     return bool(cell.execution_id == execution_id and cell.status in statuses)
 
 
-def _extract(run_file: Any, execution_id: str, version: int) -> None:
+def _extract(run_file: Any, execution_id: str, version: int) -> int | None:
+    """Extract and store. The number of records the extractor found, or None when
+    the cell no longer belongs to this execution and nothing was stored."""
     document = _document(run_file)
     definition = selectors.get_definition_version(run_file.run_id, version)
     raw = get_extractor().extract(
@@ -494,7 +504,7 @@ def _extract(run_file: Any, execution_id: str, version: int) -> None:
     with transaction.atomic():
         cell = runs.cell_for_update(run_file.pk, EXTRACT)
         if cell is None or not _belongs(cell, execution_id, RUNNING):
-            return
+            return None
         extraction, _ = Extraction.objects.get_or_create(
             file=run_file,
             defaults={
@@ -528,6 +538,7 @@ def _extract(run_file: Any, execution_id: str, version: int) -> None:
                 "revision": extraction.revision,
             },
         )
+    return len(fresh)
 
 
 def _store(extraction: Extraction, fresh: list[StoredRecord]) -> None:

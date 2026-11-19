@@ -53,6 +53,11 @@ _REQUEST_ID_ATTRIBUTE = "request_id"
 
 _installed = False
 _log_handler: logging.Handler | None = None
+# The providers `install` was given. Code that makes its own spans and metrics
+# (jobs, the assistant, extraction, sockets) asks for them here, so a test can
+# install in-memory ones; with none installed the global providers answer.
+_tracer_provider: TracerProvider | None = None
+_meter_provider: MeterProvider | None = None
 
 
 def _service_version() -> str:
@@ -134,7 +139,9 @@ def install(
     logger_provider: LoggerProvider | None = None,
 ) -> None:
     """Instrument everything against these providers. `setup_telemetry` calls it."""
-    global _installed, _log_handler
+    global _installed, _log_handler, _tracer_provider, _meter_provider
+    _tracer_provider = tracer_provider
+    _meter_provider = meter_provider
     DjangoInstrumentor().instrument(
         tracer_provider=tracer_provider,
         meter_provider=meter_provider,
@@ -159,6 +166,30 @@ def install(
     _installed = True
 
 
+def get_tracer(name: str) -> trace.Tracer:
+    """A tracer from the installed provider, else the global one (a no-op when telemetry is off)."""
+    return (_tracer_provider or trace.get_tracer_provider()).get_tracer(name)
+
+
+def meter_provider() -> metrics.MeterProvider:
+    """The installed meter provider, else the global one. Key a cache of instruments on it."""
+    return _meter_provider or metrics.get_meter_provider()
+
+
+def get_meter(name: str) -> metrics.Meter:
+    return meter_provider().get_meter(name)
+
+
+def fail_span(span: Span, error: BaseException) -> None:
+    """Mark a span failed with the exception's type and nothing else.
+
+    A message can quote what the person wrote, so it is never recorded: no
+    description, no `exception` event, only `error.type`.
+    """
+    span.set_attribute("error.type", type(error).__qualname__)
+    span.set_status(trace.Status(trace.StatusCode.ERROR))
+
+
 def attach_log_handler() -> None:
     """Put the OTLP log handler on the root logger, if there is one and it is not there.
 
@@ -173,7 +204,9 @@ def attach_log_handler() -> None:
 
 def uninstall() -> None:
     """Undo `install`. For tests; a process never needs it."""
-    global _installed, _log_handler
+    global _installed, _log_handler, _tracer_provider, _meter_provider
+    _tracer_provider = None
+    _meter_provider = None
     instrumentors: list[Any] = [
         DjangoInstrumentor(),
         PsycopgInstrumentor(),

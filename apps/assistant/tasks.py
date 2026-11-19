@@ -10,38 +10,49 @@ from typing import Any
 
 import structlog
 from asgiref.sync import async_to_sync, sync_to_async
-from django.tasks import task
 
-from apps.assistant import services
+from apps.assistant import services, telemetry
 from apps.assistant.agents.base import Proposal, TextDelta
-from apps.assistant.agents.registry import get_agent
+from apps.assistant.agents.registry import agent_kind, get_agent
+from apps.core.jobs import job
 from apps.extraction.validation import validate_draft
 from apps.realtime import services as realtime
 
 log = structlog.get_logger(__name__)
 
 
-@task()
+@job()
 def write_reply(message_id: str) -> None:
-    """Write assistant message ``message_id``. Does nothing when it is gone or done."""
-    async_to_sync(_write_reply)(message_id)
+    """Write assistant message ``message_id``. Does nothing when it is gone or done.
+
+    The job's span is ``assistant.reply`` (docs/observability.md).
+    """
+    with telemetry.reply_span(message_id, agent_kind()) as reply:
+        async_to_sync(_write_reply)(message_id, reply)
 
 
-async def _write_reply(message_id: str) -> None:
+async def _write_reply(message_id: str, reply: telemetry.ReplyTrace) -> None:
     request = await sync_to_async(services.start_reply)(message_id)
     if request is None:
+        reply.outcome = telemetry.SKIPPED
         return
+    reply.started(request.run_id)
     try:
-        if await _stream(message_id, request):
+        if await _stream(message_id, request, reply):
             await realtime.apublish_run_event(
                 request.run_id, services.done_event(message_id)
             )
-    except Exception:
+        else:
+            reply.outcome = telemetry.CLOSED
+    except Exception as error:
         log.exception("assistant_reply_failed", message_id=message_id)
+        reply.failed(error)
         await sync_to_async(services.close_reply)(message_id)
 
 
-async def _stream(message_id: str, request: services.Request) -> bool:
+async def _stream(
+    message_id: str, request: services.Request, reply: telemetry.ReplyTrace
+) -> bool:
     """Run the agent and store each event. False when someone else closed the reply."""
     agent = get_agent()
     stream = agent.reply(
@@ -56,6 +67,7 @@ async def _stream(message_id: str, request: services.Request) -> bool:
                     message_id, event.text
                 ):
                     return False
+                reply.delta()
                 await realtime.apublish_run_event(
                     request.run_id, services.delta_event(message_id, event.text)
                 )
@@ -63,6 +75,7 @@ async def _stream(message_id: str, request: services.Request) -> bool:
                 proposal = _proposal(event)
                 if not await sync_to_async(services.set_proposal)(message_id, proposal):
                     return False
+                reply.proposal()
                 await realtime.apublish_run_event(
                     request.run_id, services.proposal_event(message_id, proposal)
                 )

@@ -1,8 +1,13 @@
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 from django.db import transaction
-from django.tasks import task
+from django.tasks import task, task_backends
 
-from apps.core.jobs import enqueue_after_commit
+from apps.core import telemetry
+from apps.core.jobs import TRACE_KWARG, enqueue_after_commit, job
+from apps.core.tests.otel import Telemetry
 
 ran: list[int] = []
 
@@ -41,3 +46,71 @@ def test_rollback_enqueues_nothing() -> None:
         raise RuntimeError("roll back")
 
     assert ran == []
+
+
+# --- the trace context travels with the job -------------------------------------
+
+
+@job()
+def traced(number: int) -> int:
+    with telemetry.get_tracer("test").start_as_current_span("work"):
+        pass
+    return number
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_job_continues_the_trace_of_the_request_that_enqueued_it(
+    otel: Telemetry, queued: Callable[[], None]
+) -> None:
+    tracer = otel.tracer_provider.get_tracer("test")
+    with tracer.start_as_current_span("request") as request:
+        enqueue_after_commit(traced, 5)
+    (waiting,) = task_backends["default"].results  # type: ignore[attr-defined]
+    assert waiting.args == [5]
+    assert set(waiting.kwargs) == {TRACE_KWARG}
+    assert otel.named("work") == []
+
+    queued()  # in an empty context, as a worker would
+
+    (work,) = otel.named("work")
+    assert work.context.trace_id == request.get_span_context().trace_id
+    assert work.parent is not None
+    assert work.parent.span_id == request.get_span_context().span_id
+    assert work.parent.is_remote
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_job_enqueued_outside_a_span_carries_no_context_and_starts_a_trace(
+    otel: Telemetry, queued: Callable[[], None]
+) -> None:
+    enqueue_after_commit(traced, 6)
+    (waiting,) = task_backends["default"].results  # type: ignore[attr-defined]
+    assert waiting.kwargs == {}
+
+    queued()
+
+    (work,) = otel.named("work")
+    assert work.parent is None
+
+
+seen: list[Any] = []
+
+
+@job()
+def look(*args: Any, **kwargs: Any) -> None:
+    seen.append((args, kwargs))
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_job_does_not_see_the_context_in_its_arguments(
+    otel: Telemetry,
+) -> None:
+    seen.clear()
+    with otel.tracer_provider.get_tracer("test").start_as_current_span("request"):
+        enqueue_after_commit(look, "a", key="b")
+
+    assert seen == [(("a",), {"key": "b"})]
+
+
+def test_a_job_called_without_context_just_runs(otel: Telemetry) -> None:
+    assert traced.call(7) == 7

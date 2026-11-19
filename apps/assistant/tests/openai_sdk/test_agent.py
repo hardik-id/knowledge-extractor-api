@@ -21,6 +21,7 @@ def test_the_agent_has_the_instructions_both_tools_and_the_model() -> None:
         "find_in_documents",
         "preview_extraction",
         "outline_document",
+        "summarize_records",
     }
     assert built.model_settings.store is False
 

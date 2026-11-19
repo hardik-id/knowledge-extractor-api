@@ -133,6 +133,7 @@ Its reply text is cut into deltas of three words each.
 - **`read_document(document_id)`** reads a sample of one of the run's documents, through `Workspace.read` (as the run's owner, only the run's own files).
 - **`find_in_documents(text)`** searches the run's documents for a literal phrase (2 to 100 characters, case does not matter, no patterns). Per matching document it gives the number of matches and up to 3 snippets of about 120 characters (12 in total, the first 50 documents searched), as untrusted data. No match is a plain answer, not an error.
 - **`outline_document(document_id)`** shows how one document is built without reading it: the front matter keys, the headings with their levels, the labelled lines (`**Label:** value`) by label with a count and one example, and the length. Lists are capped (60 headings, 20 labels, 30 keys) and say when they are cut. The parsing is the pure function `outline(text)` in `tools/_structure.py`.
+- **`summarize_records()`** summarizes what the run extracted, through `Workspace.extractions`: over the run and per document, per record type the records (by review, and added by hand) and per field the values found, not found and found but not anchored, how they were judged, what was added or changed by hand, and up to two rejected values as examples, clipped and wrapped as untrusted data. Found plus not found is the records of the type. With nothing extracted it says so, as a plain answer.
 - **Propose, never apply.** The instructions explain the definition model (record types, fields, `quote` against `inferred`, value types, `multiple`, the output template) and the rule that the assistant proposes and the person applies. No tool saves anything.
 
 ### What the agent can look at
@@ -163,6 +164,7 @@ apps/assistant/agents/openai_sdk/
     read_document.py
     outline_document.py
     _structure.py          outline(text): front matter, headings, labels (pure)
+    summarize_records.py
 ```
 
 ### Adding a tool

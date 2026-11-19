@@ -20,6 +20,7 @@ from apps.assistant.agents.openai_sdk.tools import (
     preview_extraction,
     propose_definition,
     read_document,
+    summarize_records,
 )
 
 TOOLS: list[Tool] = [
@@ -28,4 +29,5 @@ TOOLS: list[Tool] = [
     preview_extraction.TOOL,
     propose_definition.TOOL,
     outline_document.TOOL,
+    summarize_records.TOOL,
 ]

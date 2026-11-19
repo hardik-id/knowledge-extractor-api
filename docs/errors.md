@@ -24,6 +24,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `file_not_found` | 404 | File not found. |
 | `extraction_not_found` | 404 | This file has no extraction yet. |
 | `record_not_found` | 404 | Record not found. |
+| `value_not_found` | 404 | Value not found. |
 | `revision_conflict` | 409 | The records changed since they were loaded. |
 | `unknown_field` | 422 | This record type or field is not in the extraction definition. |
 | `invalid_span` | 422 | The span does not match the text. |

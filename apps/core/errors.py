@@ -24,6 +24,7 @@ ERRORS: dict[str, ErrorCode] = {
     "file_not_found": ErrorCode(404, "File not found."),
     "extraction_not_found": ErrorCode(404, "This file has no extraction yet."),
     "record_not_found": ErrorCode(404, "Record not found."),
+    "value_not_found": ErrorCode(404, "Value not found."),
     "revision_conflict": ErrorCode(409, "The records changed since they were loaded."),
     "unknown_field": ErrorCode(
         422, "This record type or field is not in the extraction definition."

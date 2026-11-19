@@ -11,6 +11,8 @@ from apps.extraction.api.serializers import (
     AddRecordSerializer,
     DefinitionSerializer,
     ExtractionSerializer,
+    ReplaceFieldValuesSerializer,
+    ReviewValueSerializer,
     RevisionQuerySerializer,
     SaveDefinitionSerializer,
     UpdateRecordSerializer,
@@ -87,4 +89,36 @@ def record(request: Request, run_id: str, file_id: str, record_id: str) -> Respo
         extraction = services.update_record(
             user, run_id, file_id, record_id, revision=data.pop("revision"), patch=data
         )
+    return Response(serialize_extraction(extraction))
+
+
+@extend_schema(
+    request=ReplaceFieldValuesSerializer, responses={200: ExtractionSerializer}
+)
+@api_view(["PUT"])
+def field(
+    request: Request, run_id: str, file_id: str, record_id: str, field_id: str
+) -> Response:
+    """Replace all values of one field of a record."""
+    user = cast(User, request.user)
+    body = ReplaceFieldValuesSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    extraction = services.replace_field_values(
+        user, run_id, file_id, record_id, field_id, **body.validated_data
+    )
+    return Response(serialize_extraction(extraction))
+
+
+@extend_schema(request=ReviewValueSerializer, responses={200: ExtractionSerializer})
+@api_view(["PATCH"])
+def value(
+    request: Request, run_id: str, file_id: str, record_id: str, value_id: str
+) -> Response:
+    """Accept or reject one value of a record."""
+    user = cast(User, request.user)
+    body = ReviewValueSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    extraction = services.review_value(
+        user, run_id, file_id, record_id, value_id, **body.validated_data
+    )
     return Response(serialize_extraction(extraction))

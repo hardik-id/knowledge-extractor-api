@@ -570,6 +570,137 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /runs/{run_id}/files/{file_id}/extraction/records/{record_id}/fields/{field_id}:
+    put:
+      operationId: runs_files_extraction_records_fields_update
+      description: Replace all values of one field of a record.
+      parameters:
+      - in: path
+        name: field_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: file_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: record_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceFieldValuesRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Extraction'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /runs/{run_id}/files/{file_id}/extraction/records/{record_id}/values/{value_id}:
+    patch:
+      operationId: runs_files_extraction_records_values_partial_update
+      description: Accept or reject one value of a record.
+      parameters:
+      - in: path
+        name: file_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: record_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: value_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedReviewValueRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Extraction'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /runs/{run_id}/stages/extract/definition:
     get:
       operationId: runs_stages_extract_definition_retrieve
@@ -958,6 +1089,15 @@ components:
       required:
       - format
       - template
+    PatchedReviewValueRequest:
+      type: object
+      description: The body of ``PATCH .../records/{record_id}/values/{value_id}``.
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+        review:
+          $ref: '#/components/schemas/ReviewEnum'
     PatchedUpdateRecordRequest:
       type: object
       description: 'The body of ``PATCH .../records/{record_id}``: only the keys sent
@@ -1023,6 +1163,20 @@ components:
       required:
       - fields
       - name
+    ReplaceFieldValuesRequest:
+      type: object
+      description: The body of ``PUT .../records/{record_id}/fields/{field_id}``.
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValueInputRequest'
+      required:
+      - revision
+      - values
     ReviewEnum:
       enum:
       - suggested

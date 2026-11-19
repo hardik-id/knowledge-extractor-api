@@ -1,4 +1,4 @@
-# Live updates: sockets and the ticket
+# Live updates: sockets, the ticket and run events
 
 The API holds WebSocket connections next to the REST API. One uvicorn process serves both: `config/asgi.py` sends HTTP to Django as before and WebSockets through two steps to `apps/realtime/routing.py`.
 
@@ -40,9 +40,63 @@ No ticket, an unknown one, a used one or an expired one: the socket is **accepte
 
 A ticket is a secret in a URL. uvicorn logs `WebSocket /path?ticket=...` on the `uvicorn.error` logger, so the logging setup (`RedactTicket` in `apps/core/logging.py`) rewrites `ticket=<value>` to `ticket=[redacted]` on that logger and on the console handler. The middleware logs the path only. See [logging.md](logging.md).
 
+## The run socket
+
+```
+ws://<host>/ws/runs/{run_id}/?ticket=k3J...
+```
+
+The route the UI opens for a run (`createHttpRunEvents` in the UI), with the trailing slash. `RunConsumer` in `apps/realtime/consumers.py`, routed in `apps/realtime/routing.py`.
+
+1. The ticket signs the person in (above).
+2. The run must be visible to that person (`runs.selectors.get_run`). Otherwise the socket is accepted and closed with **4404**: someone else's run, an unknown id and a malformed id look the same.
+3. The socket joins the run's group (`run.<run_id>` on the channel layer) and from then on receives every event published for the run.
+
+The server only sends. Each event is one JSON text frame. Whatever the client sends is dropped unread: it changes nothing and gets no answer.
+
+Events published while nobody listens, or while a socket is reconnecting, are lost on purpose. The UI fetches the run's snapshot (`GET /api/v1/runs/{run_id}`) every time its socket opens, so it never needs them.
+
+Deleting a run (`DELETE /api/v1/runs/{run_id}`) closes its sockets with 4404, once the delete has committed.
+
+### Close codes
+
+| Code | Meaning | The UI |
+| --- | --- | --- |
+| 4401 | No ticket, or an unknown, used or expired one | asks for a new ticket and tries again |
+| 4404 | The run is not yours, does not exist, or was deleted | stops |
+
+The UI also stops on 4403 (not used by this API so far) and retries on any other code.
+
+### Events
+
+| `type` | Shape | Sent by |
+| --- | --- | --- |
+| `cell` | `{ "type": "cell", "cell": { file_id, stage, status, execution_id, progress, error, output, updated_at } }`, the cell as in the snapshot | `runs.services.set_cell`, on every change |
+| `extraction.changed` | `{ "type": "extraction.changed", "file_id", "revision" }` | the extraction app, when a file's revision changes (#149, #152) |
+| `assistant.delta` | `{ "type": "assistant.delta", "message_id", "text" }` | the assistant (#146) |
+| `assistant.proposal` | `{ "type": "assistant.proposal", "message_id", "proposal" }` | the assistant (#146) |
+| `assistant.done` | `{ "type": "assistant.done", "message_id" }` | the assistant (#146) |
+
+## Publishing an event
+
+Any part of the backend announces a change to a run with one call (`apps/realtime/services.py`):
+
+```python
+from apps.realtime import services as realtime
+
+realtime.publish_run_event(run_id, {"type": "cell", "cell": {...}})        # request code, jobs
+await realtime.apublish_run_event(run_id, {"type": "assistant.done", ...})  # async code
+```
+
+- **After the commit.** `publish_run_event` hands the send to `transaction.on_commit`: inside a transaction the event goes out once it commits, and never if it rolls back. Outside a transaction it goes at once. It works the same in a request and in a job in the worker process (`async_to_sync` over the channel layer).
+- **The async twin** sends at once: async code holds no transaction of its own.
+- **Never raises.** If the channel layer is down or missing, the failure is logged (`run_event_not_sent`, with `run_id` and `kind`, the event type) and the caller carries on. The request or the job does not fail because nobody could be told.
+- The event must be plain JSON data (dicts, lists, strings, numbers, booleans, null): it goes through Redis and then into one text frame.
+- `close_run_sockets(run_id)` closes the run's sockets with 4404 the same way; `runs.services.delete_run` calls it.
+
 ## Adding a socket route
 
-Add a `path(...)` to `websocket_urlpatterns` in `apps/realtime/routing.py` (or the routing of the app that owns the route, included there) and write the consumer. Read the person from `self.scope["user"]`. Do not read the ticket and do not log `scope["query_string"]`. Routes end with a slash, as the UI opens them (`/ws/runs/<id>/`).
+Add a `path(...)` to `websocket_urlpatterns` in `apps/realtime/routing.py` and write the consumer. Read the person from `self.scope["user"]`. Do not read the ticket and do not log `scope["query_string"]`. Routes end with a slash, as the UI opens them (`/ws/runs/<id>/`).
 
 ## The channel layer
 
@@ -62,4 +116,4 @@ Add a `path(...)` to `websocket_urlpatterns` in `apps/realtime/routing.py` (or t
 
 ## Tests
 
-`apps/realtime/tests/` (ticket service and endpoint, the socket through the real ASGI application, no ticket in any log line) and `apps/core/tests/test_ticket_redaction.py`. The socket tests use a small client over `asgiref` (`tests/communicator.py`), because `channels.testing` needs daphne.
+`apps/realtime/tests/` (ticket service and endpoint, the socket through the real ASGI application, no ticket in any log line, the run socket in `test_run_socket.py`, the publisher with a failing layer in `test_publisher.py`) and `apps/core/tests/test_ticket_redaction.py`. The socket tests use a small client over `asgiref` (`tests/communicator.py`), because `channels.testing` needs daphne.

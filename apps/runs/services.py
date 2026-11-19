@@ -12,6 +12,8 @@ from django.utils import timezone
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.identity.models import User
+from apps.realtime import services as realtime
+from apps.runs.api.serializers import CellSerializer
 from apps.runs.models import Cell, CellStatus, Run, RunFile, Stage
 
 STORAGE = "storage"
@@ -50,8 +52,10 @@ def create_run(user: User, items: Sequence[dict[str, Any]]) -> Run:
 
 
 def delete_run(run: Run) -> None:
-    """Delete the run with its files and cells."""
+    """Delete the run with its files and cells. Its sockets close with 4404."""
+    run_id = run.pk
     run.delete()
+    realtime.close_run_sockets(run_id)
 
 
 def set_cell(
@@ -64,7 +68,11 @@ def set_cell(
     error: dict[str, str] | None = None,
     output: dict[str, Any] | None = None,
 ) -> Cell:
-    """The one function through which a cell changes. It stamps ``updated_at``."""
+    """The one function through which a cell changes. It stamps ``updated_at``.
+
+    Every change is announced on the run's socket as ``{"type": "cell", "cell"}``,
+    the cell in the shape of the snapshot, once the transaction commits.
+    """
     cell = Cell.objects.get(file=file, stage=stage)
     cell.status = CellStatus(status)
     cell.execution_id = execution_id
@@ -73,4 +81,7 @@ def set_cell(
     cell.output = output
     cell.updated_at = timezone.now()
     cell.save()
+    realtime.publish_run_event(
+        file.run_id, {"type": "cell", "cell": dict(CellSerializer(cell).data)}
+    )
     return cell

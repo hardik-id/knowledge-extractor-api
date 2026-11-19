@@ -4,6 +4,7 @@ import http.server
 import io
 import json
 import logging
+import logging.config
 import os
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from typing import Any
 
 import httpx2
 import pytest
+from django.apps import apps
 from django.conf import settings
 from django.db import connections
 from django.test import Client, override_settings
@@ -97,6 +99,53 @@ def test_logs_are_exported_with_the_trace_when_a_logger_provider_is_given(
     ours = [r for r in records if r.trace_id == server.context.trace_id]
     assert ours
     assert all("_logger" not in (r.attributes or {}) for r in records)
+
+
+@URLS
+@pytest.mark.django_db
+def test_an_exported_log_record_holds_no_query_string(otel: Telemetry) -> None:
+    """django.request logs a 404 with the request as `extra`; its repr has the query."""
+    telemetry.uninstall()
+    exporter = InMemoryLogRecordExporter()  # type: ignore[no-untyped-call]
+    logger_provider = LoggerProvider(resource=telemetry.build_resource())
+    logger_provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    telemetry.install(
+        tracer_provider=otel.tracer_provider,
+        meter_provider=otel.meter_provider,
+        logger_provider=logger_provider,
+    )
+    ticket = "ticket-abc-123"
+    Client().get(f"/api/v1/nothing-here?ticket={ticket}")
+    records = [r.log_record for r in exporter.get_finished_logs()]
+    assert any("Not Found" in str(r.body) for r in records)
+    for record in records:
+        for value in [str(record.body), *map(str, (record.attributes or {}).values())]:
+            assert ticket not in value
+        assert "request" not in (record.attributes or {})
+
+
+def test_the_log_handler_survives_logging_being_configured_again(
+    otel: Telemetry,
+) -> None:
+    """django.setup() runs dictConfig(LOGGING), which empties the root handlers."""
+    telemetry.uninstall()
+    logger_provider = LoggerProvider(resource=telemetry.build_resource())
+    telemetry.install(
+        tracer_provider=otel.tracer_provider,
+        meter_provider=otel.meter_provider,
+        logger_provider=logger_provider,
+    )
+    handler = telemetry._log_handler
+    root = logging.getLogger()
+    assert handler in root.handlers
+    old_handlers = root.handlers[:]
+    try:
+        logging.config.dictConfig(settings.LOGGING)
+        assert handler not in root.handlers
+        apps.get_app_config("core").ready()
+        assert handler in root.handlers
+    finally:
+        root.handlers[:] = old_handlers
 
 
 @pytest.fixture
@@ -360,6 +409,25 @@ def test_the_app_starts_with_telemetry_on_and_no_collector() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "True"
+
+
+def test_the_otlp_log_handler_is_on_the_root_logger_after_a_real_start_up() -> None:
+    probe = (
+        "import logging; "
+        "print([type(h).__name__ for h in logging.getLogger().handlers])"
+    )
+    result = _manage(
+        "shell",
+        "--no-imports",
+        "-c",
+        probe,
+        OTEL_SDK_DISABLED="false",
+        OTEL_LOGS_EXPORTER="otlp",
+        OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:1",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "LoggingHandler" in result.stdout
+    assert "StreamHandler" in result.stdout
 
 
 def test_the_resource_has_the_three_attributes(settings: Any) -> None:

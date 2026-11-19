@@ -95,13 +95,35 @@ async def strip_query_async(span: Span, *args: Any) -> None:
     strip_query(span)
 
 
+_STANDARD_RECORD_ATTRIBUTES = frozenset(logging.makeLogRecord({}).__dict__) | {
+    "message",
+    "asctime",
+    "taskName",
+}
+_PLAIN_TYPES = (str, bool, int, float)
+
+
+def _is_plain(value: object) -> bool:
+    if isinstance(value, _PLAIN_TYPES):
+        return True
+    return isinstance(value, list | tuple) and all(
+        isinstance(item, _PLAIN_TYPES) for item in value
+    )
+
+
 class _PlainRecords(logging.Filter):
-    """structlog hangs its logger on the record; OTLP attributes must be plain values."""
+    """Only plain `extra` values reach the OTLP exporter.
+
+    The handler turns any other value into its `str()`. structlog hangs its logger
+    on the record, and Django's `django.request` logger adds the request, whose
+    repr holds the full path with the query string (the socket ticket). Both go.
+    """
 
     def filter(self, record: logging.LogRecord) -> logging.LogRecord:
         plain = logging.makeLogRecord(record.__dict__)
-        for name in ("_logger", "_name"):
-            plain.__dict__.pop(name, None)
+        for name, value in record.__dict__.items():
+            if name not in _STANDARD_RECORD_ATTRIBUTES and not _is_plain(value):
+                del plain.__dict__[name]
         return plain
 
 
@@ -129,12 +151,24 @@ def install(
         async_request_hook=strip_query_async,
     )
     if logger_provider is not None:
-        # An OTLP handler on the root logger. It stamps the current span's ids on
+        # An OTLP handler for the root logger. It stamps the current span's ids on
         # each record itself.
         _log_handler = LoggingHandler(logger_provider=logger_provider)
         _log_handler.addFilter(_PlainRecords())
-        logging.getLogger().addHandler(_log_handler)
+        attach_log_handler()
     _installed = True
+
+
+def attach_log_handler() -> None:
+    """Put the OTLP log handler on the root logger, if there is one and it is not there.
+
+    The entry points set telemetry up before `django.setup()`, and `django.setup()`
+    runs `dictConfig(LOGGING)`, which removes every handler the root logger has.
+    `CoreConfig.ready()` calls this again once logging is configured.
+    """
+    root = logging.getLogger()
+    if _log_handler is not None and _log_handler not in root.handlers:
+        root.addHandler(_log_handler)
 
 
 def uninstall() -> None:

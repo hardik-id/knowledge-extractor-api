@@ -24,6 +24,8 @@ The SDK reads the other standard variables itself (`OTEL_EXPORTER_OTLP_HEADERS`,
 
 The logs signal is not stable in the Python SDK yet, so it is exported only on request. Without it, logs stay on stdout (see [logging.md](logging.md)) and carry the trace id.
 
+With `OTEL_LOGS_EXPORTER=otlp` an OTLP handler sits on the root logger next to the console handler. The entry points set telemetry up before `django.setup()`, and `django.setup()` rebuilds the root logger from `LOGGING`, so `CoreConfig.ready()` attaches the handler again (`attach_log_handler()`). Only plain `extra` values (text, numbers, booleans) are exported; anything else is dropped, so Django's `request` object, whose repr holds the query string, never leaves the process.
+
 ## What is emitted
 
 Resource on every signal: `service.name`, `service.version` (from `pyproject.toml`) and `deployment.environment`.
@@ -57,10 +59,10 @@ For Splunk RUM the response carries `Server-Timing: traceparent;desc="00-<trace 
 ## What is never recorded
 
 - `Authorization` and `Cookie` values. Header capture is off by default; if an operator turns it on (`OTEL_INSTRUMENTATION_HTTP_CAPTURE_HEADERS_*`), these four are sanitized: `authorization`, `proxy-authorization`, `cookie`, `set-cookie`.
-- Query strings. The socket ticket travels in one. A request hook cuts the URL attributes (`http.url`, `http.target`, `url.full`, `url.path`) back to the part before `?` on server and outgoing spans, and empties `url.query`. The log line holds `request.path` only.
+- Query strings. The socket ticket travels in one. A request hook cuts the URL attributes (`http.url`, `http.target`, `url.full`, `url.path`) back to the part before `?` on server and outgoing spans, and empties `url.query`. The log line holds `request.path` only, and exported log records hold no non-plain `extra` such as Django's `request`.
 - Redis command arguments and SQL parameter values.
 
-Test: `test_no_span_and_no_log_line_holds_a_token_or_a_query_string` and `test_an_outgoing_call_records_no_query_string`.
+Test: `test_no_span_and_no_log_line_holds_a_token_or_a_query_string`, `test_an_outgoing_call_records_no_query_string` and `test_an_exported_log_record_holds_no_query_string`.
 
 ## Trying it locally
 

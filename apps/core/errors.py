@@ -21,6 +21,7 @@ ERRORS: dict[str, ErrorCode] = {
     "method_not_allowed": ErrorCode(405, "Method not allowed."),
     "document_not_found": ErrorCode(404, "Document not found."),
     "run_not_found": ErrorCode(404, "Run not found."),
+    "project_not_found": ErrorCode(404, "Project not found."),
     "file_not_found": ErrorCode(404, "File not found."),
     "extraction_not_found": ErrorCode(404, "This file has no extraction yet."),
     "record_not_found": ErrorCode(404, "Record not found."),
@@ -49,6 +50,9 @@ ERRORS: dict[str, ErrorCode] = {
     ),
     "assistant_busy": ErrorCode(409, "The assistant is still answering."),
     "empty_message": ErrorCode(422, "Write a message first."),
+    "run_belongs_to_project": ErrorCode(
+        409, "This run belongs to a project. Delete the project instead."
+    ),
     "execution_in_progress": ErrorCode(409, "This stage is already running."),
     "unknown_file": ErrorCode(422, "One of the files is not part of this run."),
     "conflict": ErrorCode(409, "The request conflicts with the current state."),

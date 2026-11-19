@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db test check app
+.PHONY: install lint format typecheck run migrate db worker test check app
 
 install:
 	uv sync
@@ -23,6 +23,10 @@ migrate:
 
 db:
 	docker compose up -d --wait db
+
+# The background job worker (docs/jobs.md). Stop it with Ctrl+C.
+worker:
+	uv run python manage.py db_worker
 
 test:
 	uv run pytest

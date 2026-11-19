@@ -39,3 +39,7 @@ The image defaults to `config.settings.production`. Migrations are not run by th
 | `AUTH_MODE` | production | Must be `entra` in production |
 | `DJANGO_SECURE_SSL_REDIRECT` | no | Default on; turn off when no TLS proxy is in front |
 | `CORS_ALLOWED_ORIGINS`, `ENTRA_*`, `LOG_*`, `API_DOCS_ENABLED` | no | See `.env.example` |
+
+## Worker
+
+`worker` runs `python manage.py db_worker` from the same image (see [jobs.md](jobs.md)). It starts after `api` is healthy and stops on SIGTERM once its current job is done.

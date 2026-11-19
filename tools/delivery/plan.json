@@ -35,7 +35,13 @@
     {"index": 18, "name": "studio-8-fixes", "description": "PBI-256: the test run must not read a local .env", "whenToUse": "After studio-7-stack.", "items": [256]},
     {"index": 31, "name": "assistant-1-structure", "description": "PBI-263 → 264 → 265: the agent as a package, the workspace it looks through, a budget and telemetry for tool calls", "whenToUse": "First of the assistant epic.", "items": [263, 264, 265]},
     {"index": 32, "name": "assistant-2-tools", "description": "(PBI-266 → 267) ∥ 268 ∥ 269 ∥ 270: outline, survey, find, preview and record summary tools", "whenToUse": "After assistant-1-structure.", "items": [266, 267, 268, 269, 270]},
-    {"index": 33, "name": "assistant-3-guidance", "description": "PBI-271: guidance for helping a subject-matter expert, and tools by hand", "whenToUse": "After assistant-2-tools.", "items": [271]}
+    {"index": 33, "name": "assistant-3-guidance", "description": "PBI-271: guidance for helping a subject-matter expert, and tools by hand", "whenToUse": "After assistant-2-tools.", "items": [271]},
+    {"index": 41, "name": "projects-1-api", "description": "(PBI-322 → 323) ∥ 324 ∥ 325: changeable run documents, then projects; configuration versions; clearing the conversation", "whenToUse": "First of the projects epic.", "items": [322, 323, 324, 325]},
+    {"index": 42, "name": "projects-2-api-flow", "description": "PBI-326: the flow test and the guide go through a project", "whenToUse": "After projects-1-api.", "items": [326]},
+    {"index": 51, "kind": "ui", "name": "projects-ui-1-services", "description": "UI-052: services for projects, run documents, configuration versions and clearing the conversation", "whenToUse": "After projects-2-api-flow, with the backend stack rebuilt and running.", "items": [52]},
+    {"index": 52, "kind": "ui", "name": "projects-ui-2-routes", "description": "UI-053: Studio opens a project by its address", "whenToUse": "After projects-ui-1-services.", "items": [53]},
+    {"index": 53, "kind": "ui", "name": "projects-ui-3-screens", "description": "UI-054 ∥ 055 ∥ 056 ∥ 057: project list, documents in a project, configuration versions and Save configuration, clearing the conversation", "whenToUse": "After projects-ui-2-routes.", "items": [54, 55, 56, 57]},
+    {"index": 54, "kind": "ui", "name": "projects-ui-4-walk", "description": "UI-058: walk through projects in a real browser", "whenToUse": "After projects-ui-3-screens.", "items": [58]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -95,6 +101,18 @@
     {"n": 268, "slug": "tool-find-in-documents", "title": "Assistant tool: find a phrase in the documents", "tier": "simple", "deps": [265]},
     {"n": 269, "slug": "tool-preview-extraction", "title": "Assistant tool: preview what a definition would extract", "tier": "normal", "deps": [265]},
     {"n": 270, "slug": "tool-summarize-records", "title": "Assistant tool: summary of the extracted records", "tier": "normal", "deps": [265]},
-    {"n": 271, "slug": "sme-guidance", "title": "Assistant: guidance for helping a subject-matter expert, and tools by hand", "tier": "normal", "deps": [265, 267, 268, 269, 270]}
+    {"n": 271, "slug": "sme-guidance", "title": "Assistant: guidance for helping a subject-matter expert, and tools by hand", "tier": "normal", "deps": [265, 267, 268, 269, 270]},
+    {"n": 322, "slug": "run-documents", "title": "Runs: an empty run, and changing its documents", "tier": "normal", "deps": []},
+    {"n": 323, "slug": "projects-app", "title": "Projects: a named, lasting home for a run", "tier": "normal", "deps": [322]},
+    {"n": 324, "slug": "configuration-versions", "title": "Extraction configuration: read the versions, add a note, restore one", "tier": "normal", "deps": []},
+    {"n": 325, "slug": "clear-conversation", "title": "Assistant: clear the conversation", "tier": "simple", "deps": []},
+    {"n": 326, "slug": "project-flow-test", "title": "The flow test and the guide go through a project", "tier": "normal", "deps": [323, 324, 325]},
+    {"kind": "ui", "n": 52, "slug": "project-services", "title": "Services for projects, documents of a run, configuration versions and clearing the conversation", "tier": "normal", "deps": []},
+    {"kind": "ui", "n": 53, "slug": "project-routes", "title": "Studio opens a project: routes and store by project id", "tier": "hard", "deps": [52]},
+    {"kind": "ui", "n": 54, "slug": "project-list", "title": "The project list", "tier": "normal", "deps": [53]},
+    {"kind": "ui", "n": 55, "slug": "project-documents", "title": "Documents inside a project", "tier": "normal", "deps": [53]},
+    {"kind": "ui", "n": 56, "slug": "configuration-versions-ui", "title": "Extraction configuration: the word, its versions, and Save configuration", "tier": "normal", "deps": [53]},
+    {"kind": "ui", "n": 57, "slug": "clear-conversation-ui", "title": "Assistant: keep the conversation with the project, and clear it", "tier": "simple", "deps": [53]},
+    {"kind": "ui", "n": 58, "slug": "projects-browser-walk", "title": "Walk through projects in a real browser against the backend", "tier": "hard", "deps": [54, 55, 56, 57]}
   ]
 }

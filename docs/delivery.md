@@ -53,6 +53,19 @@ Sonnet tests and validates, and merges. Haiku does the preparation step.
 
 Workflows on the same line of "start it after" can run at the same time: 1 with ui-1, 2 with 3, 5 with 6. A workflow refuses to start while a PBI it depends on is still open.
 
+## The projects epic
+
+Tracked in #327. Named projects, documents that can change, visible configuration versions.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `projects-1-api` | (#322 → #323) ∥ #324 ∥ #325 | nothing |
+| `projects-2-api-flow` | #326 | 1 |
+| `projects-ui-1-services` | UI #52 | 2, with the stack rebuilt and running |
+| `projects-ui-2-routes` | UI #53 | ui-1 |
+| `projects-ui-3-screens` | UI #54 ∥ #55 ∥ #56 ∥ #57 | ui-2 |
+| `projects-ui-4-walk` | UI #58 | ui-3 |
+
 ## The assistant epic
 
 Tracked in #272. The assistant's LLM agent becomes a package with tools that help a subject-matter expert see what can be extracted.

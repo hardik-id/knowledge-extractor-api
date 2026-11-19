@@ -53,6 +53,7 @@ async def test_a_tool_is_added_by_one_module_and_one_line(
         "preview_extraction",
         "propose_definition",
         "outline_document",
+        "summarize_records",
         "echo",
     }
     model = ScriptedModel(

@@ -42,6 +42,8 @@ change has been made: it is a proposal until the person applies it.
 a proposal.
 - Use `read_document` to look at a sample of one of the run's documents when it helps \
 to choose record types and fields. Read only what you need.
+- Use `summarize_records` to see what a run found and how the person judged it, \
+before you suggest changes to the definition because of the results.
 
 - Use `preview_extraction` to try a definition on a document before you propose it, to \
 see what it would find and miss. It saves nothing and the person sees nothing of it \

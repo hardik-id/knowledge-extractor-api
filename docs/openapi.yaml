@@ -175,6 +175,228 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /projects:
+    get:
+      operationId: projects_list
+      description: The person's projects, last activity first (GET), or start one
+        (POST).
+      tags:
+      - projects
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    post:
+      operationId: projects_create
+      description: The person's projects, last activity first (GET), or start one
+        (POST).
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /projects/{project_id}:
+    get:
+      operationId: projects_retrieve
+      description: One project (GET), rename or describe it (PATCH), or delete it
+        with its run (DELETE).
+      parameters:
+      - in: path
+        name: project_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - projects
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    patch:
+      operationId: projects_partial_update
+      description: One project (GET), rename or describe it (PATCH), or delete it
+        with its run (DELETE).
+      parameters:
+      - in: path
+        name: project_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateProjectRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    delete:
+      operationId: projects_destroy
+      description: One project (GET), rename or describe it (PATCH), or delete it
+        with its run (DELETE).
+      parameters:
+      - in: path
+        name: project_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - projects
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /ready:
     get:
       operationId: ready_retrieve
@@ -1262,6 +1484,17 @@ components:
       - record_type_id
       - revision
       - span
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+      required:
+      - name
     CreateRunRequest:
       type: object
       properties:
@@ -1665,6 +1898,15 @@ components:
           minimum: 0
         review:
           $ref: '#/components/schemas/ReviewEnum'
+    PatchedUpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
     PatchedUpdateRecordRequest:
       type: object
       description: 'The body of ``PATCH .../records/{record_id}``: only the keys sent
@@ -1681,6 +1923,60 @@ components:
           nullable: true
         use_as_example:
           type: boolean
+    Project:
+      type: object
+      description: A project on the wire. Read from the annotated queryset of the
+        selectors.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+          readOnly: true
+        document_count:
+          type: integer
+          readOnly: true
+        configuration_version:
+          type: integer
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - configuration_version
+      - created_at
+      - document_count
+      - id
+      - name
+      - run_id
+      - updated_at
+    ProjectList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
     Proposal:
       type: object
       description: A complete definition (no ``version``) and why each thing changed.

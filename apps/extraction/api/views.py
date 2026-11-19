@@ -1,6 +1,6 @@
 from typing import cast
 
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -8,9 +8,12 @@ from rest_framework.response import Response
 from apps.core.errors import ApiError
 from apps.extraction import selectors, services
 from apps.extraction.api.serializers import (
+    AddRecordSerializer,
     DefinitionSerializer,
     ExtractionSerializer,
+    RevisionQuerySerializer,
     SaveDefinitionSerializer,
+    UpdateRecordSerializer,
     serialize_extraction,
 )
 from apps.identity.models import User
@@ -44,3 +47,44 @@ def extraction(request: Request, run_id: str, file_id: str) -> Response:
     return Response(
         serialize_extraction(selectors.get_extraction(user, run_id, file_id))
     )
+
+
+@extend_schema(request=AddRecordSerializer, responses={200: ExtractionSerializer})
+@api_view(["POST"])
+def records(request: Request, run_id: str, file_id: str) -> Response:
+    """Add a record a person marked. Revision 0 on a fresh file makes the extraction."""
+    user = cast(User, request.user)
+    body = AddRecordSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    extraction = services.add_record(user, run_id, file_id, **body.validated_data)
+    return Response(serialize_extraction(extraction))
+
+
+@extend_schema(
+    methods=["PATCH"],
+    request=UpdateRecordSerializer,
+    responses={200: ExtractionSerializer},
+)
+@extend_schema(
+    methods=["DELETE"],
+    parameters=[OpenApiParameter("revision", int, required=True)],
+    responses={200: ExtractionSerializer},
+)
+@api_view(["PATCH", "DELETE"])
+def record(request: Request, run_id: str, file_id: str, record_id: str) -> Response:
+    """Change a record (PATCH), or remove one a person added (DELETE)."""
+    user = cast(User, request.user)
+    if request.method == "DELETE":
+        query = RevisionQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        extraction = services.delete_record(
+            user, run_id, file_id, record_id, revision=query.validated_data["revision"]
+        )
+    else:
+        body = UpdateRecordSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = dict(body.validated_data)
+        extraction = services.update_record(
+            user, run_id, file_id, record_id, revision=data.pop("revision"), patch=data
+        )
+    return Response(serialize_extraction(extraction))

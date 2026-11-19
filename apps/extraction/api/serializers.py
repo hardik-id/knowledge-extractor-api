@@ -56,6 +56,50 @@ class RecordSerializer(serializers.Serializer):  # type: ignore[type-arg]
     fields = FieldValueSerializer(many=True)  # type: ignore[assignment]
 
 
+class SpanInputSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """A span a person sends: the quote is kept as sent, so it can equal the text."""
+
+    start = serializers.IntegerField()
+    end = serializers.IntegerField()
+    quote = serializers.CharField(trim_whitespace=False, allow_blank=True)
+
+
+class ValueInputSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    value = serializers.CharField(
+        allow_null=True, allow_blank=True, trim_whitespace=False
+    )
+    spans = SpanInputSerializer(many=True)
+
+
+class FieldInputSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    field_id = serializers.CharField()
+    values = ValueInputSerializer(many=True)
+
+
+class AddRecordSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The body of ``POST .../records``."""
+
+    revision = serializers.IntegerField(min_value=0)
+    record_type_id = serializers.CharField()
+    span = SpanInputSerializer(allow_null=True)
+    fields = FieldInputSerializer(many=True, required=False, default=list)  # type: ignore[assignment]
+
+
+class UpdateRecordSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The body of ``PATCH .../records/{record_id}``: only the keys sent change."""
+
+    revision = serializers.IntegerField(min_value=0)
+    review = serializers.ChoiceField(Review.choices, required=False)
+    span = SpanInputSerializer(allow_null=True, required=False)
+    use_as_example = serializers.BooleanField(required=False)
+
+
+class RevisionQuerySerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The query of ``DELETE .../records/{record_id}``."""
+
+    revision = serializers.IntegerField(min_value=0)
+
+
 class ExtractionSerializer(serializers.Serializer):  # type: ignore[type-arg]
     """The whole extraction of a file: what the read answers and every write will."""
 

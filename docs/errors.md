@@ -23,7 +23,13 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `run_not_found` | 404 | Run not found. |
 | `file_not_found` | 404 | File not found. |
 | `extraction_not_found` | 404 | This file has no extraction yet. |
+| `record_not_found` | 404 | Record not found. |
+| `revision_conflict` | 409 | The records changed since they were loaded. |
+| `unknown_field` | 422 | This record type or field is not in the extraction definition. |
 | `invalid_span` | 422 | The span does not match the text. |
+| `not_deletable` | 422 | A suggestion cannot be deleted. Reject it instead. |
+| `too_many_values` | 422 | This field takes a single value. |
+| `upstream_not_ready` | 422 | The file has no text to extract from yet. |
 | `no_files` | 422 | A run needs at least one file. |
 | `mixed_sources` | 422 | A run cannot mix storage documents with files from other sources. |
 | `unsupported_source` | 422 | This source is not supported yet. |

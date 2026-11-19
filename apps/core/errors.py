@@ -23,7 +23,17 @@ ERRORS: dict[str, ErrorCode] = {
     "run_not_found": ErrorCode(404, "Run not found."),
     "file_not_found": ErrorCode(404, "File not found."),
     "extraction_not_found": ErrorCode(404, "This file has no extraction yet."),
+    "record_not_found": ErrorCode(404, "Record not found."),
+    "revision_conflict": ErrorCode(409, "The records changed since they were loaded."),
+    "unknown_field": ErrorCode(
+        422, "This record type or field is not in the extraction definition."
+    ),
     "invalid_span": ErrorCode(422, "The span does not match the text."),
+    "not_deletable": ErrorCode(
+        422, "A suggestion cannot be deleted. Reject it instead."
+    ),
+    "too_many_values": ErrorCode(422, "This field takes a single value."),
+    "upstream_not_ready": ErrorCode(422, "The file has no text to extract from yet."),
     "no_files": ErrorCode(422, "A run needs at least one file."),
     "mixed_sources": ErrorCode(
         422, "A run cannot mix storage documents with files from other sources."

@@ -37,3 +37,11 @@ The port was checked against the TypeScript: both give the same records for the 
 - orders by span start, records without a span last, otherwise in the order given.
 
 It works on stored `ExtractionRecord`s (with their values prefetched) as well as on `StoredRecord`s.
+
+## Corrections
+
+`services.change_extraction`, the one function every record write goes through (`POST .../records`, `PATCH` and `DELETE .../records/{record_id}` under a file's `extraction`). In this order: the file is in the run; the extraction exists (404 `extraction_not_found`; only the first add makes it); the `revision` the client sent is the current one (409 `revision_conflict`, `details: { revision }`); the change applies; the revision goes up by one. All or nothing: any error leaves the records as they were. The extraction row is locked while it changes, so of two writes with the same revision one succeeds and the other is a 409. Every write answers the whole extraction, as the read does, and announces `extraction.changed` on the run socket once the change is committed, never for a refused one.
+
+A first add (`revision: 0`, no extraction yet) makes the extraction from the document's text and ETag: revision 1, 422 `upstream_not_ready` when the document has no text. What a person writes is `origin: human`, `review: accepted`, `anchored: true`. A field left out of an add stores nothing (the read shows it empty); a field sent with no values stores one `null` value.
+
+`PATCH` changes only the keys sent; `span: null` clears the span. Accepting a record accepts its values that are still `suggested`. `DELETE` is for records a person added; a model's suggestion answers 422 `not_deletable`, and is rejected instead so it is not suggested again. A record or field outside the extraction's definition version is 422 `unknown_field`, more than one value for a field with `multiple: false` is 422 `too_many_values`.

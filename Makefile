@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db worker test check app
+.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env
 
 install:
 	uv sync
@@ -30,6 +30,25 @@ worker:
 
 test:
 	uv run pytest
+
+# The whole stack in Docker (docs/manual-testing.md): db, redis, otel-collector, api and worker.
+up:
+	docker compose up -d --build --wait
+
+logs:
+	docker compose logs -f --tail=100 api worker otel-collector
+
+# A dev token from the running api, valid for eight hours.
+token:
+	@docker compose exec -T api python manage.py mint_dev_token --ttl 28800
+
+# The .env.local for the UI, with a fresh token. Usage: make ui-env > ../knowledge-extractor/.env.local
+ui-env:
+	@echo NEXT_PUBLIC_BACKEND_MODE=http
+	@echo NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+	@echo NEXT_PUBLIC_WS_BASE_URL=ws://localhost:8000
+	@echo NEXT_PUBLIC_APPS=studio
+	@echo NEXT_PUBLIC_DEV_ACCESS_TOKEN=$$($(MAKE) -s token)
 
 # Fixed settings, so the file never depends on this machine's .env.
 SCHEMA_ENV = DJANGO_SETTINGS_MODULE=config.settings.test API_DOCS_ENABLED=true

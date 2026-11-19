@@ -8,6 +8,16 @@ The project is built from its backlog, one PBI per pull request.
 - **How it gets built:** [docs/delivery.md](docs/delivery.md).
 - **What the UI expects from this API:** [sign-in](https://github.com/hardik-id/knowledge-extractor/blob/main/docs/auth-api.md), [Knowledge Studio](https://github.com/hardik-id/knowledge-extractor/blob/main/docs/studio-api.md) and [extraction](https://github.com/hardik-id/knowledge-extractor/blob/main/docs/extraction-api.md), in the UI repository.
 
+## Run it
+
+```sh
+cp .env.example .env
+make up                  # db, redis, otel-collector, api and worker, healthy
+make ui-env              # the .env.local for the UI, with a fresh dev token
+```
+
+[docs/manual-testing.md](docs/manual-testing.md) shows how to try each part by hand: the UI, every Studio call with curl, the live socket, telemetry and switching the assistant to a model.
+
 ## Getting started
 
 Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.14 as pinned in `.python-version`.

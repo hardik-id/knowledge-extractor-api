@@ -59,12 +59,23 @@ services:
       start_period: 5s
       retries: 3
 
+  # api and worker share the image and the environment: sign-in mode dev, the
+  # scripted agent and extractor, telemetry to the collector.
   api:
     build: .
+    image: knowledge-extractor-api
     env_file: .env
-    environment:
-      # Inside the compose network the database is reached as "db".
+    environment: &app-environment
+      # The image defaults to production settings, which refuse AUTH_MODE=dev.
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      AUTH_MODE: dev
+      # The image user cannot write to /app; the key lives as long as the container.
+      DEV_AUTH_KEY_PATH: /tmp/dev-keys/issuer.pem
+      ASSISTANT_AGENT: ${ASSISTANT_AGENT:-scripted}
+      EXTRACTOR: ${EXTRACTOR:-scripted}
+      # Inside the compose network the services are reached by their names.
       DATABASE_URL: postgres://ke:ke@db:5432/ke
+      REDIS_URL: redis://redis:6379/0
       OTEL_SDK_DISABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_LOGS_EXPORTER: otlp
@@ -72,6 +83,8 @@ services:
       - "${API_PORT:-8000}:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       otel-collector:
         condition: service_healthy
@@ -89,22 +102,28 @@ services:
 
   # Background jobs (docs/jobs.md): the same image as api, running the worker.
   worker:
-    build: .
+    image: knowledge-extractor-api
     env_file: .env
     environment:
-      DATABASE_URL: postgres://ke:ke@db:5432/ke
-      OTEL_SDK_DISABLED: "false"
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_LOGS_EXPORTER: otlp
+      <<: *app-environment
       OTEL_SERVICE_NAME: knowledge-extractor-worker
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       api:
         # api applies the migrations, including the queue's tables.
         condition: service_healthy
     command: ["python", "manage.py", "db_worker", "--no-reload"]
     stop_signal: SIGTERM
+    # No port to probe: healthy while the worker is process 1.
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q db_worker /proc/1/cmdline"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   db-data:

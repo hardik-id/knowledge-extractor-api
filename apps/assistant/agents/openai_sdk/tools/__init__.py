@@ -14,6 +14,14 @@ it to ``TOOLS``. Nothing else changes.
 
 from agents import Tool
 
-from apps.assistant.agents.openai_sdk.tools import propose_definition, read_document
+from apps.assistant.agents.openai_sdk.tools import (
+    find_in_documents,
+    propose_definition,
+    read_document,
+)
 
-TOOLS: list[Tool] = [read_document.TOOL, propose_definition.TOOL]
+TOOLS: list[Tool] = [
+    read_document.TOOL,
+    find_in_documents.TOOL,
+    propose_definition.TOOL,
+]

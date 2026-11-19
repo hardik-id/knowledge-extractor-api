@@ -15,7 +15,11 @@ def test_the_agent_has_the_instructions_both_tools_and_the_model() -> None:
     built = build_agent(model)
     assert built.model is model
     assert built.instructions == INSTRUCTIONS
-    assert {t.name for t in built.tools} == {"propose_definition", "read_document"}
+    assert {t.name for t in built.tools} == {
+        "propose_definition",
+        "read_document",
+        "find_in_documents",
+    }
     assert built.model_settings.store is False
 
 

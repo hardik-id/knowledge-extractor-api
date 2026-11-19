@@ -49,6 +49,7 @@ async def test_a_tool_is_added_by_one_module_and_one_line(
     monkeypatch.setattr(agent_module, "TOOLS", [*TOOLS, THROWAWAY])
     assert {t.name for t in build_agent(ScriptedModel([])).tools} == {
         "read_document",
+        "find_in_documents",
         "propose_definition",
         "echo",
     }

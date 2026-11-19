@@ -7,6 +7,7 @@ production) import this module and override only what must differ.
 Sections are labelled so that later changes touch one section each.
 """
 
+import os
 from pathlib import Path
 
 import environ
@@ -19,9 +20,14 @@ from apps.core.logging import build_logging_config, configure_structlog
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 env = environ.Env()
-# .env is for local use only and is ignored by git; a missing file is fine.
-if (BASE_DIR / ".env").is_file():
-    environ.Env.read_env(BASE_DIR / ".env")
+# .env is read by local runs only, that is when the settings module is
+# config.settings.local. The test and production settings never read it. The file
+# is ignored by git; a missing file is fine. ENV_FILE names another file, or an
+# empty value for none (a test that starts a process uses this).
+if os.environ.get("DJANGO_SETTINGS_MODULE") == "config.settings.local":
+    _env_file = os.environ.get("ENV_FILE", str(BASE_DIR / ".env"))
+    if _env_file and Path(_env_file).is_file():
+        environ.Env.read_env(_env_file)
 
 # ---------------------------------------------------------------------------
 # Core

@@ -1,4 +1,4 @@
-"""Settings for the test run: deterministic and fast, nothing read from .env."""
+"""Settings for the test run: deterministic and fast, never reads .env (only config.settings.local does)."""
 
 import hashlib
 

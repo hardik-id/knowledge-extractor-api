@@ -5,7 +5,6 @@ import io
 import json
 import logging
 import logging.config
-import os
 import subprocess
 import sys
 import threading
@@ -36,6 +35,7 @@ from rest_framework.test import APIClient
 
 from apps.core import telemetry
 from apps.core.logging import make_formatter
+from apps.core.tests.process import process_env
 
 URLS = override_settings(ROOT_URLCONF="apps.core.tests.urls")
 TRACE_ID = "0af7651916cd43dd8448eb211c80319c"
@@ -384,11 +384,7 @@ def _manage(*args: str, **env: str) -> subprocess.CompletedProcess[str]:
         text=True,
         timeout=60,
         cwd=settings.BASE_DIR,
-        env={
-            **os.environ,
-            "DJANGO_SETTINGS_MODULE": "config.settings.local",
-            **env,
-        },
+        env=process_env(DJANGO_SETTINGS_MODULE="config.settings.local", **env),
     )
 
 

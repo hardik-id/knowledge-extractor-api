@@ -344,6 +344,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /ws-ticket:
+    post:
+      operationId: ws_ticket_create
+      description: A ticket to open a WebSocket as the signed-in person. Single use,
+        short-lived.
+      tags:
+      - ws-ticket
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WsTicket'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
 components:
   schemas:
     CreateRunRequest:
@@ -481,6 +521,16 @@ components:
           type: string
       required:
       - status
+    WsTicket:
+      type: object
+      properties:
+        ticket:
+          type: string
+          readOnly: true
+          description: Single use. Valid for WS_TICKET_TTL_SECONDS. Goes in the socket
+            URL as ?ticket=.
+      required:
+      - ticket
   securitySchemes:
     bearerAuth:
       type: http

@@ -31,7 +31,8 @@
     {"index": 16, "name": "studio-6-extraction", "description": "PBI-149 → 150 → 152: corrections, then running the extract stage", "whenToUse": "After studio-4-live. Can run beside studio-5-assistant.", "items": [149, 150, 152]},
     {"index": 17, "name": "studio-7-stack", "description": "PBI-154 ∥ 155 ∥ 156: telemetry for jobs and agents, the whole stack in compose with a guide, the Studio flow test", "whenToUse": "After studio-5-assistant and studio-6-extraction.", "items": [154, 155, 156]},
     {"index": 21, "kind": "ui", "needsApi": false, "name": "studio-ui-1-apps", "description": "UI-038: choose which apps the shell offers", "whenToUse": "Any time. Needs no backend.", "items": [38]},
-    {"index": 22, "kind": "ui", "name": "studio-ui-2-backend", "description": "UI-039 → 040: Studio over HTTP against the Django API, then a walk-through in a browser", "whenToUse": "After studio-7-stack, with the backend stack running (make up).", "items": [39, 40]}
+    {"index": 22, "kind": "ui", "name": "studio-ui-2-backend", "description": "UI-039 → 040: Studio over HTTP against the Django API, then a walk-through in a browser", "whenToUse": "After studio-7-stack, with the backend stack running (make up).", "items": [39, 40]},
+    {"index": 18, "name": "studio-8-fixes", "description": "PBI-256: the test run must not read a local .env", "whenToUse": "After studio-7-stack.", "items": [256]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -81,6 +82,7 @@
     {"n": 156, "slug": "studio-flow-test", "title": "One test that walks the whole Studio flow", "tier": "normal", "deps": [146, 152]},
     {"kind": "ui", "n": 38, "slug": "offered-apps", "title": "Choose which apps the shell offers", "tier": "normal", "deps": []},
     {"kind": "ui", "n": 39, "slug": "studio-http", "title": "Studio over HTTP against the Django API", "tier": "hard", "deps": [38]},
-    {"kind": "ui", "n": 40, "slug": "studio-browser-walk", "title": "Walk through Studio in a real browser against the backend", "tier": "hard", "deps": [39]}
+    {"kind": "ui", "n": 40, "slug": "studio-browser-walk", "title": "Walk through Studio in a real browser against the backend", "tier": "hard", "deps": [39]},
+    {"n": 256, "slug": "tests-ignore-dotenv", "title": "The test run must not read a local .env", "tier": "normal", "deps": []}
   ]
 }

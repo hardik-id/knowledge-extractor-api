@@ -13,7 +13,7 @@ from django.core.checks import CheckMessage, Warning
 def check_llm_settings(app_configs: Any = None, **kwargs: Any) -> list[CheckMessage]:
     if settings.ASSISTANT_AGENT != "openai":
         return []
-    from apps.assistant.agents.openai_agent import missing_settings
+    from apps.assistant.agents.openai_sdk.models import missing_settings
 
     missing = missing_settings()
     if not missing:

@@ -101,12 +101,39 @@ Its reply text is cut into deltas of three words each.
 
 ## The LLM agent
 
-`ASSISTANT_AGENT=openai` chooses `apps/assistant/agents/openai_agent.py`, an agent built with the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) (`openai-agents`). It reads the request, the definition on the person's screen, the conversation and, when it wants to, samples of the run's documents, explains itself and proposes a definition.
+`ASSISTANT_AGENT=openai` chooses the package `apps/assistant/agents/openai_sdk/`, an agent built with the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) (`openai-agents`). It reads the request, the definition on the person's screen, the conversation and, when it wants to, samples of the run's documents, explains itself and proposes a definition.
 
 - **Text.** The model's streamed text becomes `TextDelta`s as it arrives. When the model speaks again after a tool call, the new text starts after a blank line.
 - **The proposal** is a call of the tool `propose_definition(definition, reasons)`. Its arguments are checked against a strict JSON schema (the shape of `validate_draft`: modes, value types and formats as enums) and then by `validate_draft`. An invalid proposal goes back to the model as the tool's answer, starting `Error:` and saying what is wrong (where it does not fit the schema, without echoing the values), so it can correct it in the next turn. The first valid proposal is kept and later calls are refused, so at most one reaches the person, after all the text. A record type or field with an empty `id` gets one from `validate_draft`; the instructions tell the model to keep the ids of what stays.
 - **`read_document(document_id)`** reads a sample of one of the run's documents, through `RunDocuments` (as the run's owner, only the run's own files).
 - **Propose, never apply.** The instructions explain the definition model (record types, fields, `quote` against `inferred`, value types, `multiple`, the output template) and the rule that the assistant proposes and the person applies. No tool saves anything.
+
+### The package
+
+```
+apps/assistant/agents/openai_sdk/
+  __init__.py        exports OpenAIAgent
+  agent.py           build_agent(model): instructions + tools + model. Nothing else
+  instructions.py    the instructions text
+  inputs.py          the conversation as the model gets it (build_input)
+  models.py          model access: missing_settings(), connect(), the Azure sign-in
+  runner.py          OpenAIAgent: runs one reply, turns SDK events into TextDelta and Proposal, limits, endings
+  context.py         ReplyContext: what the tools of one reply share
+  tools/
+    __init__.py            TOOLS, and the rules of a tool
+    _shared.py             what every tool uses (as_data, clip, error)
+    _definition_schema.py  the schema of a definition
+    propose_definition.py
+    read_document.py
+```
+
+### Adding a tool
+
+1. Write `tools/<name>.py` that exports `TOOL` (a `function_tool` or a `FunctionTool`). Read the rules in the docstring of `tools/__init__.py` first: a tool reads through the `ReplyContext`, returns bounded text, reports a failure as text starting `Error:`, and wraps document text as untrusted data.
+2. Import it in `tools/__init__.py` and add `<name>.TOOL` to `TOOLS`.
+3. Say in `instructions.py` when to use it, and add a test module under `apps/assistant/tests/openai_sdk/`.
+
+Nothing else changes: `build_agent` takes whatever `TOOLS` holds.
 
 ### Configuration
 
@@ -161,7 +188,7 @@ It prints the deltas as they stream, then the proposal as JSON (`validate_draft`
 
 ### Tests
 
-`apps/assistant/tests/test_openai_agent.py` drives the agent with the SDK's test double `agents.testing.ScriptedModel`, which implements the SDK's `Model` interface: each step is one model call that streams text and calls tools. No network.
+`apps/assistant/tests/openai_sdk/` has one test module per module of the package. They drive the agent with the SDK's test double `agents.testing.ScriptedModel`, which implements the SDK's `Model` interface: each step is one model call that streams text and calls tools. No network.
 
 ### Another framework
 

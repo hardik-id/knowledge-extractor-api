@@ -12,7 +12,7 @@ from apps.assistant.agents.base import Agent
 
 _BUILT_IN = {
     "scripted": "apps.assistant.agents.scripted.ScriptedAgent",
-    "openai": "apps.assistant.agents.openai_agent.OpenAIAgent",
+    "openai": "apps.assistant.agents.openai_sdk.OpenAIAgent",
 }
 
 

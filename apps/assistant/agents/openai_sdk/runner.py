@@ -27,8 +27,8 @@ from apps.assistant.agents.base import (
     AgentEvent,
     Definition,
     Message,
-    RunDocuments,
     TextDelta,
+    Workspace,
 )
 from apps.assistant.agents.openai_sdk.agent import build_agent
 from apps.assistant.agents.openai_sdk.context import ReplyContext
@@ -78,7 +78,7 @@ class OpenAIAgent:
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         client: AsyncOpenAI | None = None
         model = self._model
@@ -90,8 +90,8 @@ class OpenAIAgent:
                 return
             model, client = connect()
         try:
-            refs = await documents.list()
-            state = ReplyContext(documents=documents, refs=refs)
+            refs = await workspace.documents()
+            state = ReplyContext(workspace=workspace, refs=refs)
             async for event in self._run(model, state, text, definition, history):
                 yield event
         finally:

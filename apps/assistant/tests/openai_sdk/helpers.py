@@ -10,7 +10,7 @@ from agents.testing import ModelCall, ScriptedModel, function_call
 
 from apps.assistant.agents.base import AgentEvent, Message, Proposal, TextDelta
 from apps.assistant.agents.openai_sdk import OpenAIAgent
-from apps.assistant.tests.fakes import FakeDocuments
+from apps.assistant.tests.fakes import FakeWorkspace
 from apps.assistant.tests.test_scripted import adr, bare
 from apps.extraction.validation import validate_draft
 from apps.realtime import services as realtime
@@ -57,13 +57,13 @@ async def collect(
     text: str = REQUEST,
     definition: Definition | None = None,
     history: list[Message] | None = None,
-    docs: FakeDocuments | None = None,
+    docs: FakeWorkspace | None = None,
 ) -> list[AgentEvent]:
     stream = agent.reply(
         text,
         validate_draft(bare() if definition is None else definition),
         history or [],
-        docs or FakeDocuments(),
+        docs or FakeWorkspace(),
     )
     return [event async for event in stream]
 

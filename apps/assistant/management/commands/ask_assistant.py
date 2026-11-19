@@ -3,26 +3,28 @@
     uv run python manage.py ask_assistant "<text>" [--run <id>]
 
 The reply's text is printed as it streams, then the proposal (if any) as JSON.
-Without ``--run`` the agent starts from a bare definition and has no documents;
-with it, from the run's latest saved definition and with the run's documents.
+Without ``--run`` the agent starts from a bare definition and has no workspace;
+with it, from the run's latest saved definition and with the run's workspace.
 Nothing is stored. ``ASSISTANT_AGENT`` chooses the agent (docs/assistant.md).
 """
 
-import asyncio
 import json
 from typing import Any
 
+from asgiref.sync import async_to_sync
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from apps.assistant.agents.base import (
     Definition,
     DocumentRef,
+    FileRecords,
     Proposal,
-    RunDocuments,
+    RecordView,
     TextDelta,
+    Workspace,
 )
 from apps.assistant.agents.registry import get_agent
-from apps.assistant.selectors import documents_of_run
+from apps.assistant.selectors import workspace_of_run
 from apps.core.errors import ApiError
 from apps.extraction import selectors as extraction
 from apps.extraction.validation import validate_draft
@@ -35,11 +37,21 @@ BARE: Definition = {
 }
 
 
-class NoDocuments:
-    async def list(self) -> list[DocumentRef]:
+class NoWorkspace:
+    """A workspace of no run: no documents and nothing extracted."""
+
+    async def documents(self) -> list[DocumentRef]:
         return []
 
     async def read(self, document_id: str) -> str:
+        raise ApiError("document_not_found")
+
+    async def extractions(self) -> list[FileRecords]:
+        return []
+
+    async def preview(
+        self, definition: Definition, document_id: str
+    ) -> list[RecordView]:
         raise ApiError("document_not_found")
 
 
@@ -57,7 +69,7 @@ class Command(BaseCommand):
         text = options["text"].strip()
         if not text:
             raise CommandError("Say what to ask.")
-        documents: RunDocuments = NoDocuments()
+        workspace: Workspace = NoWorkspace()
         definition = validate_draft(BARE)
         if options["run"]:
             try:
@@ -72,8 +84,8 @@ class Command(BaseCommand):
                     "output": saved.output,
                 }
             )
-            documents = documents_of_run(run)
-        proposal = asyncio.run(self._ask(text, definition, documents))
+            workspace = workspace_of_run(run)
+        proposal = async_to_sync(self._ask)(text, definition, workspace)
         self.stdout.write("")
         if proposal is None:
             self.stdout.write("(no proposal)")
@@ -89,10 +101,10 @@ class Command(BaseCommand):
         )
 
     async def _ask(
-        self, text: str, definition: Definition, documents: RunDocuments
+        self, text: str, definition: Definition, workspace: Workspace
     ) -> Proposal | None:
         proposal: Proposal | None = None
-        async for event in get_agent().reply(text, definition, [], documents):
+        async for event in get_agent().reply(text, definition, [], workspace):
             if isinstance(event, TextDelta):
                 self.stdout.write(event.text, ending="")
                 self.stdout.flush()

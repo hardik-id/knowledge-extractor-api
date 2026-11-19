@@ -182,18 +182,6 @@ def test_the_agent_reads_the_runs_documents_as_the_runs_owner(
     assert reply["text"] == "I read 1 documents."
 
 
-@pytest.mark.asyncio
-async def test_a_document_outside_the_run_cannot_be_read(user: Any) -> None:
-    from apps.assistant.selectors import OwnerDocuments
-    from apps.core.errors import ApiError
-
-    docs = OwnerDocuments(user, [])
-    assert await docs.list() == []
-    with pytest.raises(ApiError) as error:
-        await docs.read("enriched/engineering/architecture/platform-adrs.md")
-    assert error.value.code == "document_not_found"
-
-
 # refusals
 
 

@@ -1,4 +1,4 @@
-"""A fake agent and fake run documents: the smallest implementations of the interfaces."""
+"""A fake agent and a fake workspace: the smallest implementations of the interfaces."""
 
 from collections.abc import AsyncIterator
 
@@ -6,11 +6,14 @@ from apps.assistant.agents.base import (
     AgentEvent,
     Definition,
     DocumentRef,
+    FileRecords,
     Message,
     Proposal,
-    RunDocuments,
+    RecordView,
     TextDelta,
+    Workspace,
 )
+from apps.core.errors import ApiError
 
 
 class FakeAgent:
@@ -21,22 +24,41 @@ class FakeAgent:
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Hello, ")
         yield TextDelta(f"you said {text}.")
         yield Proposal(definition, [{"path": "Template", "reason": "Unchanged."}])
 
 
-class FakeDocuments:
-    def __init__(self, texts: dict[str, str] | None = None) -> None:
-        self.texts = texts or {}
+class FakeWorkspace:
+    """A workspace of a few documents, with what was extracted and what a preview finds."""
 
-    async def list(self) -> list[DocumentRef]:
+    def __init__(
+        self,
+        texts: dict[str, str] | None = None,
+        extracted: list[FileRecords] | None = None,
+        previewed: list[RecordView] | None = None,
+    ) -> None:
+        self.texts = texts or {}
+        self.extracted = extracted or []
+        self.previewed = previewed or []
+
+    async def documents(self) -> list[DocumentRef]:
         return [DocumentRef(id=key, name=key) for key in self.texts]
 
     async def read(self, document_id: str) -> str:
         return self.texts[document_id]
+
+    async def extractions(self) -> list[FileRecords]:
+        return list(self.extracted)
+
+    async def preview(
+        self, definition: Definition, document_id: str
+    ) -> list[RecordView]:
+        if document_id not in self.texts:
+            raise ApiError("document_not_found")
+        return list(self.previewed)
 
 
 class FailingAgent:
@@ -47,7 +69,7 @@ class FailingAgent:
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Let me see")
         raise RuntimeError("the model is down")
@@ -61,7 +83,7 @@ class SilentFailingAgent:
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         raise RuntimeError("the model is down")
         yield TextDelta("never")  # pragma: no cover
@@ -77,10 +99,10 @@ class RecordingAgent:
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
-        refs = await documents.list()
-        texts = [await documents.read(ref.id) for ref in refs]
+        refs = await workspace.documents()
+        texts = [await workspace.read(ref.id) for ref in refs]
         RecordingAgent.calls.append(
             {"text": text, "definition": definition, "history": history, "texts": texts}
         )
@@ -95,7 +117,7 @@ class BadProposalAgent:
         text: str,
         definition: Definition,
         history: list[Message],
-        documents: RunDocuments,
+        workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Here you go.")
         yield Proposal({"prompt": "x"}, [])

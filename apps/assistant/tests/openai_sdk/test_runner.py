@@ -28,7 +28,7 @@ from apps.assistant.agents.openai_sdk.runner import (
     NOT_CONFIGURED,
 )
 from apps.assistant.agents.registry import get_agent
-from apps.assistant.tests.fakes import FakeDocuments
+from apps.assistant.tests.fakes import FakeWorkspace
 from apps.assistant.tests.openai_sdk.helpers import *  # noqa: F403
 from apps.assistant.tests.openai_sdk.helpers import (
     REQUEST,
@@ -86,7 +86,7 @@ async def test_a_reply_without_a_proposal() -> None:
 
 @pytest.mark.asyncio
 async def test_a_model_that_never_stops_is_cut_off_at_the_turn_limit() -> None:
-    docs = FakeDocuments({"a.md": "alpha"})
+    docs = FakeWorkspace({"a.md": "alpha"})
     model = ScriptedModel(
         [
             [assistant_message("Let me look."), read("missing", f"r{n}")]
@@ -148,7 +148,7 @@ async def test_the_model_gets_the_rules_the_definition_the_documents_and_the_his
     None
 ):
     model = ScriptedModel([[assistant_message("ok")]])
-    docs = FakeDocuments({"adrs/one.md": "alpha"})
+    docs = FakeWorkspace({"adrs/one.md": "alpha"})
     history = [Message("user", "earlier"), Message("assistant", "y" * 5000)]
     await collect(OpenAIAgent(model), "add owner", adr(), history, docs)
     [call] = model.calls

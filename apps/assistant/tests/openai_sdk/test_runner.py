@@ -287,7 +287,9 @@ def test_ask_assistant_prints_the_deltas_and_the_proposal(settings: Any) -> None
     out = StringIO()
     call_command("ask_assistant", REQUEST, stdout=out)
     printed = out.getvalue()
-    assert printed.startswith("Decision records it is.\n\nDone.\nProposal:\n")
+    assert printed.startswith(
+        "Decision records it is.\n[tool propose_definition: ok]\n\n\nDone.\nProposal:\n"
+    )
     shown = json.loads(printed.split("Proposal:\n", 1)[1])
     assert validate_draft(shown["definition"]) == shown["definition"]
     assert shown["reasons"][0]["path"] == "ADR"
@@ -306,7 +308,9 @@ def test_ask_assistant_with_a_run_uses_its_definition_and_documents(
     settings.ASSISTANT_AGENT = f"{ScriptedOpenAIAgent.__module__}.ScriptedOpenAIAgent"
     out = StringIO()
     call_command("ask_assistant", "look", "--run", str(run.pk), stdout=out)
-    assert out.getvalue() == "Nothing to change.\n(no proposal)\n"
+    assert out.getvalue() == (
+        "[tool read_document: ok]\nNothing to change.\n(no proposal)\n"
+    ), "the tool call is shown when it ends, before the text that follows"
     request = ScriptedOpenAIAgent.model.calls[0].input[-1]["content"]
     assert '"name": "ADR"' in request, "the run's definition"
     assert "<document>" in ScriptedOpenAIAgent.model.calls[1].input[-1]["output"]

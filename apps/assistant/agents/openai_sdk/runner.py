@@ -28,6 +28,7 @@ from apps.assistant.agents.base import (
     Definition,
     Message,
     TextDelta,
+    ToolUsed,
     Workspace,
 )
 from apps.assistant.agents.openai_sdk.agent import build_agent
@@ -57,6 +58,13 @@ def _failure(error: BaseException) -> dict[str, Any]:
         "error": type(error).__name__,
         "status_code": getattr(error, "status_code", None),
     }
+
+
+def _unannounced(state: ReplyContext) -> list[ToolUsed]:
+    """The tool calls that ended since the last look, each once."""
+    new = state.used[state.announced :]
+    state.announced = len(state.used)
+    return new
 
 
 class OpenAIAgent:
@@ -130,6 +138,8 @@ class OpenAIAgent:
                     event = await asyncio.wait_for(anext(events), remaining)
                 except StopAsyncIteration:
                     break
+                for used in _unannounced(state):
+                    yield used
                 if not isinstance(event, RawResponsesStreamEvent):
                     continue
                 if event.data.type == "response.created":
@@ -158,6 +168,8 @@ class OpenAIAgent:
         finally:
             result.cancel()
             await events.aclose()
+        for used in _unannounced(state):
+            yield used
         if state.rejected:
             log.info("assistant_proposals_rejected", count=state.rejected)
         if ending:

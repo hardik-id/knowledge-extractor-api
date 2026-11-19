@@ -2,7 +2,8 @@
 
     uv run python manage.py ask_assistant "<text>" [--run <id>]
 
-The reply's text is printed as it streams, then the proposal (if any) as JSON.
+The reply's text is printed as it streams, each tool call on a line of its own
+(``[tool survey_documents: ok]``) as it ends, then the proposal (if any) as JSON.
 Without ``--run`` the agent starts from a bare definition and has no workspace;
 with it, from the run's latest saved definition and with the run's workspace.
 Nothing is stored. ``ASSISTANT_AGENT`` chooses the agent (docs/assistant.md).
@@ -21,6 +22,7 @@ from apps.assistant.agents.base import (
     Proposal,
     RecordView,
     TextDelta,
+    ToolUsed,
     Workspace,
 )
 from apps.assistant.agents.registry import get_agent
@@ -104,10 +106,17 @@ class Command(BaseCommand):
         self, text: str, definition: Definition, workspace: Workspace
     ) -> Proposal | None:
         proposal: Proposal | None = None
+        mid_line = False  # some text is on the line and has no newline yet
         async for event in get_agent().reply(text, definition, [], workspace):
             if isinstance(event, TextDelta):
                 self.stdout.write(event.text, ending="")
                 self.stdout.flush()
+                mid_line = not event.text.endswith("\n")
+            elif isinstance(event, ToolUsed):
+                self.stdout.write(
+                    ("\n" if mid_line else "") + f"[tool {event.name}: {event.outcome}]"
+                )
+                mid_line = False
             elif isinstance(event, Proposal):
                 proposal = event
         return proposal

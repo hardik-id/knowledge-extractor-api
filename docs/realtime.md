@@ -76,6 +76,7 @@ The UI also stops on 4403 (not used by this API so far) and retries on any other
 | `assistant.delta` | `{ "type": "assistant.delta", "message_id", "text" }` | the assistant (#146) |
 | `assistant.proposal` | `{ "type": "assistant.proposal", "message_id", "proposal" }` | the assistant (#146) |
 | `assistant.done` | `{ "type": "assistant.done", "message_id" }` | the assistant (#146) |
+| `assistant.cleared` | `{ "type": "assistant.cleared" }` | the assistant, when the conversation is deleted (#325) |
 
 ## Publishing an event
 

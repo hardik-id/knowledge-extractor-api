@@ -403,3 +403,50 @@ def test_one_reply_at_a_time_is_kept_by_the_database(run: Any) -> None:
     streaming_reply(run)
     with pytest.raises(IntegrityError), transaction.atomic():
         streaming_reply(run)
+
+
+# clearing the conversation
+
+
+def test_delete_clears_the_conversation_and_the_next_post_works(
+    client: Any, run: Any, sent: list[Any], jobs: Any
+) -> None:
+    with jobs():
+        assert post(client, run).status_code == 201
+    assert Message.objects.filter(run=run).count() == 2
+    sent.clear()
+    with jobs():
+        response = client.delete(url(run))
+    assert response.status_code == 204
+    assert client.get(url(run)).json() == {"messages": []}
+    assert sent == [{"group": f"run.{run.pk}", "type": "assistant.cleared"}]
+    assert post(client, run).status_code == 201
+
+
+def test_delete_while_a_reply_streams_is_409(
+    client: Any, run: Any, sent: list[Any]
+) -> None:
+    streaming_reply(run)
+    response = client.delete(url(run))
+    assert response.status_code == 409
+    assert response.json()["code"] == "assistant_busy"
+    assert Message.objects.filter(run=run).count() == 2
+    assert sent == []
+
+
+def test_delete_after_the_timeout_of_a_dead_reply_works(
+    client: Any, run: Any, later: Any, jobs: Any
+) -> None:
+    streaming_reply(run)
+    later(61)
+    with jobs():
+        assert client.delete(url(run)).status_code == 204
+    assert Message.objects.filter(run=run).count() == 0
+
+
+def test_delete_on_someone_elses_run_is_404(client: Any) -> None:
+    other = RunFactory()
+    MessageFactory(run=other, definition=bare())
+    response = client.delete(url(other))
+    assert response.status_code == 404
+    assert Message.objects.filter(run=other).count() == 1

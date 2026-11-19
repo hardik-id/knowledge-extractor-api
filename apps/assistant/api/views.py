@@ -16,17 +16,21 @@ from apps.identity.models import User
 
 
 @extend_schema(methods=["GET"], responses=MessageListSerializer)
+@extend_schema(methods=["DELETE"], request=None, responses={204: None})
 @extend_schema(
     methods=["POST"], request=SendMessageSerializer, responses={201: MessageSerializer}
 )
-@api_view(["GET", "POST"])
+@api_view(["GET", "POST", "DELETE"])
 def messages(request: Request, run_id: str) -> Response:
-    """The conversation with the assistant (GET), or send it a message (POST).
+    """The conversation with the assistant (GET), send it a message (POST), or clear it (DELETE).
 
     The POST answers with the person's message; the reply arrives on the run's
     socket as ``assistant.delta``, ``assistant.proposal`` and ``assistant.done``.
     """
     user = cast(User, request.user)
+    if request.method == "DELETE":
+        services.clear_messages(user, run_id)
+        return Response(status=204)
     if request.method == "POST":
         body = request.data if isinstance(request.data, dict) else {}
         text = body.get("text") or ""

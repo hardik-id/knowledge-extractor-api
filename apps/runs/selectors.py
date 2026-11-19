@@ -9,7 +9,7 @@ from uuid import UUID
 from apps.core.errors import ApiError
 from apps.core.permissions import get_visible_or_404
 from apps.identity.models import User
-from apps.runs.models import Run, RunFile
+from apps.runs.models import Cell, Run, RunFile
 
 
 def get_run(user: User, run_id: Any) -> Run:
@@ -24,3 +24,17 @@ def get_run_file(user: User, run_id: Any, file_id: Any) -> RunFile:
         return run.files.get(pk=UUID(str(file_id)))
     except RunFile.DoesNotExist, ValueError:
         raise ApiError("file_not_found") from None
+
+
+def cell_for_update(file_id: Any, stage: str) -> Cell | None:
+    """The cell of a file and stage, locked until the transaction ends; for a background job.
+
+    A job acts for no signed-in person: it has only the file's id. None when the
+    file is gone (its run was deleted).
+    """
+    return (
+        Cell.objects.select_for_update(of=("self",))
+        .select_related("file__run")
+        .filter(file_id=file_id, stage=stage)
+        .first()
+    )

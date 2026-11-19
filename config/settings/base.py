@@ -269,6 +269,8 @@ ASSISTANT_REPLY_TIMEOUT_SECONDS = env.int(
     "ASSISTANT_REPLY_TIMEOUT_SECONDS", default=300
 )
 EXTRACTOR = env.str("EXTRACTOR", default="scripted")
+# A queued or running cell older than this counts as failed (a dead worker).
+EXECUTION_TIMEOUT_SECONDS = env.int("EXECUTION_TIMEOUT_SECONDS", default=600)
 LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure
 LLM_MODEL = env.str("LLM_MODEL", default="")
 OPENAI_API_KEY = env.str("OPENAI_API_KEY", default="")  # secret

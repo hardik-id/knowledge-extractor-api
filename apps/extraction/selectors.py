@@ -15,7 +15,13 @@ from apps.extraction.defaults import (
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.models import DefinitionVersion, Extraction
+from apps.extraction.extractors.base import RawRecord, RawValue
+from apps.extraction.models import (
+    DefinitionVersion,
+    Extraction,
+    ExtractionRecord,
+    Review,
+)
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
@@ -76,3 +82,31 @@ def get_extraction(user: User, run_id: Any, file_id: Any) -> Extraction:
 def input_text(run_file: RunFile) -> DocumentText:
     """The text and ETag of the document a run file points at, read as the run's owner."""
     return documents.read_document(run_file.run.owner, run_file.source_ref)
+
+
+def example_records(run_id: Any) -> list[RawRecord]:
+    """The records of the run a person accepted and marked ``use_as_example``.
+
+    As an extractor takes them: plain data, without the values a person rejected.
+    """
+    records = (
+        ExtractionRecord.objects.filter(
+            extraction__file__run_id=run_id,
+            use_as_example=True,
+            review=Review.ACCEPTED,
+        )
+        .prefetch_related("values")
+        .order_by("id")
+    )
+    return [
+        RawRecord(
+            record.record_type_id,
+            record.span,
+            [
+                RawValue(value.field_id, value.value, list(value.spans))
+                for value in record.values.all()
+                if value.review != Review.REJECTED
+            ],
+        )
+        for record in records
+    ]

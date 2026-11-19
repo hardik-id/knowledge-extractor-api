@@ -4,8 +4,10 @@ A service takes the acting user as its first argument.
 """
 
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -51,6 +53,29 @@ def create_run(user: User, items: Sequence[dict[str, Any]]) -> Run:
     return run
 
 
+ACTIVE = (CellStatus.QUEUED, CellStatus.RUNNING)
+
+
+def queue_cells(files: Sequence[RunFile], stage: str, execution_id: str) -> None:
+    """Make the cells of ``files`` ``queued`` for one execution, inside the caller's transaction.
+
+    409 ``execution_in_progress`` when one of them is already queued or running.
+    The cells are locked first, so of two requests for the same file one wins.
+    """
+    cells = (
+        Cell.objects.select_for_update()
+        .filter(file__in=files, stage=stage)
+        .order_by("pk")
+    )
+    active = next((cell for cell in cells if cell.status in ACTIVE), None)
+    if active is not None:
+        raise ApiError(
+            "execution_in_progress", details={"execution_id": active.execution_id}
+        )
+    for file in files:
+        set_cell(file, stage, status=CellStatus.QUEUED, execution_id=execution_id)
+
+
 def delete_run(run: Run) -> None:
     """Delete the run with its files and cells. Its sockets close with 4404."""
     run_id = run.pk
@@ -85,3 +110,34 @@ def set_cell(
         file.run_id, {"type": "cell", "cell": dict(CellSerializer(cell).data)}
     )
     return cell
+
+
+def release_stuck_cells(run: Run) -> None:
+    """Fail the run's cells left ``queued`` or ``running`` longer than the timeout.
+
+    A worker that died leaves its cell active; this lets the file be executed
+    again. The cell keeps its ``execution_id``, so a late job sees it is no longer
+    queued or running and does nothing.
+    """
+    deadline = timezone.now() - timedelta(seconds=settings.EXECUTION_TIMEOUT_SECONDS)
+    with transaction.atomic():
+        stuck = (
+            Cell.objects.select_for_update(of=("self",))
+            .select_related("file")
+            .filter(
+                file__run=run,
+                status__in=ACTIVE,
+                updated_at__lt=deadline,
+            )
+        )
+        for cell in stuck:
+            set_cell(
+                cell.file,
+                cell.stage,
+                status=CellStatus.FAILED,
+                execution_id=cell.execution_id,
+                error={
+                    "code": "execution_timeout",
+                    "message": "The work did not finish in time.",
+                },
+            )

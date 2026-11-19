@@ -4,6 +4,8 @@ Settings call `configure_structlog()` and name `make_formatter` in LOGGING; app
 code only does `structlog.get_logger(__name__)`. See docs/logging.md.
 """
 
+import logging
+import re
 from typing import Any
 
 import structlog
@@ -17,6 +19,24 @@ def drop_request_started(
     if event_dict.get("event") == "request_started":
         raise structlog.DropEvent
     return event_dict
+
+
+_TICKET = re.compile(r"(ticket=)[^&\s\"']*")
+
+
+class RedactTicket(logging.Filter):
+    """Blanks the value of ``ticket=``: a WebSocket ticket is a secret in a URL.
+
+    uvicorn logs the socket's path with its query string; this keeps the ticket
+    out of that line and out of any other that quotes the URL.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if "ticket=" in message:
+            record.msg = _TICKET.sub(r"\1[redacted]", message)
+            record.args = None
+        return True
 
 
 def _shared_processors() -> list[Processor]:
@@ -70,8 +90,13 @@ def build_logging_config(log_level: str, log_format: str) -> dict[str, Any]:
                 "log_format": log_format,
             },
         },
+        "filters": {"redact_ticket": {"()": "apps.core.logging.RedactTicket"}},
         "handlers": {
-            "console": {"class": "logging.StreamHandler", "formatter": "structlog"},
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "structlog",
+                "filters": ["redact_ticket"],
+            },
             "null": {"class": "logging.NullHandler"},
         },
         "root": {"handlers": ["console"], "level": log_level},
@@ -82,5 +107,9 @@ def build_logging_config(log_level: str, log_format: str) -> dict[str, Any]:
             # uvicorn's access log is `GET /path?query`; same reason. The server
             # is also started with --no-access-log; this covers other launchers.
             "uvicorn.access": {"handlers": ["null"], "propagate": False},
+            # uvicorn logs `WebSocket /path?ticket=...` here, to its own handler
+            # (the one on the parent logger), so the handler filter above does
+            # not see it: filter the logger itself.
+            "uvicorn.error": {"filters": ["redact_ticket"]},
         },
     }

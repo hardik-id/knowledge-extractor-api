@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "apps.identity",
     "apps.documents",
     "apps.runs",
+    "apps.realtime",
 ]
 
 # ---------------------------------------------------------------------------
@@ -231,6 +232,14 @@ LOGGING = build_logging_config(LOG_LEVEL, LOG_FORMAT)
 REDIS_PORT = env.int("REDIS_PORT", default=6379)
 REDIS_URL = env.str("REDIS_URL", default=f"redis://localhost:{REDIS_PORT}/0")
 WS_TICKET_TTL_SECONDS = env.int("WS_TICKET_TTL_SECONDS", default=30)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [REDIS_URL]},
+    },
+}
+# The echo socket at /ws/test/ that proves the wiring; off outside the tests.
+REALTIME_TEST_ROUTE = env.bool("REALTIME_TEST_ROUTE", default=False)
 
 # Documents: where the list and the content come from.
 DOCUMENT_CATALOG = env.str("DOCUMENT_CATALOG", default="samples")  # samples | http

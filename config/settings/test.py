@@ -12,6 +12,9 @@ INSTALLED_APPS = [
     *INSTALLED_APPS,
     "apps.core.tests",
 ]  # a small model for shared components
+# No Redis in the tests: the channel layer lives in the process.
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+REALTIME_TEST_ROUTE = True
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # The test database name is unique per checkout, so parallel git worktrees never

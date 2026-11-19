@@ -52,7 +52,7 @@ Load the one that fits the job; each lists its commands, what done looks like an
 
 ## Docs
 
-`architecture.md` where things go and how a request flows; `api-conventions.md` paths, JSON, ids, paging; `errors.md` the error codes; `auth.md` sign-in and dev tokens; `permissions.md` visibility and 404 versus 403; `openapi.md` schema and Swagger UI; `new-app.md` the app template; `logging.md`; `security.md`; `docker.md`; `jobs.md` background jobs and the worker; `delivery.md` how PBIs are built. `openapi.yaml` is generated.
+`architecture.md` where things go and how a request flows; `api-conventions.md` paths, JSON, ids, paging; `errors.md` the error codes; `auth.md` sign-in and dev tokens; `permissions.md` visibility and 404 versus 403; `openapi.md` schema and Swagger UI; `new-app.md` the app template; `logging.md`; `realtime.md` sockets and the ticket; `security.md`; `docker.md`; `jobs.md` background jobs and the worker; `delivery.md` how PBIs are built. `openapi.yaml` is generated.
 
 ## The rules
 

@@ -212,3 +212,20 @@ async def test_deleting_the_run_closes_its_sockets_with_4404() -> None:
     await closed_with(first, 4404)
     await closed_with(second, 4404)
     assert not await Run.objects.filter(pk=run_id).aexists()
+
+
+@sync_to_async
+def replace_documents(owner: Any, run_id: Any) -> None:
+    runs.replace_documents(owner, run_id, [])
+
+
+async def test_a_change_of_documents_sends_run_changed_once() -> None:
+    cell = await a_cell()
+    owner, run_id = cell.file.run.owner, cell.file.run_id
+    socket = await open_socket(owner, run_id)
+
+    await replace_documents(owner, run_id)
+
+    assert await socket.receive_json_from() == {"type": "run.changed"}
+    await socket.receive_nothing()
+    await socket.disconnect()

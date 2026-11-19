@@ -22,6 +22,18 @@ def run_create(request: Request) -> Response:
     return Response(RunSerializer(run).data, status=201)
 
 
+@extend_schema(request=CreateRunSerializer, responses=RunSerializer)
+@api_view(["PUT"])
+def run_documents(request: Request, run_id: str) -> Response:
+    """Replace the run's documents; the definition and the conversation stay."""
+    serializer = CreateRunSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    run = services.replace_documents(
+        cast(User, request.user), run_id, serializer.validated_data["items"]
+    )
+    return Response(RunSerializer(run).data)
+
+
 @extend_schema(methods=["GET"], responses=RunSerializer)
 @extend_schema(methods=["DELETE"], responses={204: None})
 @api_view(["GET", "DELETE"])

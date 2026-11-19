@@ -15,26 +15,34 @@ from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.identity.models import User
 from apps.realtime import services as realtime
+from apps.runs import selectors
 from apps.runs.api.serializers import CellSerializer
 from apps.runs.models import Cell, CellStatus, Run, RunFile, Stage
 
 STORAGE = "storage"
 
 
-@transaction.atomic
-def create_run(user: User, items: Sequence[dict[str, Any]]) -> Run:
-    """A run of storage documents, one pending ``extract`` cell per file.
+def _resolve_documents(user: User, items: Sequence[dict[str, Any]]) -> list[Any]:
+    """The catalog entries for ``items``: the checks a run's documents always pass.
 
-    Name, type, size, location and modified time come from the catalog, not from
-    the request. The first ``source_ref`` the person may not open is a 404.
+    Storage documents only, none twice, each one opened as ``user`` (the first
+    one the person may not open is a 404 ``document_not_found``).
     """
-    if not items:
-        raise ApiError("no_files")
     sources = {item["source"] for item in items}
-    if sources != {STORAGE}:
+    if items and sources != {STORAGE}:
         raise ApiError("mixed_sources" if STORAGE in sources else "unsupported_source")
-    entries = [documents.get_document(user, item["source_ref"]) for item in items]
-    run = Run.objects.create(owner=user)
+    refs = [item["source_ref"] for item in items]
+    if len(set(refs)) != len(refs):
+        raise ApiError(
+            "validation_error",
+            "A document can be in a run only once.",
+            details={"source_ref": sorted({r for r in refs if refs.count(r) > 1})},
+        )
+    return [documents.get_document(user, ref) for ref in refs]
+
+
+def _add_files(run: Run, entries: Sequence[Any]) -> None:
+    """A file and a pending ``extract`` cell for each catalog entry. Facts come from the catalog."""
     files = RunFile.objects.bulk_create(
         RunFile(
             run=run,
@@ -50,6 +58,56 @@ def create_run(user: User, items: Sequence[dict[str, Any]]) -> Run:
         for entry in entries
     )
     Cell.objects.bulk_create(Cell(file=file, stage=Stage.EXTRACT) for file in files)
+
+
+@transaction.atomic
+def create_run(user: User, items: Sequence[dict[str, Any]]) -> Run:
+    """A run of storage documents, one pending ``extract`` cell per file.
+
+    Name, type, size, location and modified time come from the catalog, not from
+    the request. The first ``source_ref`` the person may not open is a 404.
+    """
+    if not items:
+        raise ApiError("no_files")
+    entries = _resolve_documents(user, items)
+    run = Run.objects.create(owner=user)
+    _add_files(run, entries)
+    return run
+
+
+def create_empty_run(user: User) -> Run:
+    """A run with no files, for other apps. ``POST /runs`` still refuses an empty list."""
+    return Run.objects.create(owner=user)
+
+
+def replace_documents(user: User, run_id: Any, items: Sequence[dict[str, Any]]) -> Run:
+    """Make the run's documents exactly ``items``, which may be empty.
+
+    A file whose ``source_ref`` is not listed goes, with its cell and records. A
+    file that stays is not touched. A new document gets a file and a pending cell.
+    409 ``execution_in_progress`` while a file of the run is queued or running.
+    All or nothing; the run's sockets get ``{"type": "run.changed"}`` after the commit.
+    """
+    run = selectors.get_run(user, run_id)
+    release_stuck_cells(run)
+    with transaction.atomic():
+        Run.objects.select_for_update().get(pk=run.pk)
+        entries = _resolve_documents(user, items)
+        active = (
+            Cell.objects.select_for_update(of=("self",))
+            .filter(file__run=run, status__in=ACTIVE)
+            .order_by("pk")
+            .first()
+        )
+        if active is not None:
+            raise ApiError(
+                "execution_in_progress", details={"execution_id": active.execution_id}
+            )
+        wanted = {entry.id for entry in entries}
+        have = set(run.files.values_list("source_ref", flat=True))
+        run.files.exclude(source_ref__in=wanted).delete()
+        _add_files(run, [entry for entry in entries if entry.id not in have])
+        realtime.publish_run_event(run.pk, {"type": "run.changed"})
     return run
 
 

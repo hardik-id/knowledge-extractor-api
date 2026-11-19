@@ -344,6 +344,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /runs/{run_id}/documents:
+    put:
+      operationId: runs_documents_update
+      description: Replace the run's documents; the definition and the conversation
+        stay.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /runs/{run_id}/extraction/assistant/messages:
     get:
       operationId: runs_extraction_assistant_messages_retrieve

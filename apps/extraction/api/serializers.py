@@ -196,3 +196,30 @@ def serialize_extraction(extraction: Extraction) -> dict[str, Any]:
             _record(record, file_id, field_ids) for record in extraction.records.all()
         ],
     }
+
+
+class ExecutionConfigSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The stage settings of an execution. ``definitionVersion`` is accepted too."""
+
+    definition_version = serializers.IntegerField(min_value=1, required=False)
+
+    def to_internal_value(self, data: Any) -> Any:
+        if isinstance(data, dict) and "definition_version" not in data:
+            if "definitionVersion" in data:  # how the UI sends it today
+                data = {**data, "definition_version": data["definitionVersion"]}
+        return super().to_internal_value(data)
+
+
+class StartExecutionSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The body of ``POST .../stages/extract/executions``. No ``file_ids``: every file."""
+
+    file_ids = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_null=True
+    )
+    config = ExecutionConfigSerializer(required=False)
+
+
+class ExecutionSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    execution_id = serializers.CharField()
+    stage = serializers.CharField()
+    file_ids = serializers.ListField(child=serializers.CharField())

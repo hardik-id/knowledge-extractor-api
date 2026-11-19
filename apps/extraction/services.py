@@ -3,15 +3,25 @@
 A service takes the acting user as its first argument.
 """
 
+import json
+import logging
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
 
 from apps.core.errors import ApiError
-from apps.extraction import selectors
+from apps.core.jobs import enqueue_after_commit
+from apps.extraction import selectors, tasks
+from apps.extraction.api.serializers import serialize_extraction
+from apps.extraction.extractors import get_extractor
+from apps.extraction.extractors.base import Definition
+from apps.extraction.extractors.records import StoredRecord, stored_records
+from apps.extraction.merge import merge_extracted_records
 from apps.extraction.models import (
     DefinitionVersion,
     Extraction,
@@ -25,6 +35,9 @@ from apps.extraction.validation import validate_draft
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors as runs
+from apps.runs import services as run_cells
+
+logger = logging.getLogger(__name__)
 
 
 def save_definition(
@@ -373,3 +386,201 @@ def review_value(
         value.save()
 
     return change_extraction(user, run_id, file_id, revision, apply)
+
+
+# ---------------------------------------------------------------------------
+# Executions: running the extract stage on files of a run (docs/extraction.md).
+# ---------------------------------------------------------------------------
+
+EXTRACT = "extract"
+QUEUED, RUNNING, SUCCEEDED, FAILED = "queued", "running", "succeeded", "failed"
+
+
+@dataclass(frozen=True)
+class Execution:
+    id: str
+    file_ids: list[str]
+
+
+def start_execution(
+    user: User,
+    run_id: Any,
+    stage: str,
+    *,
+    file_ids: list[str] | None,
+    definition_version: int | None,
+) -> Execution:
+    """Queue the extract stage for ``file_ids`` (every file of the run when None).
+
+    In this order: the run is ``user``'s (404); the stage is ``extract`` (404
+    ``not_found``: no other stage runs here); every id is a file of the run
+    (422 ``unknown_file``); none of them is queued or running (409
+    ``execution_in_progress``); ``definition_version``, when given, is the latest
+    saved one (409 ``definition_conflict``). Then the cells become ``queued``
+    with the new execution's id and one job per file is enqueued once that is
+    committed. Cells a dead worker left active are released first.
+    """
+    run = runs.get_run(user, run_id)
+    if stage != EXTRACT:
+        raise ApiError("not_found", "Stage not found.")
+    run_cells.release_stuck_cells(run)
+    files = list(run.files.order_by("id"))
+    if file_ids is not None:
+        by_id = {str(file.pk): file for file in files}
+        wanted = list(dict.fromkeys(_canonical(file_id) for file_id in file_ids))
+        if not wanted or any(file_id not in by_id for file_id in wanted):
+            raise ApiError("unknown_file")
+        files = [by_id[file_id] for file_id in wanted]
+    execution_id = str(uuid.uuid7())
+    with transaction.atomic():
+        run_cells.queue_cells(files, EXTRACT, execution_id)
+        latest = selectors.get_definition(user, run.pk)
+        if definition_version is not None and definition_version != latest.version:
+            raise _conflict(latest.version)
+        for file in files:
+            enqueue_after_commit(
+                tasks.extract_file, str(file.pk), execution_id, latest.version
+            )
+    return Execution(execution_id, [str(file.pk) for file in files])
+
+
+def _canonical(file_id: str) -> str:
+    try:
+        return str(UUID(str(file_id)))
+    except ValueError:
+        return str(file_id)
+
+
+def run_extraction(file_id: str, execution_id: str, definition_version: int) -> None:
+    """The job of one file of an execution (``tasks.extract_file``).
+
+    The cell goes ``running``; the document is read; the extractor runs with that
+    definition version and the run's example records; the result is merged with
+    what a person did and stored in one transaction, raising the revision; the
+    cell goes ``succeeded`` and ``extraction.changed`` is announced. Any failure
+    leaves the records as they were and the cell ``failed`` with ``{code,
+    message}``. A cell that no longer belongs to this execution (run again,
+    released after the timeout, the run deleted) means the job does nothing.
+    """
+    with transaction.atomic():
+        cell = runs.cell_for_update(file_id, EXTRACT)
+        if cell is None or not _belongs(cell, execution_id, QUEUED):
+            return
+        run_cells.set_cell(
+            cell.file, EXTRACT, status=RUNNING, execution_id=execution_id
+        )
+    try:
+        _extract(cell.file, execution_id, definition_version)
+    except Exception as error:
+        logger.exception(
+            "extraction failed: file %s, execution %s", file_id, execution_id
+        )
+        _fail(file_id, execution_id, error)
+
+
+def _belongs(cell: Any, execution_id: str, *statuses: str) -> bool:
+    return bool(cell.execution_id == execution_id and cell.status in statuses)
+
+
+def _extract(run_file: Any, execution_id: str, version: int) -> None:
+    document = _document(run_file)
+    definition = selectors.get_definition_version(run_file.run_id, version)
+    raw = get_extractor().extract(
+        document.text,
+        Definition.from_version(definition),
+        selectors.example_records(run_file.run_id),
+    )
+    fresh = stored_records(document.text, raw)
+    with transaction.atomic():
+        cell = runs.cell_for_update(run_file.pk, EXTRACT)
+        if cell is None or not _belongs(cell, execution_id, RUNNING):
+            return
+        extraction, _ = Extraction.objects.get_or_create(
+            file=run_file,
+            defaults={
+                "revision": 0,
+                "source_etag": document.etag,
+                "definition_version": version,
+            },
+        )
+        extraction = Extraction.objects.select_for_update().get(pk=extraction.pk)
+        previous = list(extraction.records.prefetch_related("values"))
+        merged: list[Any] = merge_extracted_records(previous, fresh)
+        kept = [record.pk for record in merged if isinstance(record, ExtractionRecord)]
+        extraction.records.exclude(pk__in=kept).delete()
+        _store(extraction, [r for r in merged if isinstance(r, StoredRecord)])
+        extraction.revision += 1
+        extraction.source_etag = document.etag
+        extraction.definition_version = version
+        extraction.save()
+        run_cells.set_cell(
+            run_file,
+            EXTRACT,
+            status=SUCCEEDED,
+            execution_id=execution_id,
+            output=_output(run_file, execution_id, extraction),
+        )
+        realtime.publish_run_event(
+            run_file.run_id,
+            {
+                "type": "extraction.changed",
+                "file_id": str(run_file.pk),
+                "revision": extraction.revision,
+            },
+        )
+
+
+def _store(extraction: Extraction, fresh: list[StoredRecord]) -> None:
+    """Write the new suggestions, in the merge's order (ids are time-ordered)."""
+    records = ExtractionRecord.objects.bulk_create(
+        ExtractionRecord(
+            extraction=extraction,
+            record_type_id=record.record_type_id,
+            span=record.span,
+            origin=record.origin,
+            review=record.review,
+            use_as_example=record.use_as_example,
+        )
+        for record in fresh
+    )
+    FieldValue.objects.bulk_create(
+        FieldValue(
+            record=stored,
+            field_id=value.field_id,
+            value=value.value,
+            spans=value.spans,
+            origin=value.origin,
+            review=value.review,
+            anchored=value.anchored,
+        )
+        for stored, record in zip(records, fresh, strict=True)
+        for value in record.values
+    )
+
+
+def _output(run_file: Any, execution_id: str, extraction: Extraction) -> dict[str, Any]:
+    """What the cell shows as the stage's output. The ETag is new for every execution."""
+    stored = Extraction.objects.prefetch_related("records__values").get(
+        pk=extraction.pk
+    )
+    body = json.dumps(serialize_extraction(stored)).encode()
+    return {
+        "name": f"{PurePosixPath(run_file.name).stem}.extract.json",
+        "content_type": "application/json",
+        "size": len(body),
+        "etag": f"extract-{execution_id}",
+    }
+
+
+def _fail(file_id: str, execution_id: str, error: Exception) -> None:
+    if isinstance(error, ApiError):
+        reason = {"code": error.code, "message": error.message}
+    else:
+        reason = {"code": "extraction_failed", "message": "The extraction failed."}
+    with transaction.atomic():
+        cell = runs.cell_for_update(file_id, EXTRACT)
+        if cell is None or not _belongs(cell, execution_id, QUEUED, RUNNING):
+            return
+        run_cells.set_cell(
+            cell.file, EXTRACT, status=FAILED, execution_id=execution_id, error=reason
+        )

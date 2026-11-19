@@ -31,4 +31,5 @@ def run_detail(request: Request, run_id: str) -> Response:
     if request.method == "DELETE":
         services.delete_run(run)
         return Response(status=204)
+    services.release_stuck_cells(run)
     return Response(RunSerializer(run).data)

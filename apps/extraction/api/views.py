@@ -10,11 +10,13 @@ from apps.extraction import selectors, services
 from apps.extraction.api.serializers import (
     AddRecordSerializer,
     DefinitionSerializer,
+    ExecutionSerializer,
     ExtractionSerializer,
     ReplaceFieldValuesSerializer,
     ReviewValueSerializer,
     RevisionQuerySerializer,
     SaveDefinitionSerializer,
+    StartExecutionSerializer,
     UpdateRecordSerializer,
     serialize_extraction,
 )
@@ -39,6 +41,30 @@ def definition(request: Request, run_id: str) -> Response:
         )
         return Response(DefinitionSerializer(saved).data)
     return Response(DefinitionSerializer(selectors.get_definition(user, run_id)).data)
+
+
+@extend_schema(request=StartExecutionSerializer, responses={202: ExecutionSerializer})
+@api_view(["POST"])
+def executions(request: Request, run_id: str, stage: str) -> Response:
+    """Run the stage on files of the run, in the background. Progress arrives as cells."""
+    body = StartExecutionSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    config = body.validated_data.get("config") or {}
+    execution = services.start_execution(
+        cast(User, request.user),
+        run_id,
+        stage,
+        file_ids=body.validated_data.get("file_ids"),
+        definition_version=config.get("definition_version"),
+    )
+    return Response(
+        {
+            "execution_id": execution.id,
+            "stage": stage,
+            "file_ids": execution.file_ids,
+        },
+        status=202,
+    )
 
 
 @extend_schema(responses=ExtractionSerializer)

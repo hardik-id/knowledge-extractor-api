@@ -38,6 +38,8 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `invalid_definition` | 422 | The extraction definition is not valid. |
 | `assistant_busy` | 409 | The assistant is still answering. |
 | `empty_message` | 422 | Write a message first. |
+| `execution_in_progress` | 409 | This stage is already running. |
+| `unknown_file` | 422 | One of the files is not part of this run. |
 | `conflict` | 409 | The request conflicts with the current state. |
 | `validation_error` | 422 | The request is not valid. |
 | `server_error` | 500 | Something went wrong. |

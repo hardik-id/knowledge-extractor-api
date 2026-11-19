@@ -45,3 +45,82 @@ It works on stored `ExtractionRecord`s (with their values prefetched) as well as
 A first add (`revision: 0`, no extraction yet) makes the extraction from the document's text and ETag: revision 1, 422 `upstream_not_ready` when the document has no text. What a person writes is `origin: human`, `review: accepted`, `anchored: true`. A field left out of an add, or sent with no values, stores one `null` value, `human`, `accepted` and `anchored`, as the UI's mock does. A quote and a value are kept exactly as sent, with their whitespace.
 
 `PATCH` changes only the keys sent; `span: null` clears the span. Accepting a record accepts its values that are still `suggested`. `DELETE` is for records a person added; a model's suggestion answers 422 `not_deletable`, and is rejected instead so it is not suggested again. A record or field outside the extraction's definition version is 422 `unknown_field`, more than one value for a field with `multiple: false` is 422 `too_many_values`.
+
+## Running the stage
+
+Pressing Run in the Studio extracts the chosen files in the background. The request only queues the work; one job per file does it (`tasks.extract_file`, see [jobs.md](jobs.md)), and the progress reaches the UI as `cell` events on the run socket (see [realtime.md](realtime.md)).
+
+```
+POST /api/v1/runs/{run_id}/stages/extract/executions
+{ "file_ids": ["..."], "config": { "definition_version": 3 } }
+
+202 { "execution_id": "...", "stage": "extract", "file_ids": ["..."] }
+```
+
+- No `file_ids` (or `null`) means every file of the run. A file named twice runs once. The answer lists the files in the order they run.
+- `config.definition_version` is the version the person saw. The UI sends it as `config.definitionVersion` today; both spellings are accepted. Left out, the latest saved version is used.
+
+### The request
+
+`services.start_execution`, in this order:
+
+| Check | Answer |
+| --- | --- |
+| The run is the person's | 404 `run_not_found` |
+| The stage is `extract` | 404 `not_found` |
+| Every id is a file of this run (and the list is not empty) | 422 `unknown_file` |
+| None of these files is `queued` or `running` | 409 `execution_in_progress`, `details: { execution_id }` |
+| The version is the latest saved one | 409 `definition_conflict`, `details: { version }` |
+
+Then, in one transaction: the cells of the files become `queued` with the new execution's id (through `runs.services.set_cell`, so the socket sees each), and one job per file is enqueued once that commits. A refused request changes nothing and announces nothing. The cells are locked while they are checked, so of two requests for the same file one wins.
+
+### The job, per file
+
+`services.run_extraction(file_id, execution_id, definition_version)`:
+
+1. The cell must still be `queued` for this execution, otherwise the job does nothing (the file was run again, its cell was released after the timeout, or the run was deleted). The cell becomes `running`.
+2. The document is read (`selectors.input_text`), with its ETag.
+3. `get_extractor()` runs with that definition version and the run's example records: the records a person accepted and marked `use_as_example`, in any file of the run, without their rejected values.
+4. `stored_records` checks the spans; the merge rule keeps every record a person touched, replaces the untouched suggestions and drops a fresh one that overlaps a kept record of the same type.
+5. In one transaction, with the cell and the extraction locked: the cell must still be `running` for this execution (otherwise nothing is stored); the records are written; `revision` goes up by one (a first extraction is revision 1); `source_etag` is the document's ETag when it was read and `definition_version` the one used. The cell becomes `succeeded` and `extraction.changed` is announced, both once the transaction commits.
+
+The cell's `output` is `{ name, content_type, size, etag }`: `<file name without extension>.extract.json`, `application/json`, the size of the extraction as `GET .../extraction` answers it, and `etag` `extract-<execution_id>`, new for every execution. The UI refetches the records when it changes.
+
+### Failure
+
+Anything that goes wrong (the document cannot be read, the extractor raises, the write fails) leaves the records exactly as they were: the write is one transaction. The failure is logged with its traceback and the cell becomes `failed` with `error: { code, message }`:
+
+| `code` | When |
+| --- | --- |
+| `upstream_not_ready` | the document could not be read |
+| `extraction_failed` | the extractor or the write raised; the details are only in the log |
+| `execution_timeout` | the cell was left active by a dead worker (below) |
+
+A failed cell is not active, so the file can be executed again at once.
+
+### A dead worker
+
+A cell left `queued` or `running` longer than `EXECUTION_TIMEOUT_SECONDS` (default 600) is released: at the next execution request or snapshot (`GET /api/v1/runs/{run_id}`) it becomes `failed` with `execution_timeout`, keeping its `execution_id`. `runs.services.release_stuck_cells` does it. If that job does finish later, its cell no longer belongs to it and it stores nothing. The time counts from the cell's last change, so `running` restarts the clock.
+
+### States of a cell
+
+```
+pending ──POST──> queued ──job starts──> running ──stored──> succeeded
+                    │                       │
+                    └──timeout──> failed <──┴── error or timeout
+succeeded / failed ──POST──> queued
+```
+
+### Events on the run socket, in order
+
+| Event | When |
+| --- | --- |
+| `cell`, `queued` | in the request, once per file |
+| `cell`, `running` | the job starts |
+| `cell`, `succeeded` | the records are stored |
+| `extraction.changed` (`file_id`, `revision`) | right after, in the same commit |
+| `cell`, `failed` | instead of the last two, on a failure or a timeout |
+
+| Variable | Meaning |
+| --- | --- |
+| `EXECUTION_TIMEOUT_SECONDS` | After how long a `queued` or `running` cell counts as failed. Default 600 |

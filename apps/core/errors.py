@@ -46,6 +46,8 @@ ERRORS: dict[str, ErrorCode] = {
     "invalid_definition": ErrorCode(422, "The extraction definition is not valid."),
     "assistant_busy": ErrorCode(409, "The assistant is still answering."),
     "empty_message": ErrorCode(422, "Write a message first."),
+    "execution_in_progress": ErrorCode(409, "This stage is already running."),
+    "unknown_file": ErrorCode(422, "One of the files is not part of this run."),
     "conflict": ErrorCode(409, "The request conflicts with the current state."),
     "validation_error": ErrorCode(422, "The request is not valid."),
     "server_error": ErrorCode(500, "Something went wrong."),

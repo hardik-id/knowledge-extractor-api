@@ -344,6 +344,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /runs/{run_id}/files/{file_id}/extraction:
+    get:
+      operationId: runs_files_extraction_retrieve
+      description: The records extracted from one file of the run.
+      parameters:
+      - in: path
+        name: file_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Extraction'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /runs/{run_id}/stages/extract/definition:
     get:
       operationId: runs_stages_extract_definition_retrieve
@@ -566,6 +616,29 @@ components:
       required:
       - code
       - message
+    Extraction:
+      type: object
+      description: 'The whole extraction of a file: what the read answers and every
+        write will.'
+      properties:
+        file_id:
+          type: string
+        revision:
+          type: integer
+        source_etag:
+          type: string
+        definition_version:
+          type: integer
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Record'
+      required:
+      - definition_version
+      - file_id
+      - records
+      - revision
+      - source_etag
     FieldRequest:
       type: object
       properties:
@@ -594,6 +667,34 @@ components:
       - mode
       - name
       - value_type
+    FieldValue:
+      type: object
+      properties:
+        id:
+          type: string
+        field_id:
+          type: string
+        value:
+          type: string
+          nullable: true
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/Span'
+        origin:
+          $ref: '#/components/schemas/OriginEnum'
+        review:
+          $ref: '#/components/schemas/ReviewEnum'
+        anchored:
+          type: boolean
+      required:
+      - anchored
+      - field_id
+      - id
+      - origin
+      - review
+      - spans
+      - value
     FormatEnum:
       enum:
       - json
@@ -628,6 +729,14 @@ components:
       description: |-
         * `quote` - quote
         * `inferred` - inferred
+    OriginEnum:
+      enum:
+      - llm
+      - human
+      type: string
+      description: |-
+        * `llm` - Llm
+        * `human` - Human
     OutputRequest:
       type: object
       properties:
@@ -638,6 +747,38 @@ components:
       required:
       - format
       - template
+    Record:
+      type: object
+      properties:
+        id:
+          type: string
+        file_id:
+          type: string
+        record_type_id:
+          type: string
+        span:
+          allOf:
+          - $ref: '#/components/schemas/Span'
+          nullable: true
+        origin:
+          $ref: '#/components/schemas/OriginEnum'
+        review:
+          $ref: '#/components/schemas/ReviewEnum'
+        use_as_example:
+          type: boolean
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldValue'
+      required:
+      - fields
+      - file_id
+      - id
+      - origin
+      - record_type_id
+      - review
+      - span
+      - use_as_example
     RecordTypeRequest:
       type: object
       properties:
@@ -655,6 +796,16 @@ components:
       required:
       - fields
       - name
+    ReviewEnum:
+      enum:
+      - suggested
+      - accepted
+      - rejected
+      type: string
+      description: |-
+        * `suggested` - Suggested
+        * `accepted` - Accepted
+        * `rejected` - Rejected
     Run:
       type: object
       properties:
@@ -720,6 +871,19 @@ components:
       - output
       - prompt
       - record_types
+    Span:
+      type: object
+      properties:
+        start:
+          type: integer
+        end:
+          type: integer
+        quote:
+          type: string
+      required:
+      - end
+      - quote
+      - start
     Status:
       type: object
       properties:

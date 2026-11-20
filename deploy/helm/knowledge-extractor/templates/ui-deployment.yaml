@@ -32,7 +32,7 @@ spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: {{ .Values.ui.terminationGracePeriodSeconds }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.ui.podSecurityContext | nindent 8 }}
       containers:
         - name: ui
           image: {{ printf "%s:%s" .Values.ui.image.repository (default .Chart.AppVersion .Values.ui.image.tag) | quote }}

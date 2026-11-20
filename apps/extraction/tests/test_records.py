@@ -2,16 +2,13 @@
 
 from apps.extraction.extractors.base import RawRecord, RawValue
 from apps.extraction.extractors.records import stored_records
+from apps.extraction.spans import Span
 
 TEXT = "Intro 🚀\n\n## ADR-1: Title\n**Status:** Accepted\n"
 
 
-def span(start: int, end: int, quote: str | None = None) -> dict[str, object]:
-    return {
-        "start": start,
-        "end": end,
-        "quote": TEXT[start:end] if quote is None else quote,
-    }
+def span(start: int, end: int, quote: str | None = None) -> Span:
+    return Span(start, end, TEXT[start:end] if quote is None else quote)
 
 
 def test_a_span_that_fits_is_kept_and_everything_is_llm_and_suggested() -> None:
@@ -45,7 +42,7 @@ def test_a_quote_whose_offsets_are_wrong_is_anchored_by_its_text() -> None:
 
 
 def test_a_quote_that_is_not_in_the_text_is_kept_not_anchored() -> None:
-    nowhere = {"start": 3, "end": 9, "quote": "Not in the document"}
+    nowhere = Span(3, 9, "Not in the document")
     raw = RawRecord("rt-adr", None, [RawValue("f", "Not in the document", [nowhere])])
     (record,) = stored_records(TEXT, [raw])
     (value,) = record.values
@@ -58,7 +55,7 @@ def test_a_value_is_anchored_only_when_every_span_is() -> None:
     raw = RawRecord(
         "rt",
         None,
-        [RawValue("f", "x", [span(0, 5), {"start": 0, "end": 1, "quote": "zzz"}])],
+        [RawValue("f", "x", [span(0, 5), Span(0, 1, "zzz")])],
     )
     (record,) = stored_records(TEXT, [raw])
     assert record.values[0].anchored is False
@@ -72,10 +69,8 @@ def test_a_value_without_spans_is_anchored() -> None:
 
 
 def test_a_record_span_that_cannot_be_placed_is_dropped_from_the_record() -> None:
-    bad = {"start": 0, "end": 4, "quote": "nowhere"}
+    bad = Span(0, 4, "nowhere")
     (record,) = stored_records(TEXT, [RawRecord("rt", bad)])
     assert record.span is None
-    anchored = stored_records(
-        TEXT, [RawRecord("rt", {"start": 0, "end": 4, "quote": "ADR-1"})]
-    )[0]
+    anchored = stored_records(TEXT, [RawRecord("rt", Span(0, 4, "ADR-1"))])[0]
     assert anchored.span == span(TEXT.index("ADR-1"), TEXT.index("ADR-1") + 5)

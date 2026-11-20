@@ -48,7 +48,8 @@
     {"index": 64, "kind": "ui", "name": "e2e-4-stability", "description": "UI-123: no clicks lost before the page is ready", "whenToUse": "After e2e-2-journeys, with the backend stack running. Can run beside e2e-5-engine.", "items": [123]},
     {"index": 65, "name": "e2e-5-engine", "description": "PBI-363: the delivery workflows run the end-to-end suite before they merge", "whenToUse": "After e2e-3-command. Can run beside e2e-4-stability.", "items": [363]},
     {"index": 66, "kind": "ui", "name": "e2e-6-checks", "description": "UI-124 ∥ 125 ∥ 126: accessibility scan, screenshot comparison, an optional live suite", "whenToUse": "After e2e-4-stability, with the backend stack running.", "items": [124, 125, 126]},
-    {"index": 71, "kind": "ui", "name": "define-1-field-table", "description": "UI-148: the fields of a record type as a table with tick boxes", "whenToUse": "Any time, with the backend stack running (make up).", "items": [148]}
+    {"index": 71, "kind": "ui", "name": "define-1-field-table", "description": "UI-148: the fields of a record type as a table with tick boxes", "whenToUse": "Any time, with the backend stack running (make up).", "items": [148]},
+    {"index": 72, "kind": "ui", "name": "session-1-refused-token", "description": "UI-149: a refused token (401) takes the person to sign in again", "whenToUse": "Any time, with the backend stack running (make up). Can run beside define-1-field-table.", "items": [149]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -131,6 +132,7 @@
     {"kind": "ui", "n": 125, "slug": "e2e-visual", "title": "End-to-end tests: screenshot comparison of a few stable screens", "tier": "normal", "deps": [123]},
     {"kind": "ui", "n": 126, "slug": "e2e-live", "title": "End-to-end tests: an optional live suite for the real model and real sign-in", "tier": "normal", "deps": [123]},
     {"n": 363, "slug": "e2e-merge-gate", "title": "The delivery workflows run the end-to-end suite before they merge", "tier": "complex", "deps": []},
-    {"kind": "ui", "n": 148, "slug": "define-field-table", "title": "Define tab: the fields of a record type as a table with tick boxes", "tier": "normal", "deps": []}
+    {"kind": "ui", "n": 148, "slug": "define-field-table", "title": "Define tab: the fields of a record type as a table with tick boxes", "tier": "normal", "deps": []},
+    {"kind": "ui", "n": 149, "slug": "refused-token", "title": "A refused token (401) takes the person to sign in again, in every sign-in mode", "tier": "complex", "deps": []}
   ]
 }

@@ -101,6 +101,7 @@ Tracked in #357. Playwright journeys in the UI repository, run with one command,
 | Workflow | PBIs | Start it after |
 | --- | --- | --- |
 | `define-1-field-table` | UI #148 | nothing, with the stack running (`make up`) |
+| `session-1-refused-token` | UI #149 | nothing, with the stack running. Can run beside `define-1-field-table` |
 
 The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 

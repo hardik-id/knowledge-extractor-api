@@ -220,6 +220,52 @@ const before = (calls, a, b) => {
   console.log('ok  hard tier, UI work without a backend')
 }
 
+// 12. The end-to-end suite is the merge gate.
+{
+  const e2e = 'npm run test:e2e'
+  // UI work that needs the API: each PBI's validation runs it on its own E2E_PORT, and so does the final check.
+  const prepare = { repoDir: '/ui', ready: true, problems: [], issues: issues([39, 40, 38], [38]) }
+  const ui = await run('studio-ui-2-backend', { repoDir: '/ui', apiDir: '/api' }, happy(prepare))
+  assert.equal(ui.result.status, 'done')
+  for (const n of [39, 40]) {
+    const text = ui.calls.find(c => c.label === `test and validate UI-0${n}`).prompt
+    assert.ok(text.includes(`E2E_PORT=${7100 + n} ${e2e}`), `UI-0${n} validation runs e2e on its own port`)
+    assert.ok(text.includes("don't start, stop, rebuild or reset it"), 'the shared stack is left alone')
+    assert.ok(text.includes('never 3000 or 3100'))
+  }
+  const ports = ui.calls.filter(c => c.label.startsWith('test and validate')).map(c => c.prompt.match(/E2E_PORT=(\d+)/)[1])
+  assert.equal(new Set(ports).size, ports.length, 'one E2E_PORT per agent')
+  const uiMain = ui.calls.find(c => c.label === 'validate main').prompt
+  assert.ok(uiMain.includes(`E2E_PORT=${6000 + 22} ${e2e}`) && uiMain.includes('failing test'))
+  assert.equal(ui.calls.filter(c => c.prompt.includes(e2e) && !c.label.startsWith('test and validate') && c.label !== 'validate main').length, 0, 'only the validators and the final check run it')
+  assert.ok(ui.calls.find(c => c.label === 'implement UI-039').prompt.includes('never use it either'))
+
+  // UI work that needs no backend: no e2e anywhere.
+  const apps = await run('studio-ui-1-apps', { repoDir: '/ui' }, happy({ repoDir: '/ui', ready: true, problems: [], issues: issues([38]) }))
+  assert.ok(apps.calls.filter(c => c.label === 'validate main' || c.label.startsWith('test and validate')).every(c => !c.prompt.includes(e2e)))
+
+  // API work: the per-PBI check does not run it; the final check rebuilds the stack from main and runs make e2e.
+  const api = await run('studio-7-stack', { repoDir: '/repo', uiDir: '/ui' }, happy({ repoDir: '/repo', ready: true, problems: [], issues: issues([154, 155, 156, 139, 146, 152, 153], [139, 146, 152, 153]) }))
+  assert.equal(api.result.status, 'done')
+  assert.ok(api.calls.filter(c => c.label.startsWith('test and validate')).every(c => !c.prompt.includes('end-to-end suite')))
+  const apiMain = api.calls.find(c => c.label === 'validate main').prompt
+  assert.ok(apiMain.includes('cd /repo && make up'))
+  assert.ok(apiMain.includes('E2E_PORT=6017 make e2e UI_DIR=/ui'))
+  assert.ok(apiMain.includes("failing test's name in `problems`"))
+  assert.ok(apiMain.indexOf('End-to-end suite') < apiMain.indexOf('Clean up'))
+  assert.ok(api.calls.find(c => c.label === 'implement PBI-154').prompt.includes('Never use 3000'))
+
+  // An item that changes only docs or the delivery tooling skips it: by its title or its label.
+  const docs = { repoDir: '/ui', ready: true, problems: [], issues: [{ n: 39, state: 'OPEN', pr: 0, prState: 'NONE', labels: ['documentation'] }, { n: 40, state: 'OPEN', pr: 0, prState: 'NONE', labels: [] }, { n: 38, state: 'CLOSED', pr: 0, prState: 'NONE' }] }
+  const skip = await run('studio-ui-2-backend', { repoDir: '/ui', apiDir: '/api', only: [39] }, happy(docs))
+  assert.ok(!skip.calls.find(c => c.label === 'test and validate UI-039').prompt.includes(e2e))
+  assert.ok(skip.calls.find(c => c.label === 'test and validate UI-039').prompt.includes('not run for it'))
+  assert.ok(!skip.calls.find(c => c.label === 'validate main').prompt.includes(e2e), 'nothing but docs merged: no suite on main')
+  const tooling = await run('e2e-5-engine', { repoDir: '/repo' }, happy({ repoDir: '/repo', ready: true, problems: [], issues: issues([363, 356], [356]) }))
+  assert.ok(!tooling.calls.find(c => c.label === 'validate main').prompt.includes('End-to-end suite'), 'a delivery tooling PBI skips the suite on main')
+  console.log('ok  end-to-end merge gate')
+}
+
 // Every file parses and dry-runs.
 for (const file of readdirSync(dir).filter(f => f.endsWith('.js')).sort()) {
   const name = file.slice(0, -3)

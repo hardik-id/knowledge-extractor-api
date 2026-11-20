@@ -16,7 +16,7 @@ from django.db import IntegrityError, transaction
 
 from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
-from apps.extraction import selectors, tasks, telemetry
+from apps.extraction import selectors, tasks, telemetry, template_registry
 from apps.extraction.api.serializers import serialize_extraction
 from apps.extraction.definition import Field
 from apps.extraction.extractors import extractor_kind, get_extractor
@@ -70,6 +70,31 @@ def save_definition(
     except IntegrityError:
         latest = selectors.latest_version(current.run_id)
         raise _conflict(latest.version if latest else current.version) from None
+
+
+def start_definition(run: Any, template_id: str | None = None) -> DefinitionVersion:
+    """Make version 1 of ``run``'s definition from a template (the default one when None).
+
+    The note says where it came from. An unknown id is 422 ``unknown_template``.
+    The caller runs this in its own transaction, so a refusal leaves nothing behind.
+    """
+    try:
+        template = (
+            template_registry.default_template()
+            if template_id is None
+            else template_registry.get_template(template_id)
+        )
+    except ApiError:
+        raise ApiError("unknown_template") from None
+    start = template.definition.model_dump()
+    return DefinitionVersion.objects.create(
+        run=run,
+        version=1,
+        prompt=start["prompt"],
+        record_types=start["record_types"],
+        output=start["output"],
+        note=f"From template: {template.name}",
+    )
 
 
 def restore_definition(user: User, run_id: Any, version: int) -> DefinitionVersion:

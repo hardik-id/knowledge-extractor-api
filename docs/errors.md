@@ -39,6 +39,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `invalid_definition` | 422 | The extraction definition is not valid. |
 | `definition_version_not_found` | 404 | This version of the definition was not found. |
 | `template_not_found` | 404 | Template not found. |
+| `unknown_template` | 422 | This template does not exist. |
 | `assistant_busy` | 409 | The assistant is still answering. |
 | `empty_message` | 422 | Write a message first. |
 | `run_belongs_to_project` | 409 | This run belongs to a project. Delete the project instead. |

@@ -110,12 +110,45 @@ async def test_a_person_walks_the_whole_studio_flow() -> None:
             201,
         )
     ).json()
-    assert (project["document_count"], project["configuration_version"]) == (0, None)
+    assert (project["document_count"], project["configuration_version"]) == (0, 1)
     project_url = f"{API}/projects/{project['id']}"
     projects = (
         await call(me, "get", f"{API}/projects", check=shapes.check_projects)
     ).json()
     assert [p["id"] for p in projects["items"]] == [project["id"]]
+    # A project from a template: version 1 is the template, and says so.
+    skill = (
+        await call(
+            me,
+            "post",
+            f"{API}/projects",
+            {"name": "Skills", "template_id": "skill"},
+            shapes.check_project,
+            201,
+        )
+    ).json()
+    skill_versions = (
+        await call(
+            me,
+            "get",
+            f"{API}/runs/{skill['run_id']}/stages/extract/definition/versions",
+            check=shapes.check_versions,
+        )
+    ).json()
+    assert [(v["version"], v["note"]) for v in skill_versions["items"]] == [
+        (1, "From template: Agent skills")
+    ]
+    skill_one = (
+        await call(
+            me,
+            "get",
+            f"{API}/runs/{skill['run_id']}/stages/extract/definition/versions/1",
+            check=shapes.check_saved_definition,
+        )
+    ).json()
+    assert [t["name"] for t in skill_one["record_types"]] == ["Skill"]
+    await call(me, "delete", f"{API}/projects/{skill['id']}", expect=204)
+
     run_id = project["run_id"]
     run = f"{API}/runs/{run_id}"
     empty = (await call(me, "get", run, check=shapes.check_run)).json()

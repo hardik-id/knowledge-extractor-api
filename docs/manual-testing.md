@@ -87,14 +87,14 @@ The text starts with `---` front matter, then `# Architecture decisions 2026`, a
 A project is a name on a run. Start one, then set the documents of its run:
 
 ```sh
-PROJECT=$(call -d '{"name":"Architecture decisions"}' $API/projects)
+PROJECT=$(call -d '{"name":"Architecture decisions"}' $API/projects)   # or add "template_id":"skill" (see $API/definition-templates)
 echo "$PROJECT" | show
 PROJECT_ID=$(echo "$PROJECT" | pick id)
 RUN_ID=$(echo "$PROJECT" | pick run_id)
 call $API/projects | show                  # { "items": [ ... ], "next": null }, last activity first
 ```
 
-The answer (201) has the project `id`, its `name`, `run_id`, `document_count` 0 and `configuration_version` null. The run is empty. Everything else goes through the run:
+The answer (201) has the project `id`, its `name`, `run_id`, `document_count` 0 and `configuration_version` 1 (the configuration is made from the template, the default one without `template_id`, and the version list shows the note `From template: ...`). The run is empty. Everything else goes through the run:
 
 ```sh
 RUN=$(call -X PUT -d "{\"items\":[{\"source\":\"storage\",\"source_ref\":\"$DOC\"}]}" $API/runs/$RUN_ID/documents)

@@ -30,6 +30,7 @@ class ProjectSerializer(serializers.ModelSerializer[Project]):
 class CreateProjectSerializer(serializers.Serializer):  # type: ignore[type-arg]
     name = serializers.CharField(max_length=120)
     description = serializers.CharField(required=False, allow_blank=True)
+    template_id = serializers.CharField(required=False)
 
 
 class UpdateProjectSerializer(serializers.Serializer):  # type: ignore[type-arg]

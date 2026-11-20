@@ -36,7 +36,7 @@ def test_create_makes_an_empty_run(client: Any) -> None:
     assert one["run_id"] != two["run_id"]
     assert two["description"] == "Why"
     assert one["document_count"] == 0
-    assert one["configuration_version"] is None
+    assert one["configuration_version"] == 1
     run = client.get(f"/api/v1/runs/{one['run_id']}")
     assert run.status_code == 200
     assert run.json()["files"] == []
@@ -74,7 +74,6 @@ def test_activity_follows_documents_definition_and_messages(
         format="json",
     )
     assert put.status_code == 200
-    DefinitionVersionFactory(run_id=one["run_id"], version=1)
     DefinitionVersionFactory(run_id=one["run_id"], version=2)
     MessageFactory(run_id=one["run_id"])
     body = client.get(URL).json()["items"]
@@ -198,3 +197,62 @@ def test_a_change_to_a_record_moves_the_project_up(client: Any) -> None:
     record.save()
     assert client.get(URL).json()["items"][0]["id"] == one["id"]
     assert two["id"] in [p["id"] for p in client.get(URL).json()["items"]]
+
+
+def versions_of(client: Any, project: dict[str, Any]) -> list[dict[str, Any]]:
+    url = f"/api/v1/runs/{project['run_id']}/stages/extract/definition/versions"
+    return list(client.get(url).json()["items"])
+
+
+def definition_of(client: Any, project: dict[str, Any]) -> dict[str, Any]:
+    url = f"/api/v1/runs/{project['run_id']}/stages/extract/definition"
+    return dict(client.get(url).json())
+
+
+def test_a_project_without_a_template_starts_from_adr(client: Any) -> None:
+    project = make(client)
+    assert project["configuration_version"] == 1
+    assert [v["note"] for v in versions_of(client, project)] == [
+        "From template: Architecture decision records"
+    ]
+    assert [t["name"] for t in definition_of(client, project)["record_types"]] == [
+        "ADR"
+    ]
+
+
+def test_a_project_from_a_template_starts_with_its_configuration(client: Any) -> None:
+    project = make(client, template_id="policy-rule")
+    assert project["configuration_version"] == 1
+    (version,) = versions_of(client, project)
+    assert version["note"].startswith("From template: ")
+    definition = definition_of(client, project)
+    assert [t["name"] for t in definition["record_types"]] == ["Rule"]
+    assert definition["output"]["format"] == "json"
+
+
+def test_an_unknown_template_is_422_and_leaves_no_project(client: Any) -> None:
+    response = client.post(URL, {"name": "X", "template_id": "nope"}, format="json")
+    assert response.status_code == 422
+    assert response.json()["code"] == "unknown_template"
+    assert Project.objects.count() == 0
+    assert Run.objects.count() == 0
+
+
+def test_two_projects_from_one_template_share_nothing(client: Any) -> None:
+    one = make(client, "One", template_id="skill")
+    two = make(client, "Two", template_id="skill")
+    draft = definition_of(client, one)
+    draft["base_version"] = draft.pop("version")
+    draft["prompt"] = "Changed"
+    saved = client.put(
+        f"/api/v1/runs/{one['run_id']}/stages/extract/definition",
+        draft,
+        format="json",
+    )
+    assert saved.status_code == 200, saved.content
+    assert definition_of(client, two)["prompt"] != "Changed"
+    assert len(versions_of(client, two)) == 1
+    other = make(client, "Three", template_id="skill")
+    assert definition_of(client, other)["prompt"] != "Changed"
+    templates = client.get("/api/v1/definition-templates").json()["items"]
+    assert all(t["definition"]["prompt"] != "Changed" for t in templates)

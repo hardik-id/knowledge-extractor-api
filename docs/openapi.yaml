@@ -1533,6 +1533,9 @@ components:
           maxLength: 120
         description:
           type: string
+        template_id:
+          type: string
+          minLength: 1
       required:
       - name
     CreateRunRequest:

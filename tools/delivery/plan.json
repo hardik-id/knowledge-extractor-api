@@ -51,7 +51,10 @@
     {"index": 71, "kind": "ui", "name": "define-1-field-table", "description": "UI-148: the fields of a record type as a table with tick boxes", "whenToUse": "Any time, with the backend stack running (make up).", "items": [148]},
     {"index": 72, "kind": "ui", "name": "session-1-refused-token", "description": "UI-149: a refused token (401) takes the person to sign in again", "whenToUse": "Any time, with the backend stack running (make up). Can run beside define-1-field-table.", "items": [149]},
     {"index": 81, "name": "definition-1-models", "description": "PBI-369 → 370 → 371: the extraction definition as nested pydantic models, then extraction and the assistant on them", "whenToUse": "Any time. Its final check rebuilds the stack, so not while a UI workflow is validating.", "items": [369, 370, 371]},
-    {"index": 73, "kind": "ui", "name": "define-2-table-width", "description": "UI-158: the field table is a table on a laptop screen too", "whenToUse": "After define-1-field-table, with the backend stack running.", "items": [158]}
+    {"index": 73, "kind": "ui", "name": "define-2-table-width", "description": "UI-158: the field table is a table on a laptop screen too", "whenToUse": "After define-1-field-table, with the backend stack running.", "items": [158]},
+    {"index": 91, "name": "templates-1-api", "description": "PBI-389, then 390 ∥ 391: a registry of built-in templates with a list endpoint, projects that start from one, a sample document for each", "whenToUse": "First of the templates epic. Its final check rebuilds the stack.", "items": [389, 390, 391]},
+    {"index": 92, "kind": "ui", "name": "templates-ui-1-services", "description": "UI-159: template services, the mock and a picker component", "whenToUse": "After templates-1-api, with the backend stack rebuilt and running.", "items": [159]},
+    {"index": 93, "kind": "ui", "name": "templates-ui-2-screens", "description": "UI-160 ∥ 161: New project starts from a template; load a template into an existing project", "whenToUse": "After templates-ui-1-services and define-2-table-width.", "items": [160, 161]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -139,6 +142,12 @@
     {"n": 369, "slug": "definition-models", "title": "The extraction definition as nested pydantic models, with validation on them", "tier": "complex", "deps": []},
     {"n": 370, "slug": "extraction-on-models", "title": "Extraction works on the definition models, not on dicts", "tier": "normal", "deps": [369]},
     {"n": 371, "slug": "assistant-on-models", "title": "The assistant uses the definition models; a proposal is a model", "tier": "normal", "deps": [370]},
-    {"kind": "ui", "n": 158, "slug": "field-table-width", "title": "Define tab: the field table shows as a table on a laptop screen, not only on a wide one", "tier": "normal", "deps": []}
+    {"kind": "ui", "n": 158, "slug": "field-table-width", "title": "Define tab: the field table shows as a table on a laptop screen, not only on a wide one", "tier": "normal", "deps": []},
+    {"n": 389, "slug": "template-registry", "title": "Templates for the extraction configuration: a registry of built-in ones, and a list endpoint", "tier": "normal", "deps": []},
+    {"n": 390, "slug": "project-from-template", "title": "A project starts from a template", "tier": "normal", "deps": [389]},
+    {"n": 391, "slug": "template-samples", "title": "A sample document for each template, read by the scripted extractor", "tier": "normal", "deps": [389]},
+    {"kind": "ui", "n": 159, "slug": "template-services", "title": "Templates: services, the mock and a picker component", "tier": "normal", "deps": []},
+    {"kind": "ui", "n": 160, "slug": "new-project-template", "title": "New project: start from a template", "tier": "normal", "deps": [159]},
+    {"kind": "ui", "n": 161, "slug": "load-template", "title": "Define tab: load a template into an existing project", "tier": "normal", "deps": [159]}
   ]
 }

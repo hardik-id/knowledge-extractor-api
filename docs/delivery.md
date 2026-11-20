@@ -104,6 +104,16 @@ Tracked in #372. One description of the extraction definition's shape: nested py
 | --- | --- | --- |
 | `definition-1-models` | #369 → #370 → #371 | nothing |
 
+## The templates epic
+
+Tracked in #392. Several starting configurations for extraction (ADR, Skill, Policy rule, blank) instead of one hard-wired default.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `templates-1-api` | #389 → (#390 ∥ #391) | nothing |
+| `templates-ui-1-services` | UI #159 | 1, with the stack rebuilt and running |
+| `templates-ui-2-screens` | UI #160 ∥ #161 | ui-1, and `define-2-table-width` |
+
 ## Single items
 
 | Workflow | PBIs | Start it after |

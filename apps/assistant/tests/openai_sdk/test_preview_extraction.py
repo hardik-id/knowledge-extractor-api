@@ -23,11 +23,16 @@ from apps.extraction.models import (
     FieldValue,
 )
 from apps.extraction.tests.factories import DefinitionVersionFactory
-from apps.extraction.validation import validate_draft
+from apps.extraction.validation import parse_draft
 from apps.runs.models import Cell
 from apps.runs.tests.factories import CellFactory, RunFactory, RunFileFactory
 
 SAMPLE = "enriched/engineering/architecture/architecture-decisions-2026.md"
+
+
+def dumped(data: Any) -> dict[str, Any]:
+    """The draft as plain data, ids filled."""
+    return parse_draft(data).model_dump()
 
 
 def preview_call(
@@ -41,7 +46,7 @@ def preview_call(
 
 
 def _ids() -> tuple[str, list[str]]:
-    record_type = validate_draft(adr())["record_types"][0]
+    record_type = dumped(adr())["record_types"][0]
     return record_type["id"], [f["id"] for f in record_type["fields"]]
 
 

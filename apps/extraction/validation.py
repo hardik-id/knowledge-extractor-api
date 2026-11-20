@@ -22,7 +22,6 @@ __all__ = [
     "VALUE_TYPES",
     "DraftSerializer",
     "parse_draft",
-    "validate_draft",
 ]
 
 
@@ -78,11 +77,6 @@ def parse_draft(data: Any) -> Draft:
         raise ApiError(
             "invalid_definition", "The definition is not valid.", {"errors": problems}
         ) from None
-
-
-def validate_draft(data: Any) -> dict[str, Any]:
-    """``parse_draft`` as plain JSON data, for the callers that store or pass it on."""
-    return parse_draft(data).model_dump()
 
 
 def _message(problem: Any) -> str:

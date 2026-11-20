@@ -6,12 +6,13 @@ from typing import Any
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
-from apps.assistant.agents.base import Agent, AgentEvent, Message, Proposal, TextDelta
+from apps.assistant.agents.base import Agent, AgentEvent, Message, TextDelta
 from apps.assistant.agents.registry import check_settings, get_agent
 from apps.assistant.agents.scripted import ScriptedAgent, split_into_deltas
+from apps.assistant.proposal import Proposal
 from apps.assistant.tests.fakes import FakeAgent, FakeWorkspace
-from apps.assistant.tests.test_scripted import adr, assert_valid, bare
-from apps.extraction.validation import validate_draft
+from apps.assistant.tests.test_scripted import adr, assert_valid, bare, validated
+from apps.extraction.definition import Draft
 
 Definition = dict[str, Any]
 
@@ -52,7 +53,9 @@ async def collect(
     definition: Definition,
     history: list[Message] | None = None,
 ) -> list[AgentEvent]:
-    stream = agent.reply(text, definition, history or [], FakeWorkspace())
+    stream = agent.reply(
+        text, Draft.model_validate(definition), history or [], FakeWorkspace()
+    )
     return [event async for event in stream]
 
 
@@ -78,10 +81,10 @@ async def test_a_reply_is_deltas_then_at_most_one_proposal(
     assert events[: len(deltas)] == deltas, "the proposal comes after every delta"
     assert definition == before
     if proposals:
-        validate_draft(proposals[0].definition)
+        dumped = proposals[0].definition.model_dump()
         assert proposals[0].reasons
-        if proposals[0].definition["record_types"]:
-            assert_valid(proposals[0].definition)
+        if dumped["record_types"]:
+            assert_valid(dumped)
 
 
 @pytest.mark.asyncio
@@ -117,7 +120,7 @@ async def test_the_scripted_agent_ignores_history_and_makes_ids_from_the_given_f
     history = [Message("user", "hi"), Message("assistant", "hello")]
     events = await collect(agent, "Extract all ADRs", bare(), history)
     _, [proposal] = split(events)
-    assert proposal.definition["record_types"][0]["id"] == "x-1"
+    assert proposal.definition.record_types[0].id == "x-1"
 
 
 @pytest.mark.asyncio
@@ -127,7 +130,7 @@ async def test_a_fake_agent_implements_the_interface() -> None:
     events = await collect(agent, "hi", definition)
     deltas, proposals = split(events)
     assert "".join(d.text for d in deltas) == "Hello, you said hi."
-    assert proposals[0].definition == definition
+    assert proposals[0].definition.model_dump() == validated(definition)
 
 
 @pytest.mark.asyncio

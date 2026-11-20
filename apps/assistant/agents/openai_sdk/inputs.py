@@ -4,8 +4,9 @@ import json
 
 from agents import TResponseInputItem
 
-from apps.assistant.agents.base import Definition, DocumentRef, Message
+from apps.assistant.agents.base import DocumentRef, Message
 from apps.assistant.agents.openai_sdk.tools._shared import NAME_CHARS, as_data
+from apps.extraction.definition import Draft
 
 LISTED_DOCUMENTS = 50  # documents named in the request
 HISTORY_MESSAGES = 20  # the most recent turns of the conversation
@@ -14,7 +15,7 @@ HISTORY_CHARS = 2000  # of each earlier turn
 
 def build_input(
     text: str,
-    definition: Definition,
+    definition: Draft,
     history: list[Message],
     refs: list[DocumentRef],
 ) -> list[TResponseInputItem]:
@@ -37,7 +38,7 @@ def build_input(
         documents = "This run has no documents to read."
     context = (
         "The definition on my screen:\n"
-        f"```json\n{json.dumps(definition, ensure_ascii=False, indent=2)}\n```\n\n"
+        f"```json\n{json.dumps(definition.model_dump(), ensure_ascii=False, indent=2)}\n```\n\n"
         f"{documents}\n\n"
         f"My request:\n{text}"
     )

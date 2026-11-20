@@ -3,16 +3,16 @@
 import copy
 import itertools
 import re
+from dataclasses import dataclass
 from typing import Any
 
-from apps.assistant.agents.base import Proposal
-from apps.assistant.agents.scripted import Reply, assistant_reply, key_from_name
+from apps.assistant.agents.scripted import assistant_reply, key_from_name
 from apps.extraction.defaults import (
     DEFAULT_OUTPUT,
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
 
 Definition = dict[str, Any]
 
@@ -41,11 +41,35 @@ def adr() -> Definition:
     )
 
 
+@dataclass
+class Proposed:
+    """A proposal as the JSON it is stored and sent as."""
+
+    definition: Definition
+    reasons: list[dict[str, str]]
+
+
+@dataclass
+class Reply:
+    text: str
+    proposal: Proposed | None
+
+
+def validated(definition: Definition) -> Definition:
+    """The definition as the models keep it: ids filled, strings trimmed."""
+    return Draft.model_validate(definition).model_dump()
+
+
 def reply(text: str, definition: Definition | None = None) -> Reply:
-    return assistant_reply(text, adr() if definition is None else definition, ids)
+    given = Draft.model_validate(adr() if definition is None else definition)
+    result = assistant_reply(text, given, ids)
+    if result.proposal is None:
+        return Reply(result.text, None)
+    dumped = result.proposal.model_dump()
+    return Reply(result.text, Proposed(dumped["definition"], dumped["reasons"]))
 
 
-def proposed(text: str, definition: Definition | None = None) -> Proposal:
+def proposed(text: str, definition: Definition | None = None) -> Proposed:
     result = reply(text, definition)
     assert result.proposal, f'expected a proposal for "{text}": {result.text}'
     return result.proposal
@@ -63,7 +87,7 @@ def assert_valid(definition: Definition) -> None:
                 assert field["choices"]
         field_ids = [f["id"] for f in record_type["fields"]]
         assert len(set(field_ids)) == len(field_ids)
-    validate_draft(definition)
+    validated(definition)
 
 
 def fields(definition: Definition) -> list[dict[str, Any]]:
@@ -81,7 +105,7 @@ def test_adr_gives_the_adr_record_type_and_its_template_with_fresh_ids() -> None
     proposal = proposed("Extract all ADRs", bare())
     definition = proposal.definition
     assert definition["record_types"][0]["name"] == "ADR"
-    assert definition["output"]["template"] == DEFAULT_OUTPUT["template"]
+    assert definition["output"]["template"] == DEFAULT_OUTPUT["template"].strip()
     assert definition["record_types"][0]["id"] != DEFAULT_RECORD_TYPES[0]["id"]
     assert len(proposal.reasons) > 1
     assert_valid(definition)
@@ -159,7 +183,10 @@ def test_add_does_not_touch_the_template_when_the_format_is_not_markdown() -> No
     definition = adr()
     definition["output"]["format"] = "json"
     next_definition = proposed("add owner", definition).definition
-    assert next_definition["output"]["template"] == definition["output"]["template"]
+    assert (
+        next_definition["output"]["template"]
+        == definition["output"]["template"].strip()
+    )
 
 
 def test_remove_and_drop_also_from_the_template() -> None:

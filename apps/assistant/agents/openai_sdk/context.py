@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass, field
 
-from apps.assistant.agents.base import DocumentRef, Proposal, ToolUsed, Workspace
+from apps.assistant.agents.base import DocumentRef, ToolUsed, Workspace
+from apps.assistant.proposal import Proposal
 
 
 @dataclass

@@ -6,16 +6,15 @@ always ends: if the agent fails, it ends with an apology (services.close_reply).
 """
 
 from contextlib import aclosing
-from typing import Any
 
 import structlog
 from asgiref.sync import async_to_sync, sync_to_async
 
 from apps.assistant import services, telemetry
-from apps.assistant.agents.base import Proposal, TextDelta
+from apps.assistant.agents.base import TextDelta
 from apps.assistant.agents.registry import agent_kind, get_agent
+from apps.assistant.proposal import Proposal
 from apps.core.jobs import job
-from apps.extraction.validation import validate_draft
 from apps.realtime import services as realtime
 
 log = structlog.get_logger(__name__)
@@ -72,22 +71,10 @@ async def _stream(
                     request.run_id, services.delta_event(message_id, event.text)
                 )
             elif isinstance(event, Proposal):
-                proposal = _proposal(event)
-                if not await sync_to_async(services.set_proposal)(message_id, proposal):
+                if not await sync_to_async(services.set_proposal)(message_id, event):
                     return False
                 reply.proposal()
                 await realtime.apublish_run_event(
-                    request.run_id, services.proposal_event(message_id, proposal)
+                    request.run_id, services.proposal_event(message_id, event)
                 )
     return bool(await sync_to_async(services.finish_reply)(message_id))
-
-
-def _proposal(event: Proposal) -> dict[str, Any]:
-    """The proposal as stored and sent: a valid draft and plain ``{path, reason}`` pairs."""
-    return {
-        "definition": validate_draft(event.definition),
-        "reasons": [
-            {"path": str(reason["path"]), "reason": str(reason["reason"])}
-            for reason in event.reasons
-        ],
-    }

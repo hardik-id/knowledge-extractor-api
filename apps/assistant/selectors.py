@@ -8,7 +8,6 @@ from typing import Any
 from asgiref.sync import sync_to_async
 
 from apps.assistant.agents.base import (
-    Definition,
     DocumentRef,
     FileRecords,
     RecordView,
@@ -18,7 +17,7 @@ from apps.assistant.models import Message
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.extraction import selectors as extraction
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
@@ -50,9 +49,7 @@ class OwnerWorkspace:
     async def extractions(self) -> list[FileRecords]:
         return await sync_to_async(self._extractions)()
 
-    async def preview(
-        self, definition: Definition, document_id: str
-    ) -> list[RecordView]:
+    async def preview(self, definition: Draft, document_id: str) -> list[RecordView]:
         return await sync_to_async(self._preview)(definition, document_id)
 
     def _documents(self) -> list[DocumentRef]:
@@ -80,11 +77,9 @@ class OwnerWorkspace:
             for found in extraction.list_extractions(self._owner, self._run.pk)
         ]
 
-    def _preview(self, definition: Definition, document_id: str) -> list[RecordView]:
+    def _preview(self, definition: Draft, document_id: str) -> list[RecordView]:
         text = self._read(document_id)
-        found = extraction.preview_records(
-            self._owner, self._run.pk, text, validate_draft(definition)
-        )
+        found = extraction.preview_records(self._owner, self._run.pk, text, definition)
         return [_record_view(record, record.values) for record in found]
 
 

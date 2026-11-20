@@ -16,12 +16,13 @@ from django.db.models.functions import Concat
 from django.utils import timezone
 
 from apps.assistant import selectors, tasks
-from apps.assistant.agents.base import Definition
 from apps.assistant.agents.base import Message as Turn
 from apps.assistant.models import Message, Role, Status
+from apps.assistant.proposal import Proposal
 from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
+from apps.extraction.validation import parse_draft
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors as runs
@@ -42,7 +43,7 @@ def send_message(user: User, run_id: Any, *, text: str, definition: Any) -> Mess
     text = text.strip()
     if not text:
         raise ApiError("empty_message")
-    draft = validate_draft(definition)
+    draft = parse_draft(definition)
     try:
         with transaction.atomic():
             if Message.objects.filter(run_id=run.pk, status=Status.STREAMING).exists():
@@ -52,7 +53,7 @@ def send_message(user: User, run_id: Any, *, text: str, definition: Any) -> Mess
                 role=Role.USER,
                 text=text,
                 status=Status.DONE,
-                definition=draft,
+                definition=draft.model_dump(),
             )
             reply = Message.objects.create(
                 run_id=run.pk,
@@ -112,7 +113,7 @@ class Request:
 
     run_id: Any
     text: str
-    definition: Definition
+    definition: Draft
     history: list[Turn]
     workspace: selectors.OwnerWorkspace
 
@@ -132,7 +133,12 @@ def start_reply(message_id: Any) -> Request | None:
     if message is None:
         return None
     asked = message.reply_to
-    if asked is None or message.text or message.proposal is not None:
+    if (
+        asked is None
+        or not asked.definition
+        or message.text
+        or message.proposal is not None
+    ):
         close_reply(message.pk)
         return None
     history = [
@@ -146,7 +152,7 @@ def start_reply(message_id: Any) -> Request | None:
     return Request(
         run_id=message.run_id,
         text=asked.text,
-        definition=asked.definition or {},
+        definition=Draft.model_validate(asked.definition),
         history=history,
         workspace=selectors.run_workspace(message),
     )
@@ -166,10 +172,12 @@ def append_text(message_id: Any, text: str) -> bool:
     )
 
 
-def set_proposal(message_id: Any, proposal: dict[str, Any]) -> bool:
+def set_proposal(message_id: Any, proposal: Proposal) -> bool:
     """Store the reply's proposal. False when the reply is no longer streaming."""
     return bool(
-        _streaming(message_id).update(proposal=proposal, updated_at=timezone.now())
+        _streaming(message_id).update(
+            proposal=proposal.model_dump(), updated_at=timezone.now()
+        )
     )
 
 
@@ -202,11 +210,11 @@ def delta_event(message_id: Any, text: str) -> dict[str, Any]:
     return {"type": "assistant.delta", "message_id": str(message_id), "text": text}
 
 
-def proposal_event(message_id: Any, proposal: dict[str, Any]) -> dict[str, Any]:
+def proposal_event(message_id: Any, proposal: Proposal) -> dict[str, Any]:
     return {
         "type": "assistant.proposal",
         "message_id": str(message_id),
-        "proposal": proposal,
+        "proposal": proposal.model_dump(),
     }
 
 

@@ -4,25 +4,21 @@ import json
 
 from pydantic import ValidationError
 
-from apps.assistant.agents.base import Proposal
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 from apps.assistant.agents.openai_sdk.tools._definition_schema import (
     DefinitionArgs,
-    Strict,
+    ReasonArgs,
 )
-from apps.assistant.agents.openai_sdk.tools._shared import declare, error
+from apps.assistant.agents.openai_sdk.tools._shared import Strict, declare, error
+from apps.assistant.proposal import Proposal, Reason
 from apps.core.errors import ApiError
-from apps.extraction.validation import validate_draft
-
-
-class ReasonArgs(Strict):
-    path: str
-    reason: str
+from apps.extraction.validation import parse_draft
 
 
 class ProposeArgs(Strict):
-    definition: DefinitionArgs
-    reasons: list[ReasonArgs]
+    # Derived at import, so mypy cannot see their type.
+    definition: DefinitionArgs  # type: ignore[valid-type]
+    reasons: list[ReasonArgs]  # type: ignore[valid-type]
 
 
 def _schema_errors(err: ValidationError) -> str:
@@ -49,6 +45,7 @@ async def _propose(state: ReplyContext, arguments: str) -> str:
         )
     try:
         args = ProposeArgs.model_validate_json(arguments or "{}")
+        given = args.model_dump()
     except ValidationError as err:
         state.rejected += 1
         return error(
@@ -56,21 +53,21 @@ async def _propose(state: ReplyContext, arguments: str) -> str:
             f"{_schema_errors(err)}. Correct them and call propose_definition again."
         )
     try:
-        definition = validate_draft(args.definition.model_dump())
+        definition = parse_draft(given["definition"])
     except ApiError as err:
         state.rejected += 1
         return error(
             f"the definition is not valid: {_definition_errors(err)} "
             "Correct it and call propose_definition again."
         )
-    if not args.reasons:
+    if not given["reasons"]:
         state.rejected += 1
         return error(
             "give one reason for each change. Call propose_definition again with reasons."
         )
     state.proposal = Proposal(
-        definition,
-        [{"path": r.path, "reason": r.reason} for r in args.reasons],
+        definition=definition,
+        reasons=[Reason.model_validate(r) for r in given["reasons"]],
     )
     return (
         "Accepted. The proposal will be shown to the person, who decides whether to "

@@ -15,6 +15,7 @@ from apps.extraction.defaults import (
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
+from apps.extraction.definition import Draft
 from apps.extraction.extractors import get_extractor
 from apps.extraction.extractors.base import Definition, RawRecord, RawValue
 from apps.extraction.extractors.records import StoredRecord, stored_records
@@ -26,7 +27,6 @@ from apps.extraction.models import (
     Review,
 )
 from apps.extraction.spans import Span
-from apps.extraction.validation import parse_draft
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
@@ -120,18 +120,17 @@ def list_extractions(user: User, run_id: Any) -> list[Extraction]:
 
 
 def preview_records(
-    user: User, run_id: Any, text: str, draft: dict[str, Any]
+    user: User, run_id: Any, text: str, draft: Draft
 ) -> list[StoredRecord]:
     """The records an extraction of ``text`` with ``draft`` would store, storing nothing.
 
     The configured extractor runs with the run's example records, its output is
     checked as in a real execution (``stored_records``) and merged into an empty
     extraction, so the order is the stored one. The draft is a definition without
-    a version (``validate_draft`` shape). Someone else's run is a 404.
+    a version. Someone else's run is a 404.
     """
     run = runs.get_run(user, run_id)
-    parsed = parse_draft(draft)
-    definition = Definition(0, parsed.prompt, parsed.record_types)
+    definition = Definition(0, draft.prompt, draft.record_types)
     raw = get_extractor().extract(text, definition, example_records(run.pk))
     return merge_extracted_records([], stored_records(text, raw))
 

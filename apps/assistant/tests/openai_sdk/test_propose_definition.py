@@ -22,7 +22,7 @@ from apps.assistant.tests.openai_sdk.helpers import (
 )
 from apps.assistant.tests.test_scripted import adr, bare
 from apps.extraction import validation
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
 
 
 @pytest.mark.asyncio
@@ -35,16 +35,14 @@ async def test_new_things_get_ids_and_the_definition_is_not_changed() -> None:
     model = ScriptedModel(
         [[propose(proposal_args(draft))], [assistant_message("Done.")]]
     )
-    given = validate_draft(bare())
+    given = Draft.model_validate(bare())
     before = copy.deepcopy(given)
     events = [
         e async for e in OpenAIAgent(model).reply("hi", given, [], FakeWorkspace())
     ]
     _, [proposal] = split(events)
-    assert all(rt["id"] for rt in proposal.definition["record_types"])
-    assert all(
-        f["id"] for rt in proposal.definition["record_types"] for f in rt["fields"]
-    )
+    assert all(rt.id for rt in proposal.definition.record_types)
+    assert all(f.id for rt in proposal.definition.record_types for f in rt.fields)
     assert given == before
 
 
@@ -69,7 +67,7 @@ async def test_an_invalid_first_proposal_goes_back_and_is_corrected_in_a_second_
     assert "the definition is not valid" in error
     assert "no two may share one" in error
     text, [proposal] = split(events)
-    assert proposal.definition == validate_draft(adr())
+    assert proposal.definition.model_dump() == Draft.model_validate(adr()).model_dump()
     assert text == "Here is a first try.\n\nFixed the keys."
 
 
@@ -111,7 +109,7 @@ async def test_only_the_first_valid_proposal_reaches_the_person() -> None:
     )
     events = await collect(OpenAIAgent(model))
     _, [proposal] = split(events)
-    assert proposal.definition["prompt"] == adr()["prompt"]
+    assert proposal.definition.prompt == adr()["prompt"]
     assert "already accepted" in tool_outputs(model.calls[-1])[-1]
 
 

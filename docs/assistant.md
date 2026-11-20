@@ -18,7 +18,7 @@ A run has one conversation. Each message is stored (`apps/assistant/models.py`, 
 }
 ```
 
-`role` is `user` or `assistant`. `status` is `streaming` while a reply is being written, then `done`; a person's message is `done` at once. `proposal` is `null` when there is none, and always `null` on a person's message. The proposal's `definition` has the shape of a saved definition without `version`, as `validate_draft` returns it.
+`role` is `user` or `assistant`. `status` is `streaming` while a reply is being written, then `done`; a person's message is `done` at once. `proposal` is `null` when there is none, and always `null` on a person's message. The proposal's `definition` has the shape of a saved definition without `version`, as `Draft.model_dump()` gives it.
 
 | Call | Body | Answer |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ A run has one conversation. Each message is stored (`apps/assistant/models.py`, 
 | `POST /api/v1/runs/{run_id}/extraction/assistant/messages` | `{ "text", "definition" }` | 201, the stored **user** message (one object) |
 | `DELETE /api/v1/runs/{run_id}/extraction/assistant/messages` | none | 204, every message of the run removed; the run's sockets get `{ "type": "assistant.cleared" }` after the commit. Nothing else changes (not the definition, not the records). 409 `assistant_busy` while a reply is `streaming` (a stale one is closed first) |
 
-The POST body's `definition` is the draft on the person's screen, saved or not, without `version`. It goes through `validate_draft` and is kept with the person's message: the agent works from it, not from the last saved version. The text is stored without leading and trailing spaces.
+The POST body's `definition` is the draft on the person's screen, saved or not, without `version`. It goes through `parse_draft` and is kept with the person's message: the agent works from it, not from the last saved version. The text is stored without leading and trailing spaces.
 
 | Status | Code | When |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ Each event of the agent is stored first and announced after, on the run's socket
 | Agent event | Stored | Sent |
 | --- | --- | --- |
 | `TextDelta(text)` | appended to the reply's `text` | `{ "type": "assistant.delta", "message_id", "text" }` |
-| `Proposal(definition, reasons)` | the reply's `proposal`, the definition through `validate_draft` | `{ "type": "assistant.proposal", "message_id", "proposal": { "definition", "reasons" } }` |
+| `Proposal(definition, reasons)` | the reply's `proposal`, the definition is a `Draft`, stored as `model_dump()` | `{ "type": "assistant.proposal", "message_id", "proposal": { "definition", "reasons" } }` |
 | end of the stream | `status` becomes `done` | `{ "type": "assistant.done", "message_id" }` |
 
 Every write changes the reply only while it is `streaming`. Once it is done (or gone, with its run) the job stops.
@@ -112,7 +112,7 @@ Limits:
 
 ## The scripted agent
 
-`apps/assistant/agents/scripted.py` ports the UI's `src/services/mock/mock-assistant.ts`: keyword rules, no model, no key, deterministic. It does not read the documents. The header comment of the module lists what it understands. A bare prompt (a definition with no record types) proposes record types and fields; "add", "remove", "rename", "make exact", "make inferred", "split", "can have several values", "output as ..." and "use ... in the template" change the definition; anything else answers with help and no proposal. Proposals have unique keys, a choice field has a choice, and they pass `validate_draft`.
+`apps/assistant/agents/scripted.py` ports the UI's `src/services/mock/mock-assistant.ts`: keyword rules, no model, no key, deterministic. It does not read the documents. The header comment of the module lists what it understands. A bare prompt (a definition with no record types) proposes record types and fields; "add", "remove", "rename", "make exact", "make inferred", "split", "can have several values", "output as ..." and "use ... in the template" change the definition; anything else answers with help and no proposal. Proposals have unique keys, a choice field has a choice, and they are valid `Draft`s.
 
 Its reply text is cut into deltas of three words each.
 
@@ -129,7 +129,7 @@ Its reply text is cut into deltas of three words each.
 `ASSISTANT_AGENT=openai` chooses the package `apps/assistant/agents/openai_sdk/`, an agent built with the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) (`openai-agents`). It reads the request, the definition on the person's screen, the conversation and, when it wants to, samples of the run's documents, explains itself and proposes a definition.
 
 - **Text.** The model's streamed text becomes `TextDelta`s as it arrives. When the model speaks again after a tool call, the new text starts after a blank line.
-- **The proposal** is a call of the tool `propose_definition(definition, reasons)`. Its arguments are checked against a strict JSON schema (the shape of `validate_draft`: modes, value types and formats as enums) and then by `validate_draft`. An invalid proposal goes back to the model as the tool's answer, starting `Error:` and saying what is wrong (where it does not fit the schema, without echoing the values), so it can correct it in the next turn. The first valid proposal is kept and later calls are refused, so at most one reaches the person, after all the text. A record type or field with an empty `id` gets one from `validate_draft`; the instructions tell the model to keep the ids of what stays.
+- **The proposal** is a call of the tool `propose_definition(definition, reasons)`. Its arguments are checked against a strict JSON schema (derived from the models of `apps/extraction/definition.py` by `tools/_definition_schema.py`, so every property is required and none is extra; modes, value types and formats are enums) and then by `parse_draft`. An invalid proposal goes back to the model as the tool's answer, starting `Error:` and saying what is wrong (where it does not fit the schema, without echoing the values), so it can correct it in the next turn. The first valid proposal is kept and later calls are refused, so at most one reaches the person, after all the text. A record type or field with an empty `id` gets one from `parse_draft`; the instructions tell the model to keep the ids of what stays.
 - **`preview_extraction(definition, document_id)`** validates the definition as `propose_definition` does, runs `Workspace.preview` and summarises it: records per record type; per field the records where it was found, not found, or found but not anchored; up to three example values. Nothing is saved and it is not a proposal.
 - **`read_document(document_id)`** reads a sample of one of the run's documents, through `Workspace.read` (as the run's owner, only the run's own files).
 - **`find_in_documents(text)`** searches the run's documents for a literal phrase (2 to 100 characters, case does not matter, no patterns). Per matching document it gives the number of matches and up to 3 snippets of about 120 characters (12 in total, the first 50 documents searched), as untrusted data. No match is a plain answer, not an error.
@@ -266,7 +266,7 @@ ASSISTANT_AGENT=openai uv run python manage.py ask_assistant "Extract every arch
 uv run python manage.py ask_assistant "add a field for approval date" --run <run id>
 ```
 
-It prints the deltas as they stream, each tool call on a line of its own as it ends (`[tool survey_documents: ok]`, the outcome being `ok`, `error` or `refused`), then the proposal as JSON (`validate_draft` checked), or `(no proposal)`. Without `--run` the agent starts from a bare definition and has no documents; with it, from the run's latest saved definition and with the run's documents. Nothing is stored. It uses whichever agent `ASSISTANT_AGENT` names, so it also tries the scripted agent.
+It prints the deltas as they stream, each tool call on a line of its own as it ends (`[tool survey_documents: ok]`, the outcome being `ok`, `error` or `refused`), then the proposal as JSON or `(no proposal)`. Without `--run` the agent starts from a bare definition and has no documents; with it, from the run's latest saved definition and with the run's documents. Nothing is stored. It uses whichever agent `ASSISTANT_AGENT` names, so it also tries the scripted agent.
 
 ### Tests
 
@@ -276,7 +276,7 @@ It prints the deltas as they stream, each tool call on a line of its own as it e
 
 Any framework plugs in behind the same interface: a class with `async def reply(text, definition, history, workspace)` that yields `TextDelta`s and at most one `Proposal`, named by its dotted path in `ASSISTANT_AGENT` (or added to `_BUILT_IN` in the registry). With LangChain's deep agents, for example:
 
-- build the agent with two tools in the same shape: `propose_definition` validates with `validate_draft`, keeps the first valid proposal in per-reply state and returns errors as text; `read_document` calls `workspace.read` and caps the sample;
+- build the agent with two tools in the same shape: `propose_definition` validates with `parse_draft`, keeps the first valid proposal in per-reply state and returns errors as text; `read_document` calls `workspace.read` and caps the sample;
 - stream it (`astream_events` or `astream` with `stream_mode="messages"`) and yield a `TextDelta` for each text chunk of the model;
 - after the stream, yield the kept proposal;
 - keep the limits (a recursion limit for turns, a timeout around the stream), turn its tracing off unless it goes to our own collector, and end a failed or cut-off reply with a sentence rather than an exception.

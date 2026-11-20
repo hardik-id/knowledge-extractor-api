@@ -1,6 +1,6 @@
 # knowledge-extractor chart
 
-Runs the Knowledge Extractor API in a Kubernetes cluster (AKS, dev environment): the API, the background worker and the database migration. Templates only for now; nothing here deploys itself. What the chart contains, what it expects from the cluster and every setting: [docs/deploy.md](../../../docs/deploy.md).
+Runs the Knowledge Extractor API in a Kubernetes cluster (AKS, dev environment): the API, the background worker, the database migration, the UI and the Ingress. Templates only for now; nothing here deploys itself. What the chart contains, what it expects from the cluster and every setting: [docs/deploy.md](../../../docs/deploy.md).
 
 ## Install or upgrade
 
@@ -13,6 +13,10 @@ helm upgrade --install knowledge-extractor deploy/helm/knowledge-extractor \
 ```
 
 Fill the placeholders in `values-dev.yaml` first (registry, host names, Entra ids, identity ids, Azure OpenAI). `make chart-check` lints and renders the chart without a cluster.
+
+## The UI and the Ingress
+
+`ui.*` names the UI image (built from the `hardik-id/knowledge-extractor` repository, port 3000, probe path `ui.probePath`); `ui.enabled=false` leaves it out. With `ingress.enabled` and `ingress.host` one host serves `/` (UI), `/api` and `/ws` (API), and `DJANGO_ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` follow from the host unless set in `config`. The UI's settings are compiled into its image, so for the host `<host>` it must have been built with `NEXT_PUBLIC_BACKEND_MODE=http`, `NEXT_PUBLIC_API_BASE_URL=https://<host>/api/v1`, `NEXT_PUBLIC_WS_BASE_URL=wss://<host>`, `NEXT_PUBLIC_AUTH_MODE=entra` with the tenant, client and API scope ids, and `NEXT_PUBLIC_APPS`. The UI pods run as uid 1001 (the image's user `nextjs`, `ui.podSecurityContext`) with the api's container security context. The Entra redirect URIs and the WebSocket timeouts: [docs/deploy.md](../../../docs/deploy.md).
 
 ## Secrets
 

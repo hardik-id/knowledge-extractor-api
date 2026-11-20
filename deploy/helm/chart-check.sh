@@ -87,4 +87,36 @@ case $output in
   *) echo "FAIL: unexpected message: $output"; exit 1 ;;
 esac
 
+echo "== the UI and the Ingress, on and off"
+# values-dev.yaml has both on. Every combination must render and validate.
+for flags in "--set ui.enabled=false" "--set ingress.enabled=false" "--set ui.enabled=false --set ingress.enabled=false"; do
+  echo "-- $flags"
+  # shellcheck disable=SC2086
+  out=$(run_helm template check $chart -f $chart/values-dev.yaml $source_args --set config.DJANGO_ALLOWED_HOSTS=chart-check.example $flags)
+  printf '%s\n' "$out" | run_kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" -
+  case $flags in *ui.enabled=false*)
+    case $out in *"component: ui"*) echo "FAIL: ui rendered with ui.enabled=false"; exit 1 ;; esac ;;
+  esac
+  case $flags in *ingress.enabled=false*)
+    case $out in *"kind: Ingress"*) echo "FAIL: Ingress rendered with ingress.enabled=false"; exit 1 ;; esac ;;
+  esac
+done
+
+echo "== the host name of the Ingress gives the allowed hosts and the origin"
+out=$(run_helm template check $chart $source_args --set ingress.enabled=true --set ingress.host=chart-check.example)
+case $out in
+  *'DJANGO_ALLOWED_HOSTS: "chart-check.example"'*'CORS_ALLOWED_ORIGINS: "https://chart-check.example"'*) echo "ok" ;;
+  *) echo "FAIL: allowed hosts and origin not derived from ingress.host"; exit 1 ;;
+esac
+
+echo "== an Ingress without a host: the chart must refuse"
+if output=$(run_helm template check $chart $source_args --set ingress.enabled=true --set config.DJANGO_ALLOWED_HOSTS=chart-check.example 2>&1); then
+  echo "FAIL: the chart rendered an Ingress without a host"
+  exit 1
+fi
+case $output in
+  *"ingress.host is empty"*) echo "ok: $output" ;;
+  *) echo "FAIL: unexpected message: $output"; exit 1 ;;
+esac
+
 echo "chart-check passed"

@@ -16,9 +16,11 @@ In the table `<release>` stands for the release's full name: `<release>-knowledg
 | ConfigMap `<release>` | `configmap.yaml` | The settings that are not secret. `envFrom` in api and worker. An ordinary resource of the release. A change restarts api and worker (a checksum annotation). |
 | Secret `<release>-secrets` | `secret.yaml` | Only when `secrets.existingSecret` is empty and Key Vault is off. An ordinary resource of the release. |
 | ConfigMap `<release>-migrate`, Secret `<release>-migrate-secrets` | `configmap-migrate.yaml`, `secret-migrate.yaml` | The migration Job's own copies of the two above (the Secret only when the chart makes it), same data. Helm hooks, weight `-10`, removed when the Job succeeded. |
+| Deployment `<release>-ui` and Service `<release>-ui` | `ui-deployment.yaml`, `ui-service.yaml` | The UI image: a Next.js server on port 3000. Start-up, liveness and readiness probe `ui.probePath` (`/healthz`, answers without the backend and without sign-in). Own image and tag (`ui.image`). `ui.enabled=false` leaves both out. |
+| Ingress `<release>` | `ingress.yaml` | Only with `ingress.enabled`. One host (`ingress.host`): `/api` and `/ws` to the api Service, everything else to the ui Service. |
 | ServiceAccount | `serviceaccount.yaml` | The identity of api and worker, with the Workload Identity annotations. |
 
-The api, the worker and the migration share one image (`image.repository`, `image.tag`; the [Dockerfile](docker.md)). Pods run as user 999, non-root, no privilege escalation, all capabilities dropped, the default seccomp profile and a read-only root file system (`/tmp` is an `emptyDir`; the app writes nowhere else). Requests and limits and the replica counts are in `values.yaml`.
+The UI's pods run as the image's user (uid 1001) with the same container security defaults and have no ServiceAccount token (it calls no Azure service). The api, the worker and the migration share one image (`image.repository`, `image.tag`; the [Dockerfile](docker.md)). Pods run as user 999, non-root, no privilege escalation, all capabilities dropped, the default seccomp profile and a read-only root file system (`/tmp` is an `emptyDir`; the app writes nowhere else). Requests and limits and the replica counts are in `values.yaml`.
 
 The ConfigMap and the chart-made Secret that api and worker read are ordinary release resources, so a failed migration, a rollback and `helm uninstall` behave as Helm usually does. The first install has none of them when the `pre-install` migration runs, and an upgrade must not change them before the migration succeeded, so the Job reads hook copies of its own (`<release>-migrate`, `<release>-migrate-secrets`). The chart's README has the consequences.
 
@@ -30,7 +32,17 @@ The ConfigMap and the chart-made Secret that api and worker read are ordinary re
 - For `keyVault.enabled`: the AKS add-on of the Secrets Store CSI driver with the Azure provider, which installs the `SecretProviderClass` CRD.
 - **A Secret** with the secret settings, or the values to make one (below).
 - For telemetry: **an OpenTelemetry collector** in the cluster, whose OTLP/HTTP address is `OTEL_EXPORTER_OTLP_ENDPOINT`. Telemetry is off until `OTEL_SDK_DISABLED` is `false`.
-- **TLS in front.** The production settings redirect to HTTPS and trust `X-Forwarded-Proto`; the ingress (not in the chart yet) must send it.
+- **An Ingress controller** (ingress-nginx in `values-dev.yaml`; `ingress.className`) and a **DNS name** for `ingress.host` pointing at it.
+- **TLS at the Ingress.** The production settings redirect to HTTPS and trust `X-Forwarded-Proto` (`SECURE_PROXY_SSL_HEADER`), which every usual controller sends once it ends TLS; the chart's `DJANGO_SECURE_SSL_REDIRECT` stays `true` and the app needs no change. The certificate is a Secret named in `ingress.tls.secretName` (made by cert-manager, with its annotation in `values-dev.yaml` commented, or by hand).
+
+## The UI, the host and the Ingress
+
+One host serves everything, so the browser talks to one origin: `/` is the UI, `/api` and `/ws` are the API. With the UI off, only `/api` and `/ws` are routed.
+
+- **WebSocket.** The controller must keep an idle `/ws` connection open. For ingress-nginx, `values-dev.yaml` raises `proxy-read-timeout` and `proxy-send-timeout` (annotations; the default is 60 s). Other controllers need their own setting.
+- **Derived settings.** When `config.DJANGO_ALLOWED_HOSTS` is empty it is `ingress.host`; when `config.CORS_ALLOWED_ORIGINS` is empty it is `https://<ingress.host>`. Set either by hand to override. The chart still refuses to render with no host name at all, and with `ingress.enabled` but no `ingress.host`.
+- **The UI image is built for one host.** Its public settings are compiled in (the UI repository's `docs/docker.md`), so build it with at least `NEXT_PUBLIC_BACKEND_MODE=http`, `NEXT_PUBLIC_API_BASE_URL=https://<host>/api/v1`, `NEXT_PUBLIC_WS_BASE_URL=wss://<host>`, `NEXT_PUBLIC_AUTH_MODE=entra` with `NEXT_PUBLIC_ENTRA_TENANT_ID`, `NEXT_PUBLIC_ENTRA_CLIENT_ID`, `NEXT_PUBLIC_ENTRA_API_SCOPE`, and `NEXT_PUBLIC_APPS`. This chart only names the image and cannot change them. The image listens on port 3000 and answers `/healthz` (UI #182).
+- **Entra redirect URIs.** In the app registration, on the Single-page application platform, add `https://<host>/auth/redirect` and `https://<host>/` (sign-in), and `https://<host>/api/oauth2-redirect.html` for the Authorize button of Swagger UI (`/api/docs`, only with `API_DOCS_ENABLED`).
 
 ## Settings
 
@@ -96,8 +108,8 @@ When on, api, worker and migration get `DATABASE_URL` and `REDIS_URL` as environ
 
 ## What is not there yet
 
-- **An Ingress or Gateway**, and TLS: the Service is `ClusterIP`. Until then use `kubectl port-forward`.
-- **The UI**: it has no image or chart yet.
+- **An Ingress controller, DNS and the certificate**: the chart makes the Ingress resource only.
+- **The UI image**: it is built in the UI repository (UI #182).
 - **A real Key Vault**: the chart has the placeholder (`keyVault`, off); the vault, the secrets and the roles are not created here.
 - **A production-grade PostgreSQL and Redis**: the ones in the chart are for dev only.
 - **A deployment or a pipeline**: nothing here deploys itself.

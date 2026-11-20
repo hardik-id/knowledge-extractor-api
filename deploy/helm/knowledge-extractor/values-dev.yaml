@@ -20,8 +20,7 @@ workloadIdentity:
   tenantId: 00000000-0000-0000-0000-000000000000
 
 config:
-  DJANGO_ALLOWED_HOSTS: api.dev.replace-me.example
-  CORS_ALLOWED_ORIGINS: https://app.dev.replace-me.example
+  # DJANGO_ALLOWED_HOSTS and CORS_ALLOWED_ORIGINS follow from ingress.host; set them here only to override.
   # Placeholders: the Entra app registration of the UI and API.
   ENTRA_TENANT_ID: 00000000-0000-0000-0000-000000000000
   ENTRA_CLIENT_ID: 00000000-0000-0000-0000-000000000000
@@ -56,6 +55,30 @@ postgres:
   enabled: true
 redis:
   enabled: true
+
+ui:
+  image:
+    # Placeholders: the registry and the tag of the UI image (built for this host, see the README).
+    repository: replace-me.azurecr.io/knowledge-extractor-ui
+    tag: replace-with-a-version
+
+ingress:
+  enabled: true
+  className: nginx
+  # Placeholder: the one host of the UI and the API. The UI image must be built for it.
+  host: dev.replace-me.example
+  annotations:
+    # The WebSocket (/ws) must survive: ingress-nginx closes an idle connection after
+    # 60 s by default. Raise the read and send timeouts (seconds). Other controllers
+    # need their own settings (Application Gateway: the request timeout of the backend setting).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # TLS with cert-manager (when installed): name the issuer, and give tls.secretName
+    # for the certificate to be stored in.
+    # cert-manager.io/cluster-issuer: replace-with-the-issuer
+  tls:
+    # Placeholder: the Secret that holds the certificate for the host.
+    secretName: knowledge-extractor-dev-tls
 
 # secrets: not set here, on purpose. Name an existing Secret in the namespace with
 # DJANGO_SECRET_KEY (with postgres and redis above, DATABASE_URL and REDIS_URL are

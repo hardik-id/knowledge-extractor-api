@@ -1,0 +1,115 @@
+{{- if .Values.redis.enabled }}
+{{- /*
+FOR DEV ONLY: no backups, no persistence, one replica. A small Redis (the
+official image, the major version of compose.yaml) for the channel layer of the
+live updates. The password comes from redis.password, or is generated on the
+first install and read back from the Secret on every upgrade (lookup).
+*/ -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "knowledge-extractor.redisName" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+type: Opaque
+stringData:
+  REDIS_PASSWORD: {{ include "knowledge-extractor.devPassword" (dict "root" . "name" (include "knowledge-extractor.redisName" .) "key" "REDIS_PASSWORD" "value" .Values.redis.password) | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "knowledge-extractor.redisName" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+  selector:
+    {{- include "knowledge-extractor.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "knowledge-extractor.redisName" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  annotations:
+    knowledge-extractor/dev-only: "no backups, one replica"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "knowledge-extractor.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "knowledge-extractor.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image | quote }}
+          imagePullPolicy: IfNotPresent
+          # No snapshots: nothing is kept (dev only). The password is read from the environment.
+          command: ["sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$REDIS_PASSWORD\""]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "knowledge-extractor.redisName" . }}
+                  key: REDIS_PASSWORD
+            # redis-cli reads the password from here.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "knowledge-extractor.redisName" . }}
+                  key: REDIS_PASSWORD
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 3
+            failureThreshold: 20
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+{{- end }}

@@ -88,6 +88,61 @@ secrets:
     REDIS_URL: ""
     OPENAI_API_KEY: ""
 
+# Azure Key Vault as the source of the secrets (placeholder, off until the vault
+# exists). A SecretProviderClass for the Azure provider of the Secrets Store CSI
+# driver (the AKS add-on) signs in with the workload identity of the chart's
+# ServiceAccount and syncs the vault's secrets into the Kubernetes Secret the
+# pods read. Needs workloadIdentity.enabled. docs/deploy.md, "Secrets from Key Vault".
+keyVault:
+  enabled: false
+  # Name of the vault (not its URL).
+  keyvaultName: ""
+  # Empty: workloadIdentity.clientId and workloadIdentity.tenantId.
+  clientId: ""
+  tenantId: ""
+  # The Kubernetes Secret the driver syncs. Empty: the release's full name + "-secrets".
+  secretName: ""
+  # The name of each secret in the vault, by the variable it becomes.
+  objects:
+    DJANGO_SECRET_KEY: ""
+    DATABASE_URL: ""
+    REDIS_URL: ""
+    OPENAI_API_KEY: ""
+
+# For dev only: no backups, one replica, no high availability. A small
+# PostgreSQL and Redis in the cluster for an environment that has none yet.
+# When on, DATABASE_URL and REDIS_URL point at them (unless set by hand in
+# secrets.values, or coming from Key Vault). docs/deploy.md, "Dev database and Redis".
+postgres:
+  enabled: false
+  # The same major version as compose.yaml.
+  image: postgres:18
+  database: ke
+  user: ke
+  # Empty: generated once on the first install and kept across upgrades.
+  password: ""
+  storage: 5Gi
+  # Empty: the cluster's default StorageClass.
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+redis:
+  enabled: false
+  # The same major version as compose.yaml.
+  image: redis:8
+  # Empty: generated once on the first install and kept across upgrades.
+  password: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
 api:
   replicaCount: 1
   service:

@@ -50,6 +50,10 @@ spec:
                 name: {{ include "knowledge-extractor.fullname" . }}
             - secretRef:
                 name: {{ include "knowledge-extractor.secretName" . }}
+          {{- with include "knowledge-extractor.dependencyEnv" . | trim }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8000
@@ -85,7 +89,13 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.keyVault.enabled }}
+            {{- include "knowledge-extractor.keyVaultMount" . | nindent 12 }}
+            {{- end }}
       volumes:
         # The root file system is read-only; /tmp is the only place the app may write.
         - name: tmp
           emptyDir: {}
+        {{- if .Values.keyVault.enabled }}
+        {{- include "knowledge-extractor.keyVaultVolume" . | nindent 8 }}
+        {{- end }}

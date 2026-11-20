@@ -38,7 +38,26 @@ config:
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4318
   OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev
 
+# Key Vault: off until the vault exists. Then fill these, set enabled to true
+# (or --set keyVault.enabled=true) and the Secret is synced from the vault.
+# Not used with postgres or redis below: the URLs then come from the vault.
+keyVault:
+  enabled: false
+  keyvaultName: replace-me-keyvault
+  objects:
+    DJANGO_SECRET_KEY: ke-django-secret-key
+    DATABASE_URL: ke-database-url
+    REDIS_URL: ke-redis-url
+    OPENAI_API_KEY: ke-openai-api-key
+
+# For dev only: no backups, one replica. Switch off when the dev environment
+# has a real PostgreSQL and Redis. The passwords are generated on the first install.
+postgres:
+  enabled: true
+redis:
+  enabled: true
+
 # secrets: not set here, on purpose. Name an existing Secret in the namespace with
-# DJANGO_SECRET_KEY, DATABASE_URL and REDIS_URL (Key Vault will fill it, the item
-# after the chart): --set secrets.existingSecret=<name>. Without a source the chart
+# DJANGO_SECRET_KEY (with postgres and redis above, DATABASE_URL and REDIS_URL are
+# not needed in it): --set secrets.existingSecret=<name>. Without a source the chart
 # refuses to render.

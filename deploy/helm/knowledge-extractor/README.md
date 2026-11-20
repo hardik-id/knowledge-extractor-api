@@ -18,7 +18,7 @@ Fill the placeholders in `values-dev.yaml` first (registry, host names, Entra id
 
 The pods read `DJANGO_SECRET_KEY`, `DATABASE_URL`, `REDIS_URL` (and `OPENAI_API_KEY` with `ASSISTANT_AGENT=openai` and `LLM_PROVIDER=openai`) from one Secret. The chart renders only when it has a source:
 
-- `secrets.existingSecret=<name>`: a Secret that already exists in the namespace with those keys. The chart makes no Secret. This is where Azure Key Vault plugs in later (a synced Secret with that name).
+- `secrets.existingSecret=<name>`: a Secret that already exists in the namespace with those keys. The chart makes no Secret. Azure Key Vault syncs such a Secret when `keyVault.enabled` (docs/deploy.md, "Secrets from Key Vault").
 - For a first try in dev: `secrets.values.<NAME>`, from which the chart makes the Secret. Pass them on the command line, never in a committed file: `--set-file secrets.values.DJANGO_SECRET_KEY=./key.txt --set secrets.values.DATABASE_URL=...`.
 
 With neither, `helm template` and `helm install` stop with "No secret source: ...". A change to a chart-made Secret restarts the pods; after a change to an existing Secret run `kubectl rollout restart deployment -l app.kubernetes.io/instance=<release>`.
@@ -65,7 +65,7 @@ The other half lives in Azure and is not created by this chart:
    | --- | --- | --- |
    | Storage Blob Data Reader | the storage account | reading documents (`DOCUMENT_STORAGE=azure`, not built yet) |
    | Cognitive Services OpenAI User | the Azure OpenAI resource | the assistant (`LLM_PROVIDER=azure`) |
-   | Key Vault Secrets User | the key vault | reading the secrets that become the Secret (the item after this one) |
+   | Key Vault Secrets User | the key vault | reading the secrets that become the Secret (`keyVault`, docs/deploy.md) |
 
 ## Read-only root file system
 

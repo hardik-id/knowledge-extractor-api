@@ -41,6 +41,27 @@ for values in "" "-f $chart/values-dev.yaml"; do
     | run_kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" -
 done
 
+# Key Vault on: the SecretProviderClass is a custom resource of the Secrets Store CSI driver. kubeconform
+# has no schema for it without the driver's CRD (it is not in the Kubernetes schemas), so that kind is
+# skipped; every other resource, with the volume the Key Vault adds to the pods, is checked strictly.
+echo "== template and kubeconform (strict, SecretProviderClass skipped): values-dev.yaml with keyVault.enabled=true"
+run_helm lint $chart -f $chart/values-dev.yaml --set keyVault.enabled=true
+run_helm template check $chart -f $chart/values-dev.yaml --set keyVault.enabled=true \
+  | run_kubeconform -strict -summary -skip SecretProviderClass -kubernetes-version "$KUBERNETES_VERSION" -
+
+echo "== Key Vault on and the chart-made Secret off"
+output=$(run_helm template check $chart -f $chart/values-dev.yaml --set keyVault.enabled=true)
+case $output in
+  *"kind: SecretProviderClass"*) ;;
+  *) echo "FAIL: no SecretProviderClass with keyVault.enabled"; exit 1 ;;
+esac
+# secret.yaml renders nothing then: helm says so by failing to find output for it.
+if run_helm template check $chart -f $chart/values-dev.yaml --set keyVault.enabled=true --show-only templates/secret.yaml >/dev/null 2>&1; then
+  echo "FAIL: the chart made a Secret with keyVault.enabled"
+  exit 1
+fi
+echo "ok"
+
 echo "== a secret made by the chart, from values"
 run_helm template check $chart -f $chart/values-dev.yaml \
   --set secrets.values.DJANGO_SECRET_KEY=x --set secrets.values.DATABASE_URL=x --set secrets.values.REDIS_URL=x \

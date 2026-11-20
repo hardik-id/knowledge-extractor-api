@@ -1,0 +1,126 @@
+{{- if .Values.postgres.enabled }}
+{{- /*
+FOR DEV ONLY: no backups, one replica, no high availability. A small
+PostgreSQL (the official image, the major version of compose.yaml) with a
+volume claim, for a dev environment that has no database yet.
+The password comes from postgres.password, or is generated on the first
+install and read back from the Secret on every upgrade (lookup). The Secret
+is kept on uninstall (helm.sh/resource-policy: keep) so that a reinstall
+still opens the volume, which outlives the release too.
+*/ -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "knowledge-extractor.postgresName" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: {{ include "knowledge-extractor.devPassword" (dict "root" . "name" (include "knowledge-extractor.postgresName" .) "key" "POSTGRES_PASSWORD" "value" .Values.postgres.password) | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "knowledge-extractor.postgresName" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    {{- include "knowledge-extractor.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "knowledge-extractor.postgresName" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+  annotations:
+    knowledge-extractor/dev-only: "no backups, one replica"
+spec:
+  replicas: 1
+  serviceName: {{ include "knowledge-extractor.postgresName" . }}
+  selector:
+    matchLabels:
+      {{- include "knowledge-extractor.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "knowledge-extractor.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "knowledge-extractor.postgresName" . }}
+                  key: POSTGRES_PASSWORD
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            # The image keeps its data below /var/lib/postgresql (as in compose.yaml).
+            - name: data
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgres.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage | quote }}
+{{- end }}

@@ -48,6 +48,9 @@ spec:
           env:
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.worker.otelServiceName | quote }}
+            {{- with include "knowledge-extractor.dependencyEnv" . | trim }}
+            {{- . | nindent 12 }}
+            {{- end }}
           # No port to probe: alive while the worker is process 1, as in compose.yaml.
           livenessProbe:
             exec:
@@ -61,6 +64,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.keyVault.enabled }}
+            {{- include "knowledge-extractor.keyVaultMount" . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.keyVault.enabled }}
+        {{- include "knowledge-extractor.keyVaultVolume" . | nindent 8 }}
+        {{- end }}

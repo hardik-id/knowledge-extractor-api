@@ -25,6 +25,8 @@ from apps.extraction.models import (
     ExtractionRecord,
     Review,
 )
+from apps.extraction.spans import Span
+from apps.extraction.validation import parse_draft
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
@@ -128,7 +130,8 @@ def preview_records(
     a version (``validate_draft`` shape). Someone else's run is a 404.
     """
     run = runs.get_run(user, run_id)
-    definition = Definition(0, draft["prompt"], list(draft["record_types"]))
+    parsed = parse_draft(draft)
+    definition = Definition(0, parsed.prompt, parsed.record_types)
     raw = get_extractor().extract(text, definition, example_records(run.pk))
     return merge_extracted_records([], stored_records(text, raw))
 
@@ -155,9 +158,13 @@ def example_records(run_id: Any) -> list[RawRecord]:
     return [
         RawRecord(
             record.record_type_id,
-            record.span,
+            Span.from_json(record.span) if record.span else None,
             [
-                RawValue(value.field_id, value.value, list(value.spans))
+                RawValue(
+                    value.field_id,
+                    value.value,
+                    [Span.from_json(span) for span in value.spans],
+                )
                 for value in record.values.all()
                 if value.review != Review.REJECTED
             ],

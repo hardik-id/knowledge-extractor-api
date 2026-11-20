@@ -1,32 +1,36 @@
 import pytest
 
 from apps.core.errors import ApiError
-from apps.extraction.spans import anchor, check_span, resolve_span
+from apps.extraction.spans import Span, anchor, check_span, resolve_span
 
 TEXT = "😀 café note: Accepted"  # the emoji is one code point
 QUOTE = "Accepted"
 START = TEXT.index(QUOTE)
 
 
-def span(start: int, end: int, quote: str) -> dict[str, object]:
-    return {"start": start, "end": end, "quote": quote}
+def span(start: int, end: int, quote: str) -> Span:
+    return Span(start, end, quote)
+
+
+def raw(start: int, end: int, quote: str) -> dict[str, object]:
+    return span(start, end, quote).as_json()
 
 
 def test_offsets_count_code_points_after_an_emoji() -> None:
     assert START == len("😀 café note: ")
     assert len(TEXT.encode("utf-16-le")) // 2 > len(TEXT)  # UTF-16 would count more
-    ok = check_span(TEXT, span(START, START + len(QUOTE), QUOTE))
-    assert TEXT[ok["start"] : ok["end"]] == QUOTE
+    ok = check_span(TEXT, raw(START, START + len(QUOTE), QUOTE))
+    assert TEXT[ok.start : ok.end] == QUOTE
 
 
 @pytest.mark.parametrize(
     "bad",
     [
-        span(START + 1, START + 1 + len(QUOTE), QUOTE),  # the quote is elsewhere
-        span(-1, 3, TEXT[:3]),
-        span(START, len(TEXT) + 5, QUOTE),
-        span(5, 2, ""),
-        span(0, 1, "x"),
+        raw(START + 1, START + 1 + len(QUOTE), QUOTE),  # the quote is elsewhere
+        raw(-1, 3, TEXT[:3]),
+        raw(START, len(TEXT) + 5, QUOTE),
+        raw(5, 2, ""),
+        raw(0, 1, "x"),
         {"start": "0", "end": 1, "quote": "😀"},
         {"start": True, "end": 1, "quote": "😀"},
         {"start": 0, "end": 1},

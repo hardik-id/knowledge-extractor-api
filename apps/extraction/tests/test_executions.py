@@ -257,10 +257,8 @@ def test_the_runs_example_records_reach_the_extractor(
     execute(client, file.run_id, django_capture_on_commit_callbacks)
     [examples] = RecordingExtractor.seen
     [example] = examples
-    assert (example.record_type_id, example.span) == (
-        record.record_type_id,
-        record.span,
-    )
+    assert example.record_type_id == record.record_type_id
+    assert example.span and example.span.as_json() == record.span
     assert {v.field_id for v in example.values} == set(
         record.values.values_list("field_id", flat=True)
     )

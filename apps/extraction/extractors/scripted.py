@@ -11,14 +11,14 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
 
+from apps.extraction.definition import Field, RecordType
 from apps.extraction.extractors.base import (
     Definition,
     RawRecord,
     RawValue,
-    Span,
 )
+from apps.extraction.spans import Span
 
 # What JavaScript's ``\s`` matches (Python's ``\s`` differs at the edges).
 WS = " \t\n\v\f\r                 　﻿"
@@ -126,24 +126,21 @@ def parse_date(text: str) -> str | None:
     return f"{y:04d}-{m:02d}-{d:02d}"
 
 
-def _normalise(field: dict[str, Any], text: str) -> str:
-    value_type = field.get("value_type")
-    if value_type == "choice":
+def _normalise(field: Field, text: str) -> str:
+    if field.value_type == "choice":
         lower = text.lower()
-        for choice in field.get("choices", []):
+        for choice in field.choices:
             if choice.lower() in lower:
-                return str(choice).lower()
+                return choice.lower()
         return lower
-    if value_type == "date":
+    if field.value_type == "date":
         return parse_date(text) or text
     return text
 
 
-def _find_field(
-    text: str, lines: list[_Line], field: dict[str, Any]
-) -> list[_Range] | None:
+def _find_field(text: str, lines: list[_Line], field: Field) -> list[_Range] | None:
     """Where a field's text is inside one block: one range, or one per comma-separated item."""
-    labels = {n for n in (_norm(field["name"]), _norm(field["key"])) if n}
+    labels = {n for n in (_norm(field.name), _norm(field.key)) if n}
     if "decided on" in labels:
         labels.add("date")
 
@@ -163,7 +160,7 @@ def _find_field(
             r = _trim_range(text, _Range(value_start, line.end))
             if r.end == r.start:
                 continue
-            if not field.get("multiple"):
+            if not field.multiple:
                 return [r]
             items: list[_Range] = []
             pos = r.start
@@ -190,8 +187,8 @@ def _find_field(
     return None
 
 
-def _blocks_for(text: str, record_type: dict[str, Any]) -> list[_Range]:
-    name = _trim(record_type["name"]).lower()
+def _blocks_for(text: str, record_type: RecordType) -> list[_Range]:
+    name = _trim(record_type.name).lower()
     if not name:
         return []
     lines = _split_lines(text, 0, len(text))
@@ -208,7 +205,7 @@ def _blocks_for(text: str, record_type: dict[str, Any]) -> list[_Range]:
 
 
 def _span(text: str, r: _Range) -> Span:
-    return {"start": r.start, "end": r.end, "quote": text[r.start : r.end]}
+    return Span(r.start, r.end, text[r.start : r.end])
 
 
 def extract_records(text: str, definition: Definition) -> list[RawRecord]:
@@ -217,22 +214,22 @@ def extract_records(text: str, definition: Definition) -> list[RawRecord]:
         for block in _blocks_for(text, record_type):
             lines = _split_lines(text, block.start, block.end)
             values: list[RawValue] = []
-            for field in record_type["fields"]:
+            for field in record_type.fields:
                 found = _find_field(text, lines, field)
                 if not found:
-                    values.append(RawValue(field["id"], None, []))
+                    values.append(RawValue(field.id, None, []))
                     continue
-                quoted = field.get("mode") == "quote"
+                quoted = field.mode == "quote"
                 for r in found:
                     raw = text[r.start : r.end]
                     values.append(
                         RawValue(
-                            field["id"],
+                            field.id,
                             raw if quoted else _normalise(field, raw),
                             [_span(text, r)],
                         )
                     )
-            records.append(RawRecord(record_type["id"], _span(text, block), values))
+            records.append(RawRecord(record_type.id, _span(text, block), values))
     return records
 
 

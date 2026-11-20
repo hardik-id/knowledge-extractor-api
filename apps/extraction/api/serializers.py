@@ -3,6 +3,7 @@ from typing import Any
 from rest_framework import serializers
 
 from apps.extraction import selectors
+from apps.extraction.extractors.base import Definition
 from apps.extraction.models import (
     DefinitionVersion,
     Extraction,
@@ -43,12 +44,13 @@ class DefinitionVersionListSerializer(serializers.Serializer):  # type: ignore[t
 
 
 def summarize_version(version: DefinitionVersion) -> dict[str, Any]:
+    record_types = Definition.from_version(version).record_types
     return {
         "version": version.version,
         "note": version.note,
         "created_at": version.created_at,
-        "record_type_count": len(version.record_types),
-        "field_count": sum(len(t["fields"]) for t in version.record_types),
+        "record_type_count": len(record_types),
+        "field_count": sum(len(t.fields) for t in record_types),
     }
 
 
@@ -209,11 +211,13 @@ def _record(
 
 def serialize_extraction(extraction: Extraction) -> dict[str, Any]:
     """The one wire shape of an extraction, for the read and for every write."""
-    definition = selectors.get_definition_version(
-        extraction.file.run_id, extraction.definition_version
+    definition = Definition.from_version(
+        selectors.get_definition_version(
+            extraction.file.run_id, extraction.definition_version
+        )
     )
     field_ids = {
-        record_type["id"]: [field["id"] for field in record_type["fields"]]
+        record_type.id: [field.id for field in record_type.fields]
         for record_type in definition.record_types
     }
     file_id = str(extraction.file_id)

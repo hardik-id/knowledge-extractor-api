@@ -7,6 +7,7 @@ import pytest
 from apps.extraction.extractors.records import StoredRecord, StoredValue
 from apps.extraction.merge import is_touched_by_person, merge_extracted_records
 from apps.extraction.models import ExtractionRecord
+from apps.extraction.spans import Span
 from apps.extraction.tests.factories import (
     ExtractionFactory,
     ExtractionRecordFactory,
@@ -21,7 +22,7 @@ def value(origin: str = "llm", review: str = "suggested") -> StoredValue:
 def record(id: str, span: tuple[int, int] | None, **over: Any) -> StoredRecord:
     stored = StoredRecord(
         record_type_id=over.pop("record_type_id", "rt"),
-        span={"start": span[0], "end": span[1], "quote": "q"} if span else None,
+        span=Span(span[0], span[1], "q") if span else None,
         values=over.pop("values", [value()]),
         **over,
     )

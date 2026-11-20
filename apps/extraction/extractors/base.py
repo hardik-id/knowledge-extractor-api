@@ -11,27 +11,36 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-Span = dict[str, Any]  # {"start", "end", "quote"}; offsets count code points
+from apps.extraction.definition import RecordType
+from apps.extraction.spans import Span
+from apps.extraction.validation import parse_draft
 
 
 @dataclass(frozen=True)
 class Definition:
     """A definition version: the prompt and the record types with their fields.
 
-    ``record_types`` has the shape of the stored definition (``docs`` of the UI,
-    snake_case): each record type has ``id``, ``name``, ``fields``; each field
-    has ``id``, ``key``, ``name``, ``mode``, ``value_type``, ``choices``,
-    ``multiple``.
+    ``record_types`` are the models of ``apps.extraction.definition``.
     """
 
     version: int
     prompt: str
-    record_types: list[dict[str, Any]]
+    record_types: list[RecordType]
 
     @classmethod
     def from_version(cls, version: Any) -> Definition:
-        """Plain data from a stored ``DefinitionVersion`` (anything with its attributes)."""
-        return cls(version.version, version.prompt, list(version.record_types))
+        """Parse a stored ``DefinitionVersion`` (anything with its attributes), once, at the edge."""
+        draft = parse_draft(
+            {
+                "prompt": version.prompt,
+                "record_types": version.record_types,
+                "output": version.output,
+            }
+        )
+        return cls(version.version, draft.prompt, draft.record_types)
+
+    def record_type(self, record_type_id: str) -> RecordType | None:
+        return next((t for t in self.record_types if t.id == record_type_id), None)
 
 
 @dataclass(frozen=True)

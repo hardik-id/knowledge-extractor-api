@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from typing import Any, Protocol
 
 from apps.extraction.models import Origin, Review
+from apps.extraction.spans import Span
 
 
 class MergeableValue(Protocol):
@@ -27,10 +28,14 @@ class MergeableValue(Protocol):
 
 class Mergeable(Protocol):
     record_type_id: str
-    span: Any  # {"start", "end", "quote"} or None
     origin: str
     review: str
     values: Any  # a list, or a related manager of MergeableValue
+
+    @property
+    def span(self) -> Span | dict[str, Any] | None:
+        """A ``Span``, or the stored JSON of one (``ExtractionRecord``), or none."""
+        ...
 
 
 def _values(record: Mergeable) -> Iterable[MergeableValue]:
@@ -50,8 +55,19 @@ def is_touched_by_person(record: Mergeable) -> bool:
     )
 
 
-def _overlaps(a: Any, b: Any) -> bool:
-    return bool(a["start"] < b["end"] and b["start"] < a["end"])
+def _span(record: Mergeable) -> Span | None:
+    """The record's span as a ``Span``; a stored record has it as JSON (the one edge here)."""
+    span = record.span
+    return Span.from_json(span) if isinstance(span, dict) else span
+
+
+def _overlaps(a: Span, b: Span) -> bool:
+    return a.start < b.end and b.start < a.end
+
+
+def _start(record: Mergeable) -> float:
+    span = _span(record)
+    return span.start if span else math.inf
 
 
 def merge_extracted_records[R: Mergeable](
@@ -61,16 +77,16 @@ def merge_extracted_records[R: Mergeable](
     added = [
         record
         for record in fresh
-        if not record.span
+        if (span := _span(record)) is None
         or not any(
             k.record_type_id == record.record_type_id
-            and k.span
-            and _overlaps(k.span, record.span)
+            and (kept_span := _span(k)) is not None
+            and _overlaps(kept_span, span)
             for k in kept
         )
     ]
     # sorted() is stable: records with the same start keep their order.
     return sorted(
         [*kept, *added],
-        key=lambda record: record.span["start"] if record.span else math.inf,
+        key=_start,
     )

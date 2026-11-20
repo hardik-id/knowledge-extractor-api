@@ -8,12 +8,10 @@ It touches no database: it returns plain data that the caller writes.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any
 
-from apps.core.errors import ApiError
-from apps.extraction.extractors.base import RawRecord, RawValue, Span
+from apps.extraction.extractors.base import RawRecord, RawValue
 from apps.extraction.models import Origin, Review
-from apps.extraction.spans import resolve_span
+from apps.extraction.spans import Span, resolve_span
 
 
 @dataclass
@@ -46,14 +44,11 @@ def _value(text: str, raw: RawValue) -> StoredValue:
     return StoredValue(raw.field_id, raw.value, spans, anchored=anchored)
 
 
-def _record_span(text: str, span: Any) -> Span | None:
+def _record_span(text: str, span: Span | None) -> Span | None:
     """The record's span if it fits or can be anchored by its quote, else none."""
     if span is None:
         return None
-    try:
-        resolved, fits = resolve_span(text, span)
-    except ApiError:
-        return None
+    resolved, fits = resolve_span(text, span)
     return resolved if fits else None
 
 

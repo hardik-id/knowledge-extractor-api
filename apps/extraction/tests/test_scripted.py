@@ -11,19 +11,35 @@ from typing import Any
 import pytest
 
 from apps.documents import selectors as documents
-from apps.extraction.defaults import DEFAULT_RECORD_TYPES
+from apps.extraction.defaults import DEFAULT_OUTPUT, DEFAULT_RECORD_TYPES
 from apps.extraction.extractors.base import Definition, RawRecord, RawValue
 from apps.extraction.extractors.scripted import ScriptedExtractor, parse_date
+from apps.extraction.spans import Span
+from apps.extraction.validation import parse_draft
 
 DECISIONS = "enriched/engineering/architecture/architecture-decisions-2026.md"
 PLATFORM = "enriched/engineering/architecture/platform-adrs.md"
-DEFINITION = Definition(1, "", DEFAULT_RECORD_TYPES)
+
+
+def definition_of(record_types: list[dict[str, Any]] | None = None) -> Definition:
+    """A definition from the dict form of record types, through ``parse_draft``."""
+    draft = parse_draft(
+        {
+            "prompt": "",
+            "record_types": record_types or DEFAULT_RECORD_TYPES,
+            "output": DEFAULT_OUTPUT,
+        }
+    )
+    return Definition(1, "", draft.record_types)
+
+
+DEFINITION = definition_of()
 
 
 def extract(
     text: str, record_types: list[dict[str, Any]] | None = None
 ) -> list[RawRecord]:
-    definition = Definition(1, "", record_types or DEFAULT_RECORD_TYPES)
+    definition = definition_of(record_types)
     return ScriptedExtractor().extract(text, definition)
 
 
@@ -47,7 +63,7 @@ def test_finds_the_three_adrs_of_the_sample_in_order(decisions: str) -> None:
         "Retire the legacy SOAP gateway",
     ]
     assert all(r.record_type_id == "rt-adr" for r in records)
-    assert all(r.span and r.span["quote"].startswith("## ADR-") for r in records)
+    assert all(r.span and r.span.quote.startswith("## ADR-") for r in records)
 
 
 def test_the_decisions_sample_has_a_character_outside_the_bmp(decisions: str) -> None:
@@ -65,7 +81,8 @@ def test_every_span_is_the_text_at_its_offsets_past_the_emoji_too(
         assert record.span
         spans = [record.span, *(s for v in record.values for s in v.spans)]
         for span in spans:
-            assert text[span["start"] : span["end"]] == span["quote"]
+            assert span
+            assert text[span.start : span.end] == span.quote
 
 
 def test_a_multiple_field_gives_one_value_per_approver(decisions: str) -> None:
@@ -98,8 +115,8 @@ def test_inferred_values_are_normalised_and_keep_their_evidence(
         "2026-11-10",
         "2026-09-14",
     ]
-    assert field(records[0], "status")[0].spans[0]["quote"] == "Accepted"
-    assert field(records[0], "decided_on")[0].spans[0]["quote"] == "3 November 2026"
+    assert field(records[0], "status")[0].spans[0].quote == "Accepted"
+    assert field(records[0], "decided_on")[0].spans[0].quote == "3 November 2026"
 
 
 def test_quote_fields_hold_the_exact_text_of_sections(decisions: str) -> None:
@@ -146,17 +163,14 @@ def test_offsets_count_code_points_after_non_ascii_text() -> None:
     (record,) = extract(text)
     start = 15  # "Intro 🚀 é 日本語" is 13 code points, then two newlines
     assert text[start:].startswith("## ADR-1")
-    assert record.span == {
-        "start": start,
-        "end": len(text) - 1,
-        "quote": text[start:-1],
-    }
+    assert record.span == Span(start, len(text) - 1, text[start:-1])
     title = field(record, "title")[0]
     assert title.value == "Écrire ✨"
-    assert title.spans[0]["quote"] == "Écrire ✨"
-    assert title.spans[0]["start"] == text.index("Écrire")
+    assert title.spans[0].quote == "Écrire ✨"
+    assert title.spans[0].start == text.index("Écrire")
     for span in (record.span, *(s for v in record.values for s in v.spans)):
-        assert text[span["start"] : span["end"]] == span["quote"]
+        assert span
+        assert text[span.start : span.end] == span.quote
 
 
 def test_crlf_lines_and_labels_in_other_cases() -> None:

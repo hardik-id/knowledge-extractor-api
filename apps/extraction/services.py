@@ -18,6 +18,7 @@ from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
 from apps.extraction import selectors, tasks, telemetry
 from apps.extraction.api.serializers import serialize_extraction
+from apps.extraction.definition import Field
 from apps.extraction.extractors import extractor_kind, get_extractor
 from apps.extraction.extractors.base import Definition
 from apps.extraction.extractors.records import StoredRecord, stored_records
@@ -31,7 +32,7 @@ from apps.extraction.models import (
     Review,
 )
 from apps.extraction.spans import check_span
-from apps.extraction.validation import NOTE_MAX_LENGTH, validate_draft
+from apps.extraction.validation import NOTE_MAX_LENGTH, parse_draft
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors as runs
@@ -49,7 +50,7 @@ def save_definition(
     succeed: the database refuses a second row for one version number.
     """
     current = selectors.get_definition(user, run_id)
-    draft = validate_draft(data)
+    draft = parse_draft(data)
     if len(note) > NOTE_MAX_LENGTH:
         raise ApiError(
             "invalid_definition",
@@ -61,7 +62,10 @@ def save_definition(
     try:
         with transaction.atomic():
             return DefinitionVersion.objects.create(
-                run_id=current.run_id, version=current.version + 1, note=note, **draft
+                run_id=current.run_id,
+                version=current.version + 1,
+                note=note,
+                **draft.model_dump(),
             )
     except IntegrityError:
         latest = selectors.latest_version(current.run_id)
@@ -107,7 +111,7 @@ class Change:
     """What a change sees: the extraction being changed and the rules it is checked against."""
 
     extraction: Extraction
-    definition: DefinitionVersion
+    definition: Definition
     _text: Callable[[], str]
 
     def text(self) -> str:
@@ -171,7 +175,13 @@ def change_extraction(
                 run_file.run_id, extraction.definition_version
             )
 
-        apply(Change(extraction, definition, lambda: _document(run_file).text))
+        apply(
+            Change(
+                extraction,
+                Definition.from_version(definition),
+                lambda: _document(run_file).text,
+            )
+        )
         extraction.revision += 1
         extraction.save()
         realtime.publish_run_event(
@@ -211,19 +221,16 @@ def add_record(
     """Add a record a person marked. With ``revision`` 0 on a fresh file it makes the extraction."""
 
     def apply(change: Change) -> None:
-        record_type = next(
-            (t for t in change.definition.record_types if t["id"] == record_type_id),
-            None,
-        )
+        record_type = change.definition.record_type(record_type_id)
         if record_type is None:
             raise ApiError("unknown_field")
-        known = {field["id"] for field in record_type["fields"]}
+        known = {field.id for field in record_type.fields}
         if any(given["field_id"] not in known for given in fields):
             raise ApiError("unknown_field")
-        checked_span = check_span(change.text(), span) if span else None
+        checked_span = check_span(change.text(), span).as_json() if span else None
         values: list[FieldValue] = []
-        for field in record_type["fields"]:
-            given = [g for g in fields if g["field_id"] == field["id"]]
+        for field in record_type.fields:
+            given = [g for g in fields if g["field_id"] == field.id]
             # a field left out is one stored "not found": human, accepted
             inputs = [value for g in given for value in g["values"]]
             values.extend(_human_values(change, field, inputs))
@@ -242,16 +249,18 @@ def add_record(
 
 
 def _human_values(
-    change: Change, field: dict[str, Any], inputs: list[dict[str, Any]]
+    change: Change, field: Field, inputs: list[dict[str, Any]]
 ) -> list[FieldValue]:
     """The values a person wrote for one field. No values at all is one "not found"."""
-    if not field["multiple"] and len(inputs) > 1:
-        raise ApiError("too_many_values", f'"{field["name"]}" takes a single value.')
+    if not field.multiple and len(inputs) > 1:
+        raise ApiError("too_many_values", f'"{field.name}" takes a single value.')
     return [
         FieldValue(
-            field_id=field["id"],
+            field_id=field.id,
             value=given["value"],
-            spans=[check_span(change.text(), span) for span in given["spans"]],
+            spans=[
+                check_span(change.text(), span).as_json() for span in given["spans"]
+            ],
             origin=Origin.HUMAN,
             review=Review.ACCEPTED,
             anchored=True,
@@ -278,7 +287,7 @@ def update_record(
         record = change.record(record_id)
         if "span" in patch:
             span = patch["span"]
-            record.span = check_span(change.text(), span) if span else None
+            record.span = check_span(change.text(), span).as_json() if span else None
         if "use_as_example" in patch:
             record.use_as_example = patch["use_as_example"]
         if "review" in patch:
@@ -326,29 +335,14 @@ def replace_field_values(
 
     def apply(change: Change) -> None:
         record = change.record(record_id)
-        record_type = next(
-            (
-                t
-                for t in change.definition.record_types
-                if t["id"] == record.record_type_id
-            ),
-            None,
-        )
-        field = next(
-            (
-                f
-                for f in (record_type or {"fields": []})["fields"]
-                if f["id"] == field_id
-            ),
-            None,
-        )
+        record_type = change.definition.record_type(record.record_type_id)
+        fields = record_type.fields if record_type else []
+        field = next((f for f in fields if f.id == field_id), None)
         if field is None:
             raise ApiError("unknown_field")
         inputs = values or [{"value": None, "spans": []}]
-        if not field["multiple"] and len(inputs) > 1:
-            raise ApiError(
-                "too_many_values", f'"{field["name"]}" takes a single value.'
-            )
+        if not field.multiple and len(inputs) > 1:
+            raise ApiError("too_many_values", f'"{field.name}" takes a single value.')
         stored = list(record.values.filter(field_id=field_id))
         keep: list[FieldValue] = []
         new: list[FieldValue] = []
@@ -372,7 +366,10 @@ def replace_field_values(
                     record=record,
                     field_id=field_id,
                     value=given["value"],
-                    spans=[check_span(change.text(), span) for span in given["spans"]],
+                    spans=[
+                        check_span(change.text(), span).as_json()
+                        for span in given["spans"]
+                    ],
                     origin=Origin.HUMAN,
                     review=Review.ACCEPTED,
                     anchored=True,
@@ -574,7 +571,7 @@ def _store(extraction: Extraction, fresh: list[StoredRecord]) -> None:
         ExtractionRecord(
             extraction=extraction,
             record_type_id=record.record_type_id,
-            span=record.span,
+            span=record.span.as_json() if record.span else None,
             origin=record.origin,
             review=record.review,
             use_as_example=record.use_as_example,
@@ -586,7 +583,7 @@ def _store(extraction: Extraction, fresh: list[StoredRecord]) -> None:
             record=stored,
             field_id=value.field_id,
             value=value.value,
-            spans=value.spans,
+            spans=[span.as_json() for span in value.spans],
             origin=value.origin,
             review=value.review,
             anchored=value.anchored,

@@ -1,0 +1,91 @@
+{{- /*
+HTTP and the WebSocket, on the image's own command. The probes send the Host
+and X-Forwarded-Proto headers the production settings expect: without a
+listed Host Django answers 400, and without X-Forwarded-Proto the TLS
+redirect answers 301 before the view (and so the database) is reached.
+*/ -}}
+{{- $probeHost := .Values.api.probeHost | default ((splitList "," (toString .Values.config.DJANGO_ALLOWED_HOSTS)) | first | trim) }}
+{{- $probeHeaders := list (dict "name" "Host" "value" $probeHost) (dict "name" "X-Forwarded-Proto" "value" "https") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "knowledge-extractor.fullname" . }}-api
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "knowledge-extractor.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "knowledge-extractor.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        {{- if .Values.workloadIdentity.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "knowledge-extractor.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "knowledge-extractor.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "knowledge-extractor.fullname" . }}
+            - secretRef:
+                name: {{ include "knowledge-extractor.secretName" . }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+              httpHeaders:
+                {{- toYaml $probeHeaders | nindent 16 }}
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+              httpHeaders:
+                {{- toYaml $probeHeaders | nindent 16 }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ready
+              port: http
+              httpHeaders:
+                {{- toYaml $probeHeaders | nindent 16 }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # The root file system is read-only; /tmp is the only place the app may write.
+        - name: tmp
+          emptyDir: {}

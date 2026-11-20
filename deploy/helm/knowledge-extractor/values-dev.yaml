@@ -1,0 +1,44 @@
+# The dev environment of the AKS cluster. Every value marked REPLACE or
+# 00000000-... is a placeholder to fill in before a real deployment.
+# No secret is written here: the Secret comes from secrets.existingSecret
+# (or --set-file for a first try), see docs/deploy.md.
+
+image:
+  # Placeholder: the container registry of the dev environment.
+  repository: replace-me.azurecr.io/knowledge-extractor-api
+  tag: replace-with-a-version
+
+serviceAccount:
+  # Fixed, so the federated credential in Azure can name it:
+  # system:serviceaccount:<namespace>:knowledge-extractor
+  name: knowledge-extractor
+
+workloadIdentity:
+  enabled: true
+  # Placeholders: the client id of the user-assigned managed identity, and the Entra tenant.
+  clientId: 00000000-0000-0000-0000-000000000000
+  tenantId: 00000000-0000-0000-0000-000000000000
+
+config:
+  DJANGO_ALLOWED_HOSTS: api.dev.replace-me.example
+  CORS_ALLOWED_ORIGINS: https://app.dev.replace-me.example
+  # Placeholders: the Entra app registration of the UI and API.
+  ENTRA_TENANT_ID: 00000000-0000-0000-0000-000000000000
+  ENTRA_CLIENT_ID: 00000000-0000-0000-0000-000000000000
+  API_DOCS_ENABLED: "true"
+  # The catalog and the storage are still the samples; the account URL is ready for the azure storage.
+  AZURE_STORAGE_ACCOUNT_URL: https://replacemestorage.blob.core.windows.net
+  # The assistant uses Azure OpenAI through the pod's managed identity: no key.
+  ASSISTANT_AGENT: openai
+  LLM_PROVIDER: azure
+  LLM_MODEL: replace-with-the-deployment-name
+  AZURE_OPENAI_ENDPOINT: https://replace-me.openai.azure.com
+  # Telemetry stays off until the cluster's collector exists; then set
+  # OTEL_SDK_DISABLED to "false" and OTEL_LOGS_EXPORTER to otlp.
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc.cluster.local:4318
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev
+
+# secrets: not set here, on purpose. Name an existing Secret in the namespace with
+# DJANGO_SECRET_KEY, DATABASE_URL and REDIS_URL (Key Vault will fill it, the item
+# after the chart): --set secrets.existingSecret=<name>. Without a source the chart
+# refuses to render.

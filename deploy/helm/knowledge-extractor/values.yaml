@@ -1,0 +1,142 @@
+# Defaults: safe, and empty where a value belongs to an environment.
+# Nothing secret is ever written in a committed file. docs/deploy.md explains every value.
+
+# The API image (Dockerfile at the repository root). api, worker and migrate share it.
+image:
+  repository: knowledge-extractor-api
+  # Empty: the chart's appVersion. Releases set it (--set image.tag=...).
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The identity of the api and the worker pods.
+serviceAccount:
+  create: true
+  # Empty: the release's full name. Set it when the federated credential in Azure
+  # must name a fixed ServiceAccount: system:serviceaccount:<namespace>:<name>.
+  name: ""
+  # More annotations, merged with the workload identity ones.
+  annotations: {}
+
+# Azure Workload Identity: the pods act as a user-assigned managed identity,
+# through the cluster's OIDC issuer and a federated credential (set up in Azure,
+# not by this chart: see docs/deploy.md, "Identity").
+workloadIdentity:
+  enabled: false
+  # Client id of the user-assigned managed identity. A GUID, not a secret.
+  clientId: ""
+  # Optional: the Entra tenant of the identity.
+  tenantId: ""
+
+# Settings that are not secret: the ConfigMap, read by every pod with envFrom.
+# A key is an environment variable of the application (.env.example). A changed
+# value restarts the pods.
+config:
+  DJANGO_SETTINGS_MODULE: config.settings.production
+  # Host names the API answers to, comma separated. Required.
+  DJANGO_ALLOWED_HOSTS: ""
+  # Production redirects HTTP to HTTPS. The probes send X-Forwarded-Proto, so this stays on.
+  DJANGO_SECURE_SSL_REDIRECT: "true"
+  # Origins of the UI, comma separated, never *.
+  CORS_ALLOWED_ORIGINS: ""
+  # entra in the cluster: dev is refused by the production settings.
+  AUTH_MODE: entra
+  ENTRA_TENANT_ID: ""
+  ENTRA_CLIENT_ID: ""
+  ENTRA_REQUIRED_SCOPE: access_as_user
+  LOG_LEVEL: INFO
+  LOG_FORMAT: json
+  # Swagger UI and the schema.
+  API_DOCS_ENABLED: "false"
+  WS_TICKET_TTL_SECONDS: 30
+  # Documents: samples (later http, azure).
+  DOCUMENT_CATALOG: samples
+  DOCUMENT_CATALOG_URL: ""
+  DOCUMENT_STORAGE: samples
+  AZURE_STORAGE_ACCOUNT_URL: ""
+  # Assistant and extractor.
+  ASSISTANT_AGENT: scripted
+  ASSISTANT_REPLY_TIMEOUT_SECONDS: 300
+  EXTRACTOR: scripted
+  EXECUTION_TIMEOUT_SECONDS: 600
+  # openai (needs OPENAI_API_KEY in the secret) or azure (the pod's managed identity, no key).
+  LLM_PROVIDER: openai
+  LLM_MODEL: ""
+  AZURE_OPENAI_ENDPOINT: ""
+  # OpenTelemetry: off by default. The endpoint is the cluster's own collector; this chart ships none.
+  OTEL_SDK_DISABLED: "true"
+  OTEL_SERVICE_NAME: knowledge-extractor-api
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  OTEL_RESOURCE_ATTRIBUTES: ""
+  OTEL_LOGS_EXPORTER: none
+
+# Secrets: DJANGO_SECRET_KEY, DATABASE_URL, REDIS_URL, and OPENAI_API_KEY (only
+# with ASSISTANT_AGENT=openai and LLM_PROVIDER=openai). Two ways; the chart
+# refuses to render with neither.
+secrets:
+  # 1. The name of a Secret that already exists in the namespace, with those keys.
+  #    The chart makes no Secret. This is where Azure Key Vault will plug in.
+  existingSecret: ""
+  # 2. For a first try in dev: the chart makes the Secret from these. Keep them
+  #    empty in every committed file; pass them with --set-file or --set.
+  values:
+    DJANGO_SECRET_KEY: ""
+    DATABASE_URL: ""
+    REDIS_URL: ""
+    OPENAI_API_KEY: ""
+
+api:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8000
+  # The Host header the probes send. Empty: the first entry of DJANGO_ALLOWED_HOSTS.
+  # Set it when that entry is a wildcard such as .example.com.
+  probeHost: ""
+  terminationGracePeriodSeconds: 30
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+worker:
+  replicaCount: 1
+  otelServiceName: knowledge-extractor-worker
+  # SIGTERM lets a running job finish: longer than EXECUTION_TIMEOUT_SECONDS.
+  terminationGracePeriodSeconds: 660
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# The migration Job, a Helm hook that runs before every install and upgrade.
+migrate:
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# The image runs as the user app (uid 999, Dockerfile).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+  seccompProfile:
+    type: RuntimeDefault
+# Read-only root file system: the app writes only to /tmp (an emptyDir).
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

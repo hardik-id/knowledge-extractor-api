@@ -1,0 +1,14 @@
+{{- include "knowledge-extractor.validate" . -}}
+{{- /*
+An ordinary resource of the release: api and worker read it, upgrade and
+rollback treat it like the Deployments. The migration Job reads its own hook
+copy (configmap-migrate.yaml). docs/deploy.md, "Migration".
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "knowledge-extractor.fullname" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+data:
+  {{- include "knowledge-extractor.configData" . | nindent 2 }}

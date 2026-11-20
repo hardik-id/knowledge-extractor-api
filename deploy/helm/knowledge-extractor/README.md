@@ -25,13 +25,15 @@ With neither, `helm template` and `helm install` stop with "No secret source: ..
 
 ## Migration, and the first install
 
-`<release>-migrate` is a Job and a Helm hook (`pre-install`, `pre-upgrade`): Helm runs it to completion before it creates or updates the Deployments, so a new version never serves traffic on an old schema, and a failed migration fails the `helm` command and leaves the running version in place. It runs `python manage.py migrate --noinput` (idempotent: it applies only what is missing), and is removed when it succeeds; a failed one stays for `kubectl logs job/<release>-migrate`.
+`<release>-migrate` is a Job and a Helm hook (`pre-install`, `pre-upgrade`): Helm runs it to completion before it creates or updates the Deployments, so a new version never serves traffic on an old schema, and a failed migration fails the `helm` command. It runs `python manage.py migrate --noinput` (idempotent: it applies only what is missing), and is removed when it succeeds; a failed one stays for `kubectl logs job/<release>-migrate`.
 
-On a first install the release has no resources yet, and a `pre-install` hook runs before they are created. The Job needs the settings and the Secret, so the ConfigMap and the chart-made Secret are hooks too, with a lower weight (`-10`): they are created first and are recreated before every upgrade, so the migration always sees the new values. The ServiceAccount is not a hook (a recreated one would invalidate the tokens of running pods), and the Job does not need it: it has no Azure identity and no API token. Consequences:
+The ConfigMap and the chart-made Secret that api and worker read are ordinary resources of the release, so upgrade, rollback and `helm uninstall` treat them like the Deployments: a failed migration changes none of them, and a pod that restarts meanwhile runs the old image with the old settings. `helm rollback` brings the old values back together with the old checksum annotations.
 
-- With `secrets.existingSecret` the Secret must exist before the first install.
+On a first install the release has no resources yet, and a `pre-install` hook runs before they are created. So the Job reads its own copies, which are hooks with a lower weight (`-10`), created before the Job and removed when it succeeded: the ConfigMap `<release>-migrate` and, when the chart makes the Secret, `<release>-migrate-secrets`. They carry the same data as the release's own, rendered from the same values. The ServiceAccount is not a hook (a recreated one would invalidate the tokens of running pods), and the Job does not need it: it has no Azure identity and no API token. Consequences:
+
+- With `secrets.existingSecret` the Secret must exist before the first install; the Job reads it too (no copy is made).
 - The database named in `DATABASE_URL` and its role must exist (the chart ships no database); the migration creates the tables, including the job queue's.
-- `helm uninstall` does not remove hook resources: delete the ConfigMap (named after the release: `<release>-knowledge-extractor`, or just the release name when it contains `knowledge-extractor`) and a chart-made Secret (`<name>-secrets`) by hand.
+- If the migration fails, its copies of the ConfigMap and the Secret stay with the failed Job (for `kubectl describe`), and are replaced on the next try. A failed first install leaves them behind: delete them with the Job (`kubectl delete job,configmap,secret -l app.kubernetes.io/component=migrate`) before trying again.
 
 ## Identity: Azure Workload Identity
 

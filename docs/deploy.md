@@ -12,14 +12,15 @@ In the table `<release>` stands for the release's full name: `<release>-knowledg
 | --- | --- | --- |
 | Deployment `<release>-api` and Service `<release>-api` | `api-deployment.yaml`, `api-service.yaml` | The image's own command (uvicorn): HTTP and the WebSocket, port 8000. Start-up and liveness probe `/api/v1/health`, readiness `/api/v1/ready` (the database). The probes send the `Host` header (the first of `DJANGO_ALLOWED_HOSTS`, or `api.probeHost`) and `X-Forwarded-Proto: https`: without them the production settings answer 400 and 301 before the view runs, and readiness would not reach the database. |
 | Deployment `<release>-worker` | `worker-deployment.yaml` | `python manage.py db_worker --no-reload` ([jobs.md](jobs.md)). No Service. The probe is compose's (the worker is process 1). Grace period 660 s: SIGTERM lets a running job finish (`EXECUTION_TIMEOUT_SECONDS` is 600). |
-| Job `<release>-migrate` | `migrate-job.yaml` | `python manage.py migrate --noinput`, a Helm hook before every install and upgrade. |
-| ConfigMap `<release>` | `configmap.yaml` | The settings that are not secret. `envFrom` in all three pods. A change restarts api and worker (a checksum annotation). |
-| Secret `<release>-secrets` | `secret.yaml` | Only when `secrets.existingSecret` is empty. |
+| Job `<release>-migrate` | `migrate-job.yaml` | `python manage.py migrate --noinput`, a Helm hook before every install and upgrade. It reads the two hook copies below. |
+| ConfigMap `<release>` | `configmap.yaml` | The settings that are not secret. `envFrom` in api and worker. An ordinary resource of the release. A change restarts api and worker (a checksum annotation). |
+| Secret `<release>-secrets` | `secret.yaml` | Only when `secrets.existingSecret` is empty. An ordinary resource of the release. |
+| ConfigMap `<release>-migrate`, Secret `<release>-migrate-secrets` | `configmap-migrate.yaml`, `secret-migrate.yaml` | The migration Job's own copies of the two above (the Secret only when the chart makes it), same data. Helm hooks, weight `-10`, removed when the Job succeeded. |
 | ServiceAccount | `serviceaccount.yaml` | The identity of api and worker, with the Workload Identity annotations. |
 
 The api, the worker and the migration share one image (`image.repository`, `image.tag`; the [Dockerfile](docker.md)). Pods run as user 999, non-root, no privilege escalation, all capabilities dropped, the default seccomp profile and a read-only root file system (`/tmp` is an `emptyDir`; the app writes nowhere else). Requests and limits and the replica counts are in `values.yaml`.
 
-The ConfigMap and the chart-made Secret are Helm hooks (`pre-install`, `pre-upgrade`, weight `-10`) so that the migration Job, which runs before the release's other resources exist, can read them. The chart's README explains why and what follows (they are not removed by `helm uninstall`).
+The ConfigMap and the chart-made Secret that api and worker read are ordinary release resources, so a failed migration, a rollback and `helm uninstall` behave as Helm usually does. The first install has none of them when the `pre-install` migration runs, and an upgrade must not change them before the migration succeeded, so the Job reads hook copies of its own (`<release>-migrate`, `<release>-migrate-secrets`). The chart's README has the consequences.
 
 ## What the chart expects from the cluster
 

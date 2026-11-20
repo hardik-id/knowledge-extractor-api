@@ -4,4 +4,4 @@
   worker  {{ include "knowledge-extractor.fullname" . }}-worker
 
 Try it:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "knowledge-extractor.fullname" . }}-api 8000:{{ .Values.api.service.port }}
-There is no Ingress yet (docs/deploy.md). The pods start only once the Secret and the migration are in place.
+There is no Ingress yet (docs/deploy.md). The pods start only once the Secret is in place, and the migration has run before them.

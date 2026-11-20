@@ -56,6 +56,29 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
+{{/* The Secret the migration Job reads: the named one, or its own hook copy of the chart-made one. */}}
+{{- define "knowledge-extractor.migrateSecretName" -}}
+{{- if .Values.secrets.existingSecret }}
+{{- .Values.secrets.existingSecret }}
+{{- else }}
+{{- printf "%s-migrate-secrets" (include "knowledge-extractor.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/* The data of the ConfigMap: the same in the release's own copy and in the migration's hook copy. */}}
+{{- define "knowledge-extractor.configData" -}}
+{{- range $name, $value := .Values.config }}
+{{ $name }}: {{ $value | toString | quote }}
+{{- end }}
+{{- end }}
+
+{{/* The data of the chart-made Secret: the same in the release's own copy and in the migration's hook copy. */}}
+{{- define "knowledge-extractor.secretData" -}}
+{{- range $key := splitList "," (include "knowledge-extractor.secretKeys" .) }}
+{{ $key }}: {{ get $.Values.secrets.values $key | toString | quote }}
+{{- end }}
+{{- end }}
+
 {{/* Secret keys needed by the settings: the variable names the application reads. */}}
 {{- define "knowledge-extractor.secretKeys" -}}
 {{- $keys := list "DJANGO_SECRET_KEY" "DATABASE_URL" "REDIS_URL" }}
@@ -67,7 +90,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 Refuse to render when the settings or secrets are not usable. The messages
-say what to set. Called once, from configmap.yaml.
+say what to set. Called once, from configmap.yaml (the migration's copies are rendered from the same values).
 */}}
 {{- define "knowledge-extractor.validate" -}}
 {{- if not .Values.config.DJANGO_ALLOWED_HOSTS }}

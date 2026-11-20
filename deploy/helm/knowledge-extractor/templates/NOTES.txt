@@ -1,0 +1,7 @@
+{{ include "knowledge-extractor.fullname" . }} installed in namespace {{ .Release.Namespace }}.
+
+  api     {{ include "knowledge-extractor.fullname" . }}-api (Service port {{ .Values.api.service.port }})
+  worker  {{ include "knowledge-extractor.fullname" . }}-worker
+
+Try it:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "knowledge-extractor.fullname" . }}-api 8000:{{ .Values.api.service.port }}
+There is no Ingress yet (docs/deploy.md). The pods start only once the Secret and the migration are in place.

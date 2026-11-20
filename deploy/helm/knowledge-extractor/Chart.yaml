@@ -1,0 +1,8 @@
+apiVersion: v2
+name: knowledge-extractor
+description: The Knowledge Extractor API, its background worker and its database migration (docs/deploy.md).
+type: application
+# The chart's own version: raise it with every change to the templates.
+version: 0.1.0
+# The default image tag when image.tag is empty. Releases set image.tag.
+appVersion: "0.1.0"

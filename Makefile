@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env e2e e2e-report
+.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env e2e e2e-report chart-check
 
 install:
 	uv sync
@@ -58,6 +58,10 @@ e2e:
 	@test -d "$(UI_DIR)/node_modules" || { echo "$(UI_DIR)/node_modules is missing: run npm ci in $(UI_DIR)"; exit 1; }
 	$(MAKE) up
 	cd "$(UI_DIR)" && npm run test:e2e -- $(ARGS)
+
+# The Helm chart (docs/deploy.md): lint, render with both values files, validate against the Kubernetes schemas. Not part of make check.
+chart-check:
+	@deploy/helm/chart-check.sh
 
 # Where the Playwright report of the last e2e run is, and how to open it.
 e2e-report:

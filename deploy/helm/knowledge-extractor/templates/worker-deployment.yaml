@@ -1,0 +1,66 @@
+{{- /* The background job worker (docs/jobs.md): no port, no Service. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "knowledge-extractor.fullname" . }}-worker
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "knowledge-extractor.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "knowledge-extractor.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+        {{- if .Values.workloadIdentity.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "knowledge-extractor.serviceAccountName" . }}
+      # SIGTERM lets the worker finish the job it is running; the period must outlast the longest job (EXECUTION_TIMEOUT_SECONDS).
+      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "knowledge-extractor.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "manage.py", "db_worker", "--no-reload"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "knowledge-extractor.fullname" . }}
+            - secretRef:
+                name: {{ include "knowledge-extractor.secretName" . }}
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.worker.otelServiceName | quote }}
+          # No port to probe: alive while the worker is process 1, as in compose.yaml.
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q db_worker /proc/1/cmdline"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

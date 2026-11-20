@@ -1,0 +1,20 @@
+{{- include "knowledge-extractor.validate" . -}}
+{{- /*
+A hook, like the Secret below: the migration Job runs before the release's
+own resources exist (first install) or while they still hold the old values
+(upgrade), and needs the new settings in both cases. docs/deploy.md, "Migration".
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "knowledge-extractor.fullname" . }}
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  {{- range $name, $value := .Values.config }}
+  {{ $name }}: {{ $value | toString | quote }}
+  {{- end }}

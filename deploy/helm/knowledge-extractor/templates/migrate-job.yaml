@@ -1,0 +1,54 @@
+{{- /*
+The database migration. A hook: it runs, and must succeed, before the new
+version is installed or upgraded, so a failed migration leaves the running
+version serving. It needs no Azure identity (the database URL is in the
+Secret), so it runs as the namespace's default ServiceAccount without a token.
+*/ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "knowledge-extractor.fullname" . }}-migrate
+  labels:
+    {{- include "knowledge-extractor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrate.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrate.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "knowledge-extractor.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "knowledge-extractor.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "knowledge-extractor.fullname" . }}
+            - secretRef:
+                name: {{ include "knowledge-extractor.secretName" . }}
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

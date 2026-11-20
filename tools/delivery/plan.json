@@ -41,7 +41,10 @@
     {"index": 51, "kind": "ui", "name": "projects-ui-1-services", "description": "UI-052: services for projects, run documents, configuration versions and clearing the conversation", "whenToUse": "After projects-2-api-flow, with the backend stack rebuilt and running.", "items": [52]},
     {"index": 52, "kind": "ui", "name": "projects-ui-2-routes", "description": "UI-053: Studio opens a project by its address", "whenToUse": "After projects-ui-1-services.", "items": [53]},
     {"index": 53, "kind": "ui", "name": "projects-ui-3-screens", "description": "UI-054 ∥ 055 ∥ 056 ∥ 057: project list, documents in a project, configuration versions and Save configuration, clearing the conversation", "whenToUse": "After projects-ui-2-routes.", "items": [54, 55, 56, 57]},
-    {"index": 54, "kind": "ui", "name": "projects-ui-4-walk", "description": "UI-058: walk through projects in a real browser", "whenToUse": "After projects-ui-3-screens.", "items": [58]}
+    {"index": 54, "kind": "ui", "name": "projects-ui-4-walk", "description": "UI-058: walk through projects in a real browser", "whenToUse": "After projects-ui-3-screens.", "items": [58]},
+    {"index": 61, "kind": "ui", "name": "e2e-1-runner", "description": "UI-096: a Playwright runner, fixtures and a smoke test", "whenToUse": "First of the end-to-end epic, with the backend stack running (make up).", "items": [96]},
+    {"index": 62, "kind": "ui", "name": "e2e-2-journeys", "description": "UI-097 ∥ 098 ∥ 099: journey tests for projects and versions, assistant and review, privacy, persistence and phone width", "whenToUse": "After e2e-1-runner, with the backend stack running.", "items": [97, 98, 99]},
+    {"index": 63, "name": "e2e-3-command", "description": "PBI-356: make e2e runs the UI tests against the stack", "whenToUse": "After e2e-1-runner. Can run beside e2e-2-journeys.", "items": [356]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -113,6 +116,11 @@
     {"kind": "ui", "n": 55, "slug": "project-documents", "title": "Documents inside a project", "tier": "normal", "deps": [53]},
     {"kind": "ui", "n": 56, "slug": "configuration-versions-ui", "title": "Extraction configuration: the word, its versions, and Save configuration", "tier": "normal", "deps": [53]},
     {"kind": "ui", "n": 57, "slug": "clear-conversation-ui", "title": "Assistant: keep the conversation with the project, and clear it", "tier": "simple", "deps": [53]},
-    {"kind": "ui", "n": 58, "slug": "projects-browser-walk", "title": "Walk through projects in a real browser against the backend", "tier": "hard", "deps": [54, 55, 56, 57]}
+    {"kind": "ui", "n": 58, "slug": "projects-browser-walk", "title": "Walk through projects in a real browser against the backend", "tier": "hard", "deps": [54, 55, 56, 57]},
+    {"kind": "ui", "n": 96, "slug": "e2e-runner", "title": "End-to-end tests: a Playwright runner, fixtures and a smoke test", "tier": "complex", "deps": []},
+    {"kind": "ui", "n": 97, "slug": "e2e-projects-versions", "title": "End-to-end journey: projects, documents and configuration versions", "tier": "normal", "deps": [96]},
+    {"kind": "ui", "n": 98, "slug": "e2e-assistant-review", "title": "End-to-end journey: the assistant, running, and reviewing records", "tier": "normal", "deps": [96]},
+    {"kind": "ui", "n": 99, "slug": "e2e-privacy-persistence", "title": "End-to-end journey: privacy, persistence, phone width and keyboard", "tier": "normal", "deps": [96]},
+    {"n": 356, "slug": "make-e2e", "title": "make e2e: run the UI's end-to-end tests against the stack", "tier": "simple", "deps": []}
   ]
 }

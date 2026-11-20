@@ -76,6 +76,16 @@ Tracked in #272. The assistant's LLM agent becomes a package with tools that hel
 | `assistant-2-tools` | (#266 → #267) ∥ #268 ∥ #269 ∥ #270 | 1 |
 | `assistant-3-guidance` | #271 | 2 |
 
+## The end-to-end tests epic
+
+Tracked in #357. Playwright journeys in the UI repository, run with one command, so a change to the UI or the API is checked in a real browser without a person clicking through it.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `e2e-1-runner` | UI #96 | nothing, with the stack running (`make up`) |
+| `e2e-2-journeys` | UI #97 ∥ #98 ∥ #99 | 1, with the stack running |
+| `e2e-3-command` | #356 | 1. Can run beside 2 |
+
 The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 
 ## Running one

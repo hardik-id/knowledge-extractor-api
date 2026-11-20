@@ -272,6 +272,16 @@ make up
 
 Compose recreates `api` and `worker`. Send an assistant message again; the reply now comes from the model. Switch back by restoring `scripted`.
 
+## End-to-end tests
+
+```sh
+make e2e                                  # starts the stack (make up), then the UI's Playwright suite
+make e2e ARGS="e2e/smoke.spec.ts"         # only one spec
+make e2e-report                           # where the report of the last run is, and how to open it
+```
+
+It needs the UI checkout at `../knowledge-extractor` (or `UI_DIR=<path>`) with `npm ci` done there, and Docker. The exit code is the tests' exit code. The report is `playwright-report/index.html` in the UI checkout. The tests make their own people, so they do not touch the demo projects.
+
 ## Stopping and resetting
 
 ```sh

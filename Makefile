@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env
+.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env e2e e2e-report
 
 install:
 	uv sync
@@ -49,6 +49,21 @@ ui-env:
 	@echo NEXT_PUBLIC_WS_BASE_URL=ws://localhost:8000
 	@echo NEXT_PUBLIC_APPS=studio
 	@echo NEXT_PUBLIC_DEV_ACCESS_TOKEN=$$($(MAKE) -s token)
+
+# The UI's end-to-end tests against this stack (docs/manual-testing.md). Usage: make e2e [ARGS="e2e/smoke.spec.ts"]
+UI_DIR ?= ../knowledge-extractor
+
+e2e:
+	@test -d "$(UI_DIR)" || { echo "UI_DIR $(UI_DIR) not found: set UI_DIR to the knowledge-extractor checkout"; exit 1; }
+	@test -d "$(UI_DIR)/node_modules" || { echo "$(UI_DIR)/node_modules is missing: run npm ci in $(UI_DIR)"; exit 1; }
+	$(MAKE) up
+	cd "$(UI_DIR)" && npm run test:e2e -- $(ARGS)
+
+# Where the Playwright report of the last e2e run is, and how to open it.
+e2e-report:
+	@test -d "$(UI_DIR)/playwright-report" || { echo "No report in $(UI_DIR)/playwright-report: run make e2e first"; exit 1; }
+	@echo "Report: $(UI_DIR)/playwright-report/index.html"
+	@echo "Open it with: cd $(UI_DIR) && npx playwright show-report"
 
 # Fixed settings, so the file never depends on this machine's .env.
 SCHEMA_ENV = DJANGO_SETTINGS_MODULE=config.settings.test API_DOCS_ENABLED=true

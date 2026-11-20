@@ -10,6 +10,7 @@ description: Verify a change in this repository before a pull request by running
 0. In a fresh worktree run `uv sync --locked` first. Never `make install` there: it installs git hooks, which are shared by all worktrees.
 1. Database: PostgreSQL is one shared `db` service (the same one for every worktree). Never stop or reset it. Create your own database with the compose file of the main checkout, so it works from any worktree: `docker compose -f <main checkout>/compose.yaml exec -T db createdb -U ke <name>`. Then export it for this shell: `export DATABASE_URL=postgres://ke:ke@localhost:5432/<name>`. `make check`, `migrate`, `runserver` and `mint_dev_token` all read it.
 2. `make check` (ruff, mypy, schema-check, pytest). Fix everything; do not skip a check.
+2a. A change to an endpoint, an event or the sign-in that the UI uses: also run `make e2e` (needs the UI checkout, `docs/manual-testing.md`).
 3. `uv run python manage.py makemigrations --check --dry-run` is clean.
 4. Start the app on your own port, saving its process id: `uv run python manage.py migrate`, then `uv run python manage.py runserver 127.0.0.1:<port> --noreload & echo $! > /tmp/<name>.pid`.
 5. Call it with a dev token (`AUTH_MODE=dev`, the local default; `docs/auth.md`):

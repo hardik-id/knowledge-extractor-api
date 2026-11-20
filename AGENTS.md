@@ -10,6 +10,7 @@ uv run python manage.py check             # system checks
 uv run python manage.py runserver         # dev server, http://127.0.0.1:8000/
 uv run pytest                           # tests, against PostgreSQL
 make test                                 # same, also part of make check
+make e2e                                  # the UI's end-to-end tests against the stack (docs/manual-testing.md)
 make check                                # ruff, mypy, schema-check, pytest: the gate before a pull request
 make format                               # ruff format and fix
 make schema                               # write docs/openapi.yaml
@@ -18,6 +19,8 @@ uv run python manage.py mint_dev_token    # dev bearer token (AUTH_MODE=dev)
 uv run python manage.py makemigrations --check --dry-run
 docker compose up -d db                   # PostgreSQL, shared by every worktree
 ```
+
+A change to an endpoint, an event or the sign-in that the UI uses is checked with `make e2e` as well as `make check`.
 
 `make check` fails when `docs/openapi.yaml` is out of date. A tool counts as a check only once its configuration is in the repository.
 

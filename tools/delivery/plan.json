@@ -54,7 +54,8 @@
     {"index": 73, "kind": "ui", "name": "define-2-table-width", "description": "UI-158: the field table is a table on a laptop screen too", "whenToUse": "After define-1-field-table, with the backend stack running.", "items": [158]},
     {"index": 91, "name": "templates-1-api", "description": "PBI-389, then 390 ∥ 391: a registry of built-in templates with a list endpoint, projects that start from one, a sample document for each", "whenToUse": "First of the templates epic. Its final check rebuilds the stack.", "items": [389, 390, 391]},
     {"index": 92, "kind": "ui", "name": "templates-ui-1-services", "description": "UI-159: template services, the mock and a picker component", "whenToUse": "After templates-1-api, with the backend stack rebuilt and running.", "items": [159]},
-    {"index": 93, "kind": "ui", "name": "templates-ui-2-screens", "description": "UI-160 ∥ 161: New project starts from a template; load a template into an existing project", "whenToUse": "After templates-ui-1-services and define-2-table-width.", "items": [160, 161]}
+    {"index": 93, "kind": "ui", "name": "templates-ui-2-screens", "description": "UI-160 ∥ 161: New project starts from a template; load a template into an existing project", "whenToUse": "After templates-ui-1-services and define-2-table-width.", "items": [160, 161]},
+    {"index": 101, "kind": "ui", "name": "look-1-fixes", "description": "UI-176: the page no longer scrolls into empty space; text boxes are boxes", "whenToUse": "Any time, with the backend stack running.", "items": [176]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -148,6 +149,7 @@
     {"n": 391, "slug": "template-samples", "title": "A sample document for each template, read by the scripted extractor", "tier": "normal", "deps": [389]},
     {"kind": "ui", "n": 159, "slug": "template-services", "title": "Templates: services, the mock and a picker component", "tier": "normal", "deps": []},
     {"kind": "ui", "n": 160, "slug": "new-project-template", "title": "New project: start from a template", "tier": "normal", "deps": [159]},
-    {"kind": "ui", "n": 161, "slug": "load-template", "title": "Define tab: load a template into an existing project", "tier": "normal", "deps": [159]}
+    {"kind": "ui", "n": 161, "slug": "load-template", "title": "Define tab: load a template into an existing project", "tier": "normal", "deps": [159]},
+    {"kind": "ui", "n": 176, "slug": "scroll-and-corners", "title": "The page scrolls into empty space, and text boxes look like pills", "tier": "normal", "deps": []}
   ]
 }

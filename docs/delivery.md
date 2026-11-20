@@ -121,6 +121,7 @@ Tracked in #392. Several starting configurations for extraction (ADR, Skill, Pol
 | `define-1-field-table` | UI #148 | nothing, with the stack running (`make up`) |
 | `session-1-refused-token` | UI #149 | nothing, with the stack running. Can run beside `define-1-field-table` |
 | `define-2-table-width` | UI #158 | `define-1-field-table`, with the stack running |
+| `look-1-fixes` | UI #176 | nothing, with the stack running |
 
 The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 

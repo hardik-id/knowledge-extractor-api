@@ -58,5 +58,17 @@
     "name": "security-awareness-training.md",
     "location": "enriched / it / compliance",
     "modified_at": "2026-06-14T09:00:00Z"
+  },
+  {
+    "id": "enriched/engineering/operations/operations-skills.md",
+    "name": "operations-skills.md",
+    "location": "enriched / engineering / operations",
+    "modified_at": "2026-11-12T09:30:00Z"
+  },
+  {
+    "id": "enriched/hr/policies/leave-rules-2027.md",
+    "name": "leave-rules-2027.md",
+    "location": "enriched / hr / policies",
+    "modified_at": "2026-11-20T08:15:00Z"
   }
 ]

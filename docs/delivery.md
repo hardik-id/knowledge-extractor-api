@@ -96,6 +96,12 @@ Tracked in #357. Playwright journeys in the UI repository, run with one command,
 | `e2e-5-engine` | #363 | 3. Can run beside 4 |
 | `e2e-6-checks` | UI #124 ∥ #125 ∥ #126 | 4, with the stack running |
 
+## Single items
+
+| Workflow | PBIs | Start it after |
+| --- | --- | --- |
+| `define-1-field-table` | UI #148 | nothing, with the stack running (`make up`) |
+
 The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 
 ## Running one

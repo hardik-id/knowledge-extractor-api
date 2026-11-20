@@ -1,16 +1,29 @@
-"""The shape and rules of a definition, shared by the API and the assistant."""
+"""The way a definition gets in: untrusted data to a ``Draft``, or 422.
 
-import uuid
+The shape and its rules are the models in ``definition.py``. The DRF serializers
+here describe the same shape for the OpenAPI schema (and the body of a save); a
+test feeds both the same samples.
+"""
+
 from typing import Any
 
+from pydantic import ValidationError
 from rest_framework import serializers
 
 from apps.core.errors import ApiError
+from apps.extraction.definition import FORMATS, MODES, VALUE_TYPES, Draft
 
-MODES = ("quote", "inferred")
-VALUE_TYPES = ("text", "date", "number", "choice")
-FORMATS = ("json", "markdown", "csv")
 NOTE_MAX_LENGTH = 200
+
+__all__ = [
+    "FORMATS",
+    "MODES",
+    "NOTE_MAX_LENGTH",
+    "VALUE_TYPES",
+    "DraftSerializer",
+    "parse_draft",
+    "validate_draft",
+]
 
 
 class FieldSerializer(serializers.Serializer):  # type: ignore[type-arg]
@@ -46,34 +59,33 @@ class DraftSerializer(serializers.Serializer):  # type: ignore[type-arg]
     output = OutputSerializer()
 
 
-def _invalid(message: str, details: dict[str, Any] | None = None) -> ApiError:
-    return ApiError("invalid_definition", message, details)
+def parse_draft(data: Any) -> Draft:
+    """The draft with ids filled in and defaults applied, or 422 ``invalid_definition``.
+
+    ``details.errors`` lists each problem with the path to the value, for example
+    ``record_types.0.fields.2.mode``.
+    """
+    try:
+        return Draft.model_validate(data)
+    except ValidationError as error:
+        problems = [
+            {
+                "path": ".".join(str(part) for part in problem["loc"]),
+                "message": _message(problem),
+            }
+            for problem in error.errors()
+        ]
+        raise ApiError(
+            "invalid_definition", "The definition is not valid.", {"errors": problems}
+        ) from None
 
 
 def validate_draft(data: Any) -> dict[str, Any]:
-    """The draft with ids filled in and defaults applied, or 422 ``invalid_definition``."""
-    serializer = DraftSerializer(data=data)
-    if not serializer.is_valid():
-        raise _invalid("The definition is not valid.", {"errors": serializer.errors})
-    draft: dict[str, Any] = _plain(serializer.validated_data)
-    for record_type in draft["record_types"]:
-        record_type["id"] = record_type.get("id") or f"rt-{uuid.uuid4().hex[:12]}"
-        keys = [field["key"].strip() for field in record_type["fields"]]
-        if not all(keys) or len(set(keys)) != len(keys):
-            raise _invalid(
-                f'The fields of "{record_type["name"]}" need a key each, '
-                "and no two may share one."
-            )
-        for field in record_type["fields"]:
-            field["id"] = field.get("id") or f"f-{uuid.uuid4().hex[:12]}"
-            field["key"] = field["key"].strip()
-    return draft
+    """``parse_draft`` as plain JSON data, for the callers that store or pass it on."""
+    return parse_draft(data).model_dump()
 
 
-def _plain(value: Any) -> Any:
-    """Ordered dicts and lists from the serializer as plain JSON data."""
-    if isinstance(value, dict):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_plain(item) for item in value]
-    return value
+def _message(problem: Any) -> str:
+    if problem["type"] == "value_error":  # a rule of ours: its text is the message
+        return str(problem["ctx"]["error"])
+    return str(problem["msg"])

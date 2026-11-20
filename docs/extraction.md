@@ -125,6 +125,14 @@ succeeded / failed ──POST──> queued
 | --- | --- |
 | `EXECUTION_TIMEOUT_SECONDS` | After how long a `queued` or `running` cell counts as failed. Default 600 |
 
+## The shape of a definition
+
+`definition.py` is the one place the shape of a definition is written in code: `Draft` (a prompt, record types, an output) holds `RecordType`s, a record type holds `Field`s, and `Output` says how records are written out. Each model owns its own part and its rules: the allowed modes (`quote`, `inferred`), value types (`text`, `date`, `number`, `choice`) and formats (`json`, `markdown`, `csv`); strings are trimmed; a missing or blank `id` is filled in (`rt-...`, `f-...`); a record type's fields each have a key and no two share one. The module imports nothing from Django, DRF or another app.
+
+`validation.parse_draft(data)` is the one way in from untrusted data. It returns a `Draft`, or raises 422 `invalid_definition` with `details: { errors: [{ path, message }] }`, where `path` leads to the value (`record_types.0.fields.2.mode`; a rule of a record type, such as a repeated key, is at `record_types.0` and names the record type). `validate_draft(data)` is `parse_draft(data).model_dump()`: plain data for the database, which still stores the definition as JSON.
+
+The OpenAPI schema is generated from the DRF serializers in `validation.py` (`DraftSerializer`), not from the models: drf-spectacular's pydantic support covers only the outermost model of a request, and the schema needs a request and a response variant of each part and a body that adds `base_version` and `note`. A test feeds the same valid and invalid samples to the serializers and to `parse_draft` and expects the same verdicts; change both when the shape changes.
+
 ## Extraction configuration and its versions
 
 The UI and the documents call the definition an "extraction configuration". The paths, the code and the error codes keep the word `definition`.

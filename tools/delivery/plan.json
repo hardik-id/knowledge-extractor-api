@@ -44,7 +44,10 @@
     {"index": 54, "kind": "ui", "name": "projects-ui-4-walk", "description": "UI-058: walk through projects in a real browser", "whenToUse": "After projects-ui-3-screens.", "items": [58]},
     {"index": 61, "kind": "ui", "name": "e2e-1-runner", "description": "UI-096: a Playwright runner, fixtures and a smoke test", "whenToUse": "First of the end-to-end epic, with the backend stack running (make up).", "items": [96]},
     {"index": 62, "kind": "ui", "name": "e2e-2-journeys", "description": "UI-097 ∥ 098 ∥ 099: journey tests for projects and versions, assistant and review, privacy, persistence and phone width", "whenToUse": "After e2e-1-runner, with the backend stack running.", "items": [97, 98, 99]},
-    {"index": 63, "name": "e2e-3-command", "description": "PBI-356: make e2e runs the UI tests against the stack", "whenToUse": "After e2e-1-runner. Can run beside e2e-2-journeys.", "items": [356]}
+    {"index": 63, "name": "e2e-3-command", "description": "PBI-356: make e2e runs the UI tests against the stack", "whenToUse": "After e2e-1-runner. Can run beside e2e-2-journeys.", "items": [356]},
+    {"index": 64, "kind": "ui", "name": "e2e-4-stability", "description": "UI-123: no clicks lost before the page is ready", "whenToUse": "After e2e-2-journeys, with the backend stack running. Can run beside e2e-5-engine.", "items": [123]},
+    {"index": 65, "name": "e2e-5-engine", "description": "PBI-363: the delivery workflows run the end-to-end suite before they merge", "whenToUse": "After e2e-3-command. Can run beside e2e-4-stability.", "items": [363]},
+    {"index": 66, "kind": "ui", "name": "e2e-6-checks", "description": "UI-124 ∥ 125 ∥ 126: accessibility scan, screenshot comparison, an optional live suite", "whenToUse": "After e2e-4-stability, with the backend stack running.", "items": [124, 125, 126]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -121,6 +124,11 @@
     {"kind": "ui", "n": 97, "slug": "e2e-projects-versions", "title": "End-to-end journey: projects, documents and configuration versions", "tier": "normal", "deps": [96]},
     {"kind": "ui", "n": 98, "slug": "e2e-assistant-review", "title": "End-to-end journey: the assistant, running, and reviewing records", "tier": "normal", "deps": [96]},
     {"kind": "ui", "n": 99, "slug": "e2e-privacy-persistence", "title": "End-to-end journey: privacy, persistence, phone width and keyboard", "tier": "normal", "deps": [96]},
-    {"n": 356, "slug": "make-e2e", "title": "make e2e: run the UI's end-to-end tests against the stack", "tier": "simple", "deps": []}
+    {"n": 356, "slug": "make-e2e", "title": "make e2e: run the UI's end-to-end tests against the stack", "tier": "simple", "deps": []},
+    {"kind": "ui", "n": 123, "slug": "e2e-stability", "title": "End-to-end tests: no clicks lost before the page is ready (a flaky test)", "tier": "normal", "deps": []},
+    {"kind": "ui", "n": 124, "slug": "e2e-accessibility", "title": "End-to-end tests: accessibility scan of every main screen", "tier": "normal", "deps": [123]},
+    {"kind": "ui", "n": 125, "slug": "e2e-visual", "title": "End-to-end tests: screenshot comparison of a few stable screens", "tier": "normal", "deps": [123]},
+    {"kind": "ui", "n": 126, "slug": "e2e-live", "title": "End-to-end tests: an optional live suite for the real model and real sign-in", "tier": "normal", "deps": [123]},
+    {"n": 363, "slug": "e2e-merge-gate", "title": "The delivery workflows run the end-to-end suite before they merge", "tier": "complex", "deps": []}
   ]
 }

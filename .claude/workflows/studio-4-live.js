@@ -83,6 +83,9 @@ const PLAN = {
 //   repoDir: "/path"  the main checkout, when it can't be found from the start folder
 //   apiDir, apiUrl    UI workflows only: the backend checkout and where it answers
 //   uiDir             API workflows only: the UI checkout, read as the contract
+//
+// The end-to-end suite is the merge gate: UI work that needs the API runs it in each PBI's clean-checkout
+// validation and once on `main` at the end; API work runs it once on `main` at the end (after `make up`).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const input = args || {}
@@ -142,6 +145,7 @@ const PREPARE_SCHEMA = {
           state: { type: 'string', enum: ['OPEN', 'CLOSED'] },
           pr: { type: 'integer', description: 'Newest pull request for it, 0 when there is none' },
           prState: { type: 'string', enum: ['NONE', 'OPEN', 'MERGED', 'CLOSED'] },
+          labels: { type: 'array', items: { type: 'string' }, description: 'Names of the issue labels' },
         },
         required: ['n', 'state', 'pr', 'prState'],
       },
@@ -252,9 +256,21 @@ const place = p => ({
   checkDb: `ke_pbi_${pad(p.n)}_check`,
   port: KIND.port + 100 + p.n,
   checkPort: KIND.port + 1100 + p.n,
+  // The end-to-end runner starts its own copy of the UI: one port per PBI, never 3000 or 3100.
+  e2ePort: 5100 + p.n,
+  checkE2ePort: 7100 + p.n,
 })
 
+// The end-to-end suite is skipped for an item that changes only docs or the delivery tooling:
+// its issue has the `documentation` label, or its title names docs or the delivery workflows, engine or tooling.
+const DOCS_OR_TOOLING = /\b(docs?|documentation|delivery (workflows?|engine|tooling))\b/i
+const skipsE2e = (p, state) => ((state && state.labels) || []).includes('documentation') || DOCS_OR_TOOLING.test(p.title)
+// UI work runs the suite for each PBI when it needs the backend; API work runs it once, on main.
+const E2E_EACH_PBI = PLAN.kind === 'ui' && PLAN.needsApi !== false
+
 // ── What differs between the two repositories ────────────────────────────────
+
+const E2E_STACK_RULE = `The backend stack at ${apiUrl} is already running and shared: don't start, stop, rebuild or reset it, and don't run \`make up\`. The suite starts its own copy of the UI on that E2E_PORT (never 3000 or 3100). If the Playwright browsers are missing, \`npx playwright install chromium\` is fine.`
 
 const KINDS = {
   // The Django API.
@@ -274,12 +290,13 @@ const KINDS = {
       `The infrastructure services in \`compose.yaml\` (\`db\`, and \`redis\` and \`otel-collector\` once they exist) are one set shared by every agent in every worktree. Never stop, restart or reset them and never run \`docker compose down\`, unless the issue's own "Done when" says so. Use your own database and your own port, given below. Create the database with the server's own tools (for example \`docker compose -f ${repoDir}/compose.yaml exec -T db createdb -U ke <name>\`) and pass it as \`DATABASE_URL\` on the command line or in your worktree's \`.env\`. Run the app from your worktree with \`uv run\`, not through the compose \`api\` or \`worker\` services, unless the issue is about those.`,
       `Git hooks are shared by all worktrees. Don't install or change them from a worktree (no \`pre-commit install\`, no \`make install\`). Run the hooks by hand instead: \`uv run pre-commit run --all-files\`.`,
       `Stop every server and container you start, except the shared ones.`,
+      `If you start the UI's app (\`make e2e\` does), give it a free port of your own (\`E2E_PORT=<port>\`, check with \`ss -ltn\`). Never use 3000 (a person's dev server) or 3100 (the runner's default, which parallel agents would share).`,
       `The UI this API serves is checked out at ${uiDir} (read only for you). Its \`docs/*.md\`, \`src/services/contracts.ts\`, \`src/services/http/\` (what goes over the wire and what the parser requires) and \`src/services/mock/\` (the behaviour to mirror) are the contract. Where the issue and that code disagree, say so in the pull request.`,
     ],
     sync: '`uv sync`',
     checks: '`make check`',
     tryIt: c => `run the app on port ${c.port} with database ${c.db}, call it, run the commands it names`,
-    cleanChecks: '`uv sync --locked`. Then `make check` and `uv run python manage.py makemigrations --check --dry-run`',
+    cleanChecks: () => '`uv sync --locked`. Then `make check` and `uv run python manage.py makemigrations --check --dry-run`.',
     validateIt: c => `start the app on port ${c.checkPort} with database ${c.checkDb}, call it with curl, run the command it names, open the file`,
     strays: 'files that should not be in git (`.env`, keys, database files, editor folders), and for dependencies typed into `pyproject.toml` without the matching change in `uv.lock`',
     cleanUp: c => `stop what you started, drop ${c.checkDb} if you created it`,
@@ -289,9 +306,12 @@ const KINDS = {
       'Generators: was something written by hand that a generator produces (an app skeleton, migrations, dependency lines, hook versions, the OpenAPI file)?',
       'Tests: do they test behaviour, against real PostgreSQL, and would they fail if the feature broke?',
     ],
-    mainCheck: (wt, index) => `3. \`uv sync --locked\`, then \`make check\` and \`uv run python manage.py makemigrations --check --dry-run\`.
-4. Create the database ke_main_check_${index}, \`migrate\` it, start the app on port ${8090 + index} and call \`/api/v1/health\`. Stop the app.
-5. Clean up: drop the database, remove the worktree.`,
+    mainCheck: (wt, index, e2e) => [
+      `\`uv sync --locked\`, then \`make check\` and \`uv run python manage.py makemigrations --check --dry-run\`.`,
+      `Create the database ke_main_check_${index}, \`migrate\` it, start the app on port ${8090 + index} and call \`/api/v1/health\`. Stop the app.`,
+      ...(e2e ? [`End-to-end suite. Run it from the main checkout ${repoDir}, not from the worktree: after step 1 it is \`main\`, and its compose project is the shared stack (a worktree would start a second stack under another project name). If step 1 could not bring it level with \`origin/main\`, report that as a problem and skip this step. Rebuild the stack from \`main\`: \`cd ${repoDir} && make up\`. This is the one place where the compose \`api\` and \`worker\` are rebuilt; \`db\`, \`redis\` and \`otel-collector\` stay as they are, and nothing is taken down. Then \`cd ${repoDir} && E2E_PORT=${6000 + index} make e2e${input.uiDir ? ` UI_DIR=${input.uiDir}` : ''}\` (it needs \`npm ci\` done in the UI checkout; if the Playwright browsers are missing, \`npx playwright install chromium\` there is fine). A failing suite is a problem of this check: put each failing test's name in \`problems\`, with the first line of its error.`] : []),
+      `Clean up: drop the database, remove the worktree.`,
+    ],
   },
 
   // The Next.js UI. Only the Knowledge Studio app is worked on.
@@ -305,20 +325,22 @@ const KINDS = {
     shared: () => PLAN.needsApi === false
       ? `Nothing to start: this work does not need the backend.`
       : `The UI work is tried against the running backend: \`curl -fsS ${apiUrl}/api/v1/health\` must answer \`{"status":"ok"}\`. If it does not, that is a problem. Don't start, stop or rebuild the backend yourself.`,
-    resources: c => `Port for the UI: ${c.port}`,
-    checkResources: c => `Port for the UI: ${c.checkPort}`,
+    resources: c => `Port for the UI: ${c.port}   Port for the end-to-end runner (E2E_PORT): ${c.e2ePort}`,
+    checkResources: c => `Port for the UI: ${c.checkPort}   Port for the end-to-end runner (E2E_PORT): ${c.checkE2ePort}`,
     rules: () => [
       `Read \`CLAUDE.md\` and \`AGENTS.md\` at the root of your worktree first and follow them: the design system, the \`src/services\` boundary, shared components instead of copies.`,
       `Only the Knowledge Studio app is in scope. Don't change how the pipeline app behaves.`,
       `Dependencies: \`npm ci\` in your own worktree. Never link or copy \`node_modules\` from another checkout: the build breaks.`,
-      `Port 3000 may be the owner's own dev server: never use it and never stop it. Run the UI on your own port, given below (\`npx next dev -p <port>\`). The backend accepts any \`http://localhost:<port>\` origin locally.`,
+      `Port 3000 may be the owner's own dev server: never use it and never stop it. Port 3100 is the end-to-end runner's default, which parallel agents would share: never use it either. Run the UI on your own port, given below (\`npx next dev -p <port>\`). If you need another one, pick a free port (check with \`ss -ltn\`). The backend accepts any \`http://localhost:<port>\` origin locally.`,
       `The backend API runs at ${apiUrl}, from ${apiDir} (compose project \`knowledge-extractor-api\`). It is shared: never stop, rebuild or reset it. A dev bearer token for it: \`docker compose -f ${apiDir}/compose.yaml exec -T api python manage.py mint_dev_token\`. The settings that point the UI at it are in the issue.`,
       `Stop every server and browser you start.`,
     ],
     sync: '`npm ci`',
     checks: '`npm run lint`, `npx tsc --noEmit`, `npm test` and `npm run build`',
     tryIt: c => `run the UI on port ${c.port} against the backend, do what the item says in it, run the commands it names`,
-    cleanChecks: '`npm ci`. Then `npm run lint`, `npx tsc --noEmit`, `npm test` and `npm run build`',
+    cleanChecks: (c, e2e) => `\`npm ci\`. Then \`npm run lint\`, \`npx tsc --noEmit\`, \`npm test\` and \`npm run build\`.${e2e === 'run'
+      ? ` Then the end-to-end suite: \`E2E_PORT=${c.checkE2ePort} npm run test:e2e\`. ${E2E_STACK_RULE} A failing suite is a failed check: record each failing test by name in its output.`
+      : e2e === 'skip' ? ` This item changes only docs or the delivery tooling, so the end-to-end suite is not run for it.` : ''}`,
     validateIt: c => `run the UI on port ${c.checkPort} against the backend, do what the item says in it, run the command it names, open the file`,
     strays: 'files that should not be in git (`.env.local`, tokens, `node_modules`, build output), and for a changed `package.json` without the matching `package-lock.json`',
     cleanUp: () => `stop what you started`,
@@ -328,9 +350,12 @@ const KINDS = {
       'Contract: do `src/services/http`, `src/services/mock`, `contracts.ts` and the documents in `docs/` still say the same thing?',
       'Tests: Node\'s own test runner (`src/**/*.test.ts`); do they test behaviour and would they fail if the feature broke?',
     ],
-    mainCheck: (wt, index) => `3. \`npm ci\`, then \`npm run lint\`, \`npx tsc --noEmit\`, \`npm test\` and \`npm run build\`.
-4. Start the built UI on port ${3090 + index} (\`npx next start -p ${3090 + index}\`) and request \`/studio\`: it must answer 200. Stop it.
-5. Clean up: remove the worktree.`,
+    mainCheck: (wt, index, e2e) => [
+      `\`npm ci\`, then \`npm run lint\`, \`npx tsc --noEmit\`, \`npm test\` and \`npm run build\`.`,
+      `Start the built UI on port ${3090 + index} (\`npx next start -p ${3090 + index}\`) and request \`/studio\`: it must answer 200. Stop it.`,
+      ...(e2e ? [`End-to-end suite: \`E2E_PORT=${6000 + index} npm run test:e2e\` in the worktree. ${E2E_STACK_RULE} A failing suite is a problem of this check: put each failing test's name in \`problems\`, with the first line of its error.`] : []),
+      `Clean up: remove the worktree.`,
+    ],
   },
 }
 
@@ -352,7 +377,7 @@ const preparePrompt = (items, others) => `Prepare a delivery run for the GitHub 
 2. \`git -C <dir> fetch origin --prune\`. The checkout must be on \`main\` and \`git -C <dir> status --porcelain\` must be empty. If it is clean and behind, fast-forward it: \`git -C <dir> merge --ff-only origin/main\`. If it has changes or is on another branch, leave it alone and report that as a problem.
 3. Tools: ${KIND.tools}. Report each one that fails as a problem.
 4. ${KIND.shared('<dir>')}
-5. Report the state of each of these issues (\`gh issue view <n> -R ${REPO} --json state\`), and the newest pull request from its branch (\`gh pr list -R ${REPO} --state all --head <branch> --json number,state\`; \`pr\` is 0 and \`prState\` is NONE when there is none):
+5. Report the state of each of these issues (\`gh issue view <n> -R ${REPO} --json state,labels\`; report the names of its labels in \`labels\`), and the newest pull request from its branch (\`gh pr list -R ${REPO} --state all --head <branch> --json number,state\`; \`pr\` is 0 and \`prState\` is NONE when there is none):
 ${items.map(p => `   - #${p.n}, branch ${place(p).branch}`).join('\n')}${others.length ? `
    And only the state of these issues (no pull request needed): ${others.map(n => `#${n}`).join(', ')}.` : ''}
 
@@ -386,7 +411,7 @@ ${KIND.checkResources(c)}
 Steps:
 1. Read the issue (\`gh issue view ${p.n} -R ${REPO}\`): "Done when" is your checklist. Read the pull request (\`gh pr view ${pr} -R ${REPO}\`) for what the author says was done.
 2. Take a clean copy of exactly what is on GitHub: \`git -C ${repoDir} fetch origin\`; remove ${c.checkWt} if it is left over (\`git -C ${repoDir} worktree remove --force ${c.checkWt}\`); \`git -C ${repoDir} worktree add --detach ${c.checkWt} origin/${c.branch}\`.
-3. Test: ${KIND.cleanChecks}. Record every command, whether it passed, and the lines that show it.
+3. Test: ${KIND.cleanChecks(c, E2E_EACH_PBI ? (skipsE2e(p, stateOf[p.n]) ? 'skip' : 'run') : '')} Record every command, whether it passed, and the lines that show it.
 4. Validate. Take each "Done when" item in turn and do what it says against the real thing: ${KIND.validateIt(c)}. Record the command and what you saw. Verdict per item: \`passed\` (you saw it work), \`failed\` (you saw it fail), \`not_verified\` (you could not check it here: say why). What the pull request claims, and tests you did not run, are not evidence.
 5. Also look for ${KIND.strays}. Either one is a failed check.
 6. Clean up: ${KIND.cleanUp(c)}, \`git -C ${repoDir} worktree remove --force ${c.checkWt}\`.
@@ -449,7 +474,9 @@ ${minors.map(m => `   - ${m.title}${m.file ? ` (${m.file})` : ''}: ${clip(m.deta
 
 If the rebase can't be resolved safely, or the checks fail after it and the repair is not small, don't merge: hand back \`blocked\` with the reason and leave the worktree as it is.`
 
-const mainPrompt = merged => `Check that \`main\` of ${REPO} is healthy after these merges: ${merged.join(', ')}. Report only. Don't fix code.
+const mainPrompt = (merged, e2e) => {
+  const steps = KIND.mainCheck(`${repoDir}/.worktrees/main-check-${PLAN.index}`, PLAN.index, e2e)
+  return `Check that \`main\` of ${REPO} is healthy after these merges: ${merged.join(', ')}. Report only. Don't fix code.
 ${rules()}
 
 Your worktree: ${repoDir}/.worktrees/main-check-${PLAN.index} (detached)
@@ -457,10 +484,11 @@ Your worktree: ${repoDir}/.worktrees/main-check-${PLAN.index} (detached)
 Steps:
 1. \`git -C ${repoDir} fetch origin --prune\`. When the main checkout is clean and on main, fast-forward it: \`git -C ${repoDir} merge --ff-only origin/main\`.
 2. \`git -C ${repoDir} worktree add --detach ${repoDir}/.worktrees/main-check-${PLAN.index} origin/main\` (remove a left-over one first).
-${KIND.mainCheck(`${repoDir}/.worktrees/main-check-${PLAN.index}`, PLAN.index)}
-6. Look at \`git -C ${repoDir} worktree list\`: name the worktrees under \`.worktrees/\` that are still there. Leave them and the local branches alone.
+${steps.map((line, i) => `${i + 3}. ${line}`).join('\n')}
+${steps.length + 3}. Look at \`git -C ${repoDir} worktree list\`: name the worktrees under \`.worktrees/\` that are still there. Leave them and the local branches alone.
 
 \`ok\` is true when every check passed and the app answered. \`problems\` lists only what failed.`
+}
 
 // ── The run ──────────────────────────────────────────────────────────────────
 
@@ -609,7 +637,9 @@ const results = await Promise.all(ITEMS.map(start))
 const mergedNow = results.filter(r => r.status === 'merged' && r.pr).map(r => r.pbi)
 let main = null
 if (mergedNow.length) {
-  main = await agent(mainPrompt(mergedNow), {
+  // The suite runs once on main, unless every merged item changed only docs or the delivery tooling.
+  const e2eOnMain = (PLAN.kind === 'api' || E2E_EACH_PBI) && results.some(r => r.status === 'merged' && r.pr && !skipsE2e(byNumber[r.n], stateOf[r.n]))
+  main = await agent(mainPrompt(mergedNow, e2eOnMain), {
     label: 'validate main',
     phase: 'Validate main',
     model: STAGES.validateMain.model,

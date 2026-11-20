@@ -17,11 +17,18 @@ implement ──► review ───────────┐
 | --- | --- |
 | Implement | Reads the issue, works in its own git worktree, uses the generators, runs the checks, opens the pull request |
 | Review | Has not seen the work. Judges the pull request against the issue: correctness, security, conventions, generators, tests, simplicity. Major findings block, minor ones don't |
-| Test and validate | Takes a clean checkout of the pull request. Runs every check, then does each "Done when" item against the running app. Reports evidence, changes nothing |
+| Test and validate | Takes a clean checkout of the pull request. Runs every check, then does each "Done when" item against the running app. UI work that needs the API also runs the end-to-end suite (`npm run test:e2e`) against the running stack, on its own `E2E_PORT`. Reports evidence, changes nothing |
 | Fix | Only the points that block. After two rounds the PBI is marked blocked and the PBIs that wait for it are skipped |
 | Merge | One at a time: rebase onto `main`, checks again, squash-merge, file each minor finding as a low-priority issue, clean up |
 
 Review and validation run side by side. A workflow ends with a full check of `main`.
+
+The end-to-end suite is the merge gate, because there is no CI:
+
+- **UI work that needs the API:** each PBI's validation runs `npm run test:e2e` against the stack that is already running (the engine never restarts it), and the final check of `main` runs it once more. A failing test blocks like any other failed check.
+- **API work:** per-PBI validation stays as it is, because the stack runs `main`, not a worktree. The final check of `main` rebuilds the stack from `main` (`make up`) and runs `make e2e`. A failure is reported as a problem of that check, with the names of the failing tests.
+- **Docs and delivery tooling:** an item whose label is `documentation`, or whose title names docs or the delivery workflows, engine or tooling, skips the suite. The rule is the `DOCS_OR_TOOLING` line in `tools/delivery/engine.js`.
+- **Ports:** every agent that starts a UI app uses a free port of its own and never 3000 (a person's dev server) or 3100 (the runner's default). Each PBI gets `E2E_PORT` 5100 plus its number (validation: 7100 plus), the final check 6000 plus the workflow's index.
 
 A PBI starts as soon as the PBIs it depends on are merged, so a workflow has no idle waves.
 
@@ -116,7 +123,7 @@ Running a workflow again is safe. A closed issue is skipped, and an open pull re
 | Worktree | `.worktrees/pbi-142` (validation uses `.worktrees/pbi-142-check`) |
 | Branch | `pbi/142-runs` (in the UI repository: `studio/039-studio-http`) |
 | Database | `ke_pbi_142` (validation: `ke_pbi_142_check`) |
-| Port | 8242 (validation: 9242). UI work: 3139 and 4139 |
+| Port | 8242 (validation: 9242). UI work: 3139 and 4139; its end-to-end runner (`E2E_PORT`): 5139 and 7139 |
 
 Some things are shared, so agents leave them alone:
 

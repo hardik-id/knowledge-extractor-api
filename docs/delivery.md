@@ -96,6 +96,14 @@ Tracked in #357. Playwright journeys in the UI repository, run with one command,
 | `e2e-5-engine` | #363 | 3. Can run beside 4 |
 | `e2e-6-checks` | UI #124 ∥ #125 ∥ #126 | 4, with the stack running |
 
+## The definition models epic
+
+Tracked in #372. One description of the extraction definition's shape: nested pydantic models.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `definition-1-models` | #369 → #370 → #371 | nothing |
+
 ## Single items
 
 | Workflow | PBIs | Start it after |

@@ -114,6 +114,16 @@ Tracked in #392. Several starting configurations for extraction (ADR, Skill, Pol
 | `templates-ui-1-services` | UI #159 | 1, with the stack rebuilt and running |
 | `templates-ui-2-screens` | UI #160 ∥ #161 | ui-1, and `define-2-table-width` |
 
+## The modern look epic
+
+UI milestone "Modern look". "Polder for apps": lines instead of frames, small radii, an app type scale and density, neutral ground, a slim shell.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `look-1-fixes` | UI #176 | nothing |
+| `look-2-foundation` | UI #177 → #178 | 1 |
+| `look-3-screens` | UI #179 ∥ #180 ∥ #181 | 2 |
+
 ## Single items
 
 | Workflow | PBIs | Start it after |
@@ -121,7 +131,6 @@ Tracked in #392. Several starting configurations for extraction (ADR, Skill, Pol
 | `define-1-field-table` | UI #148 | nothing, with the stack running (`make up`) |
 | `session-1-refused-token` | UI #149 | nothing, with the stack running. Can run beside `define-1-field-table` |
 | `define-2-table-width` | UI #158 | `define-1-field-table`, with the stack running |
-| `look-1-fixes` | UI #176 | nothing, with the stack running |
 
 The foundation epic was delivered the same way by `foundation-1-bootstrap` to `foundation-8-agent-kit` (#1 to #23).
 

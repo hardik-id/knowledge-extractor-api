@@ -10,7 +10,6 @@ import pytest
 
 from apps.core.errors import ApiError
 from apps.extraction import template_registry
-from apps.extraction.definition import Draft
 from apps.extraction.template_registry import TEMPLATES_DIR, Template
 
 FILES = sorted(TEMPLATES_DIR.glob("*.json"))
@@ -82,10 +81,8 @@ def test_the_default_is_the_adr_as_it_always_was() -> None:
         (Path(__file__).parent / "old_default.json").read_text("utf-8")
     )
     now = template_registry.default_template().definition.model_dump()
-    # Draft trims strings, so the template's trailing newline is gone.
-    old["output"]["template"] = old["output"]["template"].strip()
     assert now == old
-    assert Draft.model_validate(old).model_dump() == now
+    assert now["output"]["template"].endswith("{{decision}}\n")
 
 
 @pytest.mark.django_db

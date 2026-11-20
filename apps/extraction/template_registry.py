@@ -32,7 +32,13 @@ def _load() -> dict[str, Template]:
     templates = {}
     for path in sorted(TEMPLATES_DIR.glob("*.json")):
         try:
-            template = Template.model_validate(json.loads(path.read_text("utf-8")))
+            raw = json.loads(path.read_text("utf-8"))
+            template = Template.model_validate(raw)
+            # Validation trims strings, but the output template's trailing newline is
+            # part of the text (a new run's definition has always carried it).
+            template.definition.output.template = raw["definition"]["output"][
+                "template"
+            ]
         except ValueError as error:
             raise ValueError(
                 f"Template file {path.name} is not valid: {error}"

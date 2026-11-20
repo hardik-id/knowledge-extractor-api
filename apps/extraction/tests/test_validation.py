@@ -9,7 +9,12 @@ from apps.extraction.defaults import (
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.validation import DraftSerializer, parse_draft, validate_draft
+from apps.extraction.validation import DraftSerializer, parse_draft
+
+
+def dumped(data: Any) -> dict[str, Any]:
+    """The draft as plain data, ids filled."""
+    return parse_draft(data).model_dump()
 
 
 def draft() -> dict[str, Any]:
@@ -118,7 +123,7 @@ def test_the_result_is_what_the_serializer_gave_apart_from_ids() -> None:
     serializer = DraftSerializer(data=data)
     assert serializer.is_valid()
     expected = serializer.validated_data
-    result = validate_draft(data)
+    result = dumped(data)
     assert result["prompt"] == expected["prompt"]
     assert result["output"] == dict(expected["output"])
     assert result["record_types"] == [
@@ -127,9 +132,9 @@ def test_the_result_is_what_the_serializer_gave_apart_from_ids() -> None:
     ]
 
 
-def test_validate_draft_fills_ids_and_returns_plain_data() -> None:
+def test_parse_draft_fills_ids_and_dumps_plain_data() -> None:
     data = changed(lambda d: first_field(d).pop("id"))
-    result = validate_draft(data)
+    result = dumped(data)
     assert result["record_types"][0]["fields"][0]["id"].startswith("f-")
     assert type(result) is dict
     assert type(result["record_types"][0]["fields"][0]) is dict

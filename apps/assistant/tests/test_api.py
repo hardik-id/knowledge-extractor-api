@@ -10,11 +10,12 @@ from django.utils import timezone
 from apps.assistant import services, tasks
 from apps.assistant.agents.scripted import assistant_reply
 from apps.assistant.models import Message, Role, Status
+from apps.assistant.proposal import Proposal
 from apps.assistant.tests.factories import MessageFactory
 from apps.assistant.tests.fakes import RecordingAgent
 from apps.assistant.tests.test_scripted import adr, bare
 from apps.documents import selectors as documents
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
 from apps.realtime import services as realtime
 from apps.runs.tests.factories import RunFactory, RunFileFactory
 
@@ -115,14 +116,14 @@ def test_post_answers_the_users_message_and_the_reply_arrives(
     ]
     assert messages[0] == mine
     reply = messages[1]
-    expected = assistant_reply(ADR_ASK, bare())
+    expected = assistant_reply(ADR_ASK, Draft.model_validate(bare()))
     assert expected.proposal
     assert reply["text"] == expected.text
     assert reply["proposal"]["definition"]["record_types"][0]["name"] == "ADR"
     assert no_ids(reply["proposal"]["definition"]) == no_ids(
-        validate_draft(expected.proposal.definition)
+        expected.proposal.definition.model_dump()
     )
-    assert reply["proposal"]["reasons"] == expected.proposal.reasons
+    assert reply["proposal"]["reasons"] == expected.proposal.model_dump()["reasons"]
 
     # the socket saw the same: deltas, then the proposal, then done
     assert {event.pop("group") for event in sent} == {f"run.{run.pk}"}
@@ -159,11 +160,11 @@ def test_the_next_message_gets_the_history_and_the_draft(
         assert post(client, run, "add owner", adr()).status_code == 201
     [call] = RecordingAgent.calls
     assert call["text"] == "add owner"
-    assert call["definition"] == validate_draft(adr())
+    assert call["definition"] == Draft.model_validate(adr())
     history = call["history"]
     assert [(m.role, m.text) for m in history] == [  # type: ignore[attr-defined]
         ("user", ADR_ASK),
-        ("assistant", assistant_reply(ADR_ASK, bare()).text),
+        ("assistant", assistant_reply(ADR_ASK, Draft.model_validate(bare())).text),
     ]
 
 
@@ -390,7 +391,12 @@ def test_a_second_run_of_the_job_closes_a_half_written_reply(
 def test_writes_stop_once_the_reply_is_done(run: Any) -> None:
     reply = MessageFactory(run=run, role=Role.ASSISTANT, text="Done.")
     assert services.append_text(reply.pk, "more") is False
-    assert services.set_proposal(reply.pk, {}) is False
+    assert (
+        services.set_proposal(
+            reply.pk, Proposal(definition=Draft.model_validate(bare()), reasons=[])
+        )
+        is False
+    )
     assert services.finish_reply(reply.pk) is False
     reply.refresh_from_db()
     assert reply.text == "Done."

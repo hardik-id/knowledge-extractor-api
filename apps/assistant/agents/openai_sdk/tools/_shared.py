@@ -12,6 +12,7 @@ import structlog
 from agents import FunctionTool
 from agents.strict_schema import ensure_strict_json_schema
 from agents.tool_context import ToolContext
+from pydantic import BaseModel, ConfigDict
 
 from apps.assistant import telemetry
 from apps.assistant.agents.base import ToolUsed
@@ -36,6 +37,12 @@ def clip(text: str, limit: int) -> str:
 def error(message: str) -> str:
     """A failure, as the model reads it: text that starts with ``Error:``."""
     return f"Error: {message}"
+
+
+class Strict(BaseModel):
+    """The arguments of a tool: no property the schema does not name."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 Handler = Callable[[ReplyContext, str], Awaitable[str]]

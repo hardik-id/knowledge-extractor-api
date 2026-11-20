@@ -24,6 +24,7 @@ from apps.extraction.defaults import (
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
+from apps.extraction.definition import Draft
 from apps.extraction.models import (
     DefinitionVersion,
     Extraction,
@@ -31,7 +32,6 @@ from apps.extraction.models import (
     FieldValue,
 )
 from apps.extraction.tests.factories import DefinitionVersionFactory
-from apps.extraction.validation import validate_draft
 from apps.runs.models import Cell
 from apps.runs.tests.factories import CellFactory, RunFactory, RunFileFactory
 
@@ -42,8 +42,8 @@ OTHER = "enriched/engineering/architecture/architecture-decisions-2026.md"
 TITLE = "f-adr-title"
 
 
-def definition() -> dict[str, Any]:
-    return validate_draft(
+def definition() -> Draft:
+    return Draft.model_validate(
         {
             "prompt": DEFAULT_PROMPT,
             "record_types": DEFAULT_RECORD_TYPES,
@@ -269,17 +269,9 @@ def test_preview_changes_no_cell_and_no_stored_record(
     execute(client, run, capture)
     before = snapshot()
     draft = definition()
-    draft["record_types"][0]["name"] = "Something else"
+    draft.record_types[0].name = "Something else"
     assert async_to_sync(workspace.preview)(draft, ADR) == []
     assert snapshot() == before
-
-
-def test_preview_with_a_draft_that_is_not_valid_is_refused(
-    file: Any, workspace: OwnerWorkspace
-) -> None:
-    with pytest.raises(ApiError) as error:
-        async_to_sync(workspace.preview)({"prompt": "x"}, ADR)
-    assert error.value.code == "invalid_definition"
 
 
 # --- what an agent can do with it ----------------------------------------------------

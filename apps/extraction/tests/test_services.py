@@ -10,10 +10,15 @@ from apps.extraction.defaults import (
     DEFAULT_RECORD_TYPES,
 )
 from apps.extraction.services import save_definition
-from apps.extraction.validation import validate_draft
+from apps.extraction.validation import parse_draft
 from apps.runs.tests.factories import RunFactory
 
 pytestmark = pytest.mark.django_db
+
+
+def dumped(data: Any) -> dict[str, Any]:
+    """The draft as plain data, ids filled."""
+    return parse_draft(data).model_dump()
 
 
 def draft() -> dict[str, Any]:
@@ -24,8 +29,8 @@ def draft() -> dict[str, Any]:
     }
 
 
-def test_validate_draft_fills_ids_and_defaults() -> None:
-    data = validate_draft(
+def test_parse_draft_fills_ids_and_defaults() -> None:
+    data = dumped(
         {
             "prompt": "p",
             "record_types": [
@@ -51,9 +56,9 @@ def test_validate_draft_fills_ids_and_defaults() -> None:
     assert record_type["fields"][0]["choices"] == []
 
 
-def test_validate_draft_rejects_non_objects() -> None:
+def test_parse_draft_rejects_non_objects() -> None:
     with pytest.raises(ApiError) as error:
-        validate_draft([])
+        dumped([])
     assert error.value.code == "invalid_definition"
 
 

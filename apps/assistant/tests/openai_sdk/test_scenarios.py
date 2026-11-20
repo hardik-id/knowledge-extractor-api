@@ -12,13 +12,13 @@ from agents.testing import ScriptedModel, assistant_message, function_call
 from apps.assistant.agents.base import (
     AgentEvent,
     FileRecords,
-    Proposal,
     RecordView,
     ToolUsed,
     ValueView,
 )
 from apps.assistant.agents.openai_sdk import OpenAIAgent
 from apps.assistant.agents.openai_sdk.tools._shared import MAX_TOOL_CALLS
+from apps.assistant.proposal import Proposal
 from apps.assistant.tests.fakes import FakeWorkspace
 from apps.assistant.tests.openai_sdk.helpers import (
     collect,
@@ -27,8 +27,7 @@ from apps.assistant.tests.openai_sdk.helpers import (
     split,
     tool_outputs,
 )
-from apps.assistant.tests.test_scripted import adr, bare
-from apps.extraction.validation import validate_draft
+from apps.assistant.tests.test_scripted import adr, bare, validated
 
 DOCS = {
     "adr-1.md": "# Decisions\n\n## ADR-1: Use Postgres\n\n**Status:** accepted\n"
@@ -46,7 +45,7 @@ def called(events: list[AgentEvent]) -> list[tuple[str, str]]:
 async def test_what_can_i_extract_on_an_empty_definition() -> None:
     previewed = [
         RecordView(
-            validate_draft(adr())["record_types"][0]["id"],
+            validated(adr())["record_types"][0]["id"],
             "llm",
             "suggested",
             [ValueView("title", "Use Postgres", "llm", "suggested", True)],
@@ -63,7 +62,7 @@ async def test_what_can_i_extract_on_an_empty_definition() -> None:
             [
                 function_call(
                     "preview_extraction",
-                    {"definition": validate_draft(adr()), "document_id": "adr-1.md"},
+                    {"definition": validated(adr()), "document_id": "adr-1.md"},
                     call_id="c3",
                 )
             ],
@@ -178,7 +177,7 @@ async def test_only_the_first_proposal_is_kept_and_the_budget_is_enforced() -> N
     )
     proposals = [e for e in events if isinstance(e, Proposal)]
     assert len(proposals) == 1
-    assert proposals[0].definition == validate_draft(adr()), "the first one"
+    assert proposals[0].definition.model_dump() == validated(adr()), "the first one"
     outcomes = [o for n, o in called(events)]
     assert outcomes[:2] == ["ok", "error"], "a second proposal is refused"
     assert outcomes[-1] == "refused", "past the budget a call is refused"

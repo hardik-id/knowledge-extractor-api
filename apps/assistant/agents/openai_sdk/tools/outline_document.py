@@ -3,9 +3,9 @@
 from pydantic import ValidationError
 
 from apps.assistant.agents.openai_sdk.context import ReplyContext
-from apps.assistant.agents.openai_sdk.tools._definition_schema import Strict
 from apps.assistant.agents.openai_sdk.tools._shared import (
     NAME_CHARS,
+    Strict,
     as_data,
     clip,
     declare,

@@ -43,10 +43,9 @@ from apps.assistant.tests.openai_sdk.helpers import (
     split,
     tool_outputs,
 )
-from apps.assistant.tests.test_scripted import adr, bare
+from apps.assistant.tests.test_scripted import adr, bare, validated
 from apps.core.logging import build_logging_config
 from apps.documents import selectors as documents
-from apps.extraction.validation import validate_draft
 from apps.runs.tests.factories import RunFactory, RunFileFactory
 
 
@@ -69,9 +68,8 @@ async def test_deltas_then_one_valid_proposal_after_them() -> None:
     )
     assert events[-1] is proposal, "the proposal comes after every delta"
     assert len([e for e in events if isinstance(e, TextDelta)]) == 2
-    assert validate_draft(proposal.definition) == proposal.definition
-    assert proposal.definition == validate_draft(adr()), "existing ids are kept"
-    assert proposal.reasons == [
+    assert proposal.definition.model_dump() == validated(adr()), "existing ids are kept"
+    assert proposal.model_dump()["reasons"] == [
         {"path": "ADR", "reason": "Looks for decision records."}
     ]
     assert tool_outputs(model.calls[1])[0].startswith("Accepted.")
@@ -171,7 +169,7 @@ async def test_the_model_gets_the_rules_the_definition_the_documents_and_the_his
     assert len(long_turn["content"]) == HISTORY_CHARS
     content = request["content"]
     assert content.endswith("My request:\nadd owner")
-    assert json.dumps(validate_draft(adr())["record_types"][0]["name"]) in content
+    assert json.dumps(validated(adr())["record_types"][0]["name"]) in content
     assert "- adrs/one.md: adrs/one.md" in content
     assert "alpha" not in content, "document text is read only through the tool"
 
@@ -263,7 +261,7 @@ def test_a_reply_through_the_job_logs_no_key_prompt_or_document_text(
         assert response.status_code == 201
     reply = api_client.get(url).json()["messages"][1]
     assert reply["text"] == "Let me read it.\n\nHere is a proposal."
-    assert reply["proposal"]["definition"] == validate_draft(adr())
+    assert reply["proposal"]["definition"] == validated(adr())
     assert reply["status"] == "done"
     kinds = [e["type"] for e in sent]
     assert kinds[-2:] == ["assistant.proposal", "assistant.done"]
@@ -291,7 +289,7 @@ def test_ask_assistant_prints_the_deltas_and_the_proposal(settings: Any) -> None
         "Decision records it is.\n[tool propose_definition: ok]\n\n\nDone.\nProposal:\n"
     )
     shown = json.loads(printed.split("Proposal:\n", 1)[1])
-    assert validate_draft(shown["definition"]) == shown["definition"]
+    assert validated(shown["definition"]) == shown["definition"]
     assert shown["reasons"][0]["path"] == "ADR"
 
 

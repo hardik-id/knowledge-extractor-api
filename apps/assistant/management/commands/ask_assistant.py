@@ -16,27 +16,28 @@ from asgiref.sync import async_to_sync
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from apps.assistant.agents.base import (
-    Definition,
     DocumentRef,
     FileRecords,
-    Proposal,
     RecordView,
     TextDelta,
     ToolUsed,
     Workspace,
 )
 from apps.assistant.agents.registry import get_agent
+from apps.assistant.proposal import Proposal
 from apps.assistant.selectors import workspace_of_run
 from apps.core.errors import ApiError
 from apps.extraction import selectors as extraction
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
 from apps.runs import selectors as runs
 
-BARE: Definition = {
-    "prompt": "",
-    "record_types": [],
-    "output": {"format": "markdown", "template": ""},
-}
+BARE = Draft.model_validate(
+    {
+        "prompt": "",
+        "record_types": [],
+        "output": {"format": "markdown", "template": ""},
+    }
+)
 
 
 class NoWorkspace:
@@ -51,9 +52,7 @@ class NoWorkspace:
     async def extractions(self) -> list[FileRecords]:
         return []
 
-    async def preview(
-        self, definition: Definition, document_id: str
-    ) -> list[RecordView]:
+    async def preview(self, definition: Draft, document_id: str) -> list[RecordView]:
         raise ApiError("document_not_found")
 
 
@@ -72,14 +71,14 @@ class Command(BaseCommand):
         if not text:
             raise CommandError("Say what to ask.")
         workspace: Workspace = NoWorkspace()
-        definition = validate_draft(BARE)
+        definition = BARE
         if options["run"]:
             try:
                 run = runs.get_any_run(options["run"])
             except ApiError as error:
                 raise CommandError(error.message) from None
             saved = extraction.get_definition(run.owner, run.pk)
-            definition = validate_draft(
+            definition = Draft.model_validate(
                 {
                     "prompt": saved.prompt,
                     "record_types": saved.record_types,
@@ -92,18 +91,13 @@ class Command(BaseCommand):
         if proposal is None:
             self.stdout.write("(no proposal)")
             return
-        validate_draft(proposal.definition)
         self.stdout.write("Proposal:")
         self.stdout.write(
-            json.dumps(
-                {"definition": proposal.definition, "reasons": proposal.reasons},
-                ensure_ascii=False,
-                indent=2,
-            )
+            json.dumps(proposal.model_dump(), ensure_ascii=False, indent=2)
         )
 
     async def _ask(
-        self, text: str, definition: Definition, workspace: Workspace
+        self, text: str, definition: Draft, workspace: Workspace
     ) -> Proposal | None:
         proposal: Proposal | None = None
         mid_line = False  # some text is on the line and has no newline yet

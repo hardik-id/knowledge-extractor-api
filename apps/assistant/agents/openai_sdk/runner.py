@@ -25,7 +25,6 @@ from openai import APIError, AsyncOpenAI
 
 from apps.assistant.agents.base import (
     AgentEvent,
-    Definition,
     Message,
     TextDelta,
     ToolUsed,
@@ -35,6 +34,7 @@ from apps.assistant.agents.openai_sdk.agent import build_agent
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 from apps.assistant.agents.openai_sdk.inputs import build_input
 from apps.assistant.agents.openai_sdk.models import connect, missing_settings
+from apps.extraction.definition import Draft
 
 log = structlog.get_logger(__name__)
 
@@ -84,7 +84,7 @@ class OpenAIAgent:
     async def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
@@ -111,7 +111,7 @@ class OpenAIAgent:
         model: Model,
         state: ReplyContext,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
     ) -> AsyncIterator[AgentEvent]:
         result = Runner.run_streamed(

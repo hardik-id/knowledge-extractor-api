@@ -8,11 +8,12 @@ from typing import Any
 import pytest
 from agents.testing import ModelCall, ScriptedModel, function_call
 
-from apps.assistant.agents.base import AgentEvent, Message, Proposal, TextDelta
+from apps.assistant.agents.base import AgentEvent, Message, TextDelta
 from apps.assistant.agents.openai_sdk import OpenAIAgent
+from apps.assistant.proposal import Proposal
 from apps.assistant.tests.fakes import FakeWorkspace
 from apps.assistant.tests.test_scripted import adr, bare
-from apps.extraction.validation import validate_draft
+from apps.extraction.definition import Draft
 from apps.realtime import services as realtime
 
 Definition = dict[str, Any]
@@ -61,7 +62,7 @@ async def collect(
 ) -> list[AgentEvent]:
     stream = agent.reply(
         text,
-        validate_draft(bare() if definition is None else definition),
+        Draft.model_validate(bare() if definition is None else definition),
         history or [],
         docs or FakeWorkspace(),
     )

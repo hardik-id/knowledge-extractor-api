@@ -10,18 +10,10 @@ applying a proposal is a normal save of the definition by the person.
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Literal, Protocol
 
-# A validated draft (apps.extraction.validation.validate_draft): ``prompt``,
-# ``record_types`` and ``output``, every record type and field with an ``id``.
-Definition = dict[str, Any]
-
-
-class Reason(TypedDict):
-    """Why one thing changed. ``path`` names it in plain words: "ADR / Approved by"."""
-
-    path: str
-    reason: str
+from apps.assistant.proposal import Proposal
+from apps.extraction.definition import Draft
 
 
 @dataclass(frozen=True)
@@ -29,14 +21,6 @@ class TextDelta:
     """New text for the reply. Not the text so far: the deltas joined are the reply."""
 
     text: str
-
-
-@dataclass(frozen=True)
-class Proposal:
-    """A complete definition (not a patch) and a reason for each change."""
-
-    definition: Definition
-    reasons: list[Reason]
 
 
 @dataclass(frozen=True)
@@ -121,13 +105,11 @@ class Workspace(Protocol):
         """The records of every file of the run that has been extracted."""
         ...
 
-    async def preview(
-        self, definition: Definition, document_id: str
-    ) -> list[RecordView]:
+    async def preview(self, definition: Draft, document_id: str) -> list[RecordView]:
         """The records the extractor finds in a document with ``definition``.
 
         A dry run: nothing is stored and no cell changes. ``definition`` is a
-        draft (``prompt``, ``record_types``, ``output``). The records are as an
+        ``Draft``. The records are as an
         extraction would store them (suggested, by the model).
         """
         ...
@@ -137,7 +119,7 @@ class Agent(Protocol):
     def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:

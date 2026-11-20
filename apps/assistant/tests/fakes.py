@@ -4,16 +4,16 @@ from collections.abc import AsyncIterator
 
 from apps.assistant.agents.base import (
     AgentEvent,
-    Definition,
     DocumentRef,
     FileRecords,
     Message,
-    Proposal,
     RecordView,
     TextDelta,
     Workspace,
 )
+from apps.assistant.proposal import Proposal, Reason
 from apps.core.errors import ApiError
+from apps.extraction.definition import Draft
 
 
 class FakeAgent:
@@ -22,13 +22,16 @@ class FakeAgent:
     async def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Hello, ")
         yield TextDelta(f"you said {text}.")
-        yield Proposal(definition, [{"path": "Template", "reason": "Unchanged."}])
+        yield Proposal(
+            definition=definition,
+            reasons=[Reason(path="Template", reason="Unchanged.")],
+        )
 
 
 class FakeWorkspace:
@@ -53,9 +56,7 @@ class FakeWorkspace:
     async def extractions(self) -> list[FileRecords]:
         return list(self.extracted)
 
-    async def preview(
-        self, definition: Definition, document_id: str
-    ) -> list[RecordView]:
+    async def preview(self, definition: Draft, document_id: str) -> list[RecordView]:
         if document_id not in self.texts:
             raise ApiError("document_not_found")
         return list(self.previewed)
@@ -67,7 +68,7 @@ class FailingAgent:
     async def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
@@ -81,7 +82,7 @@ class SilentFailingAgent:
     async def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
@@ -97,7 +98,7 @@ class RecordingAgent:
     async def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
@@ -110,14 +111,14 @@ class RecordingAgent:
 
 
 class BadProposalAgent:
-    """Proposes a definition that is not valid."""
+    """Builds a proposal of a definition that is not valid, which no model allows."""
 
     async def reply(
         self,
         text: str,
-        definition: Definition,
+        definition: Draft,
         history: list[Message],
         workspace: Workspace,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Here you go.")
-        yield Proposal({"prompt": "x"}, [])
+        yield Proposal.model_validate({"definition": {"prompt": "x"}, "reasons": []})

@@ -57,7 +57,9 @@
     {"index": 93, "kind": "ui", "name": "templates-ui-2-screens", "description": "UI-160 ∥ 161: New project starts from a template; load a template into an existing project", "whenToUse": "After templates-ui-1-services and define-2-table-width.", "items": [160, 161]},
     {"index": 101, "kind": "ui", "name": "look-1-fixes", "description": "UI-176: the page no longer scrolls into empty space; text boxes are boxes", "whenToUse": "Any time, with the backend stack running.", "items": [176]},
     {"index": 102, "kind": "ui", "name": "look-2-foundation", "description": "UI-177 → 178: Polder for apps (rules, tokens, building blocks), then a slim app shell with a page header", "whenToUse": "After look-1-fixes, with the backend stack running.", "items": [177, 178]},
-    {"index": 103, "kind": "ui", "name": "look-3-screens", "description": "UI-179 ∥ 180 ∥ 181: Studio's screens, the Define side and the Review side of extraction in the new look", "whenToUse": "After look-2-foundation.", "items": [179, 180, 181]}
+    {"index": 103, "kind": "ui", "name": "look-3-screens", "description": "UI-179 ∥ 180 ∥ 181: Studio's screens, the Define side and the Review side of extraction in the new look", "whenToUse": "After look-2-foundation.", "items": [179, 180, 181]},
+    {"index": 111, "name": "deploy-1-chart", "description": "PBI-406, then 407 ∥ 408: a Helm chart for the dev environment (API, worker, migration, settings, secrets, identity), then the UI with the Ingress, and the Key Vault placeholder with a dev database", "whenToUse": "Any time. Changes only deployment files, so the end-to-end suite and the stack rebuild are skipped.", "items": [406, 407, 408]},
+    {"index": 112, "kind": "ui", "name": "deploy-ui-1-image", "description": "UI-182: a container image for the UI", "whenToUse": "Any time, with the backend stack running.", "items": [182]}
   ],
   "items": [
     {"n": 1, "slug": "scaffold", "title": "Scaffold the project with uv and Django generators", "tier": "normal", "deps": []},
@@ -157,6 +159,10 @@
     {"kind": "ui", "n": 178, "slug": "look-shell", "title": "Modern look: a slim app shell and a page header", "tier": "normal", "deps": [177]},
     {"kind": "ui", "n": 179, "slug": "look-studio", "title": "Modern look: project list, project dialogs and the Documents page", "tier": "normal", "deps": []},
     {"kind": "ui", "n": 180, "slug": "look-define", "title": "Modern look: extraction header, the Define tab and the assistant", "tier": "normal", "deps": []},
-    {"kind": "ui", "n": 181, "slug": "look-review", "title": "Modern look: the Review and Output tabs", "tier": "normal", "deps": []}
+    {"kind": "ui", "n": 181, "slug": "look-review", "title": "Modern look: the Review and Output tabs", "tier": "normal", "deps": []},
+    {"n": 406, "slug": "helm-chart-core", "title": "Helm chart: the API, the worker and the migration, with settings, secrets and identity placeholders", "tier": "complex", "deps": []},
+    {"n": 407, "slug": "helm-ui-ingress", "title": "Helm chart: the UI and the Ingress", "tier": "normal", "deps": [406]},
+    {"n": 408, "slug": "helm-keyvault-dev-deps", "title": "Helm chart: the Key Vault placeholder, and PostgreSQL and Redis for dev", "tier": "normal", "deps": [406]},
+    {"kind": "ui", "n": 182, "slug": "ui-image", "title": "A container image for the UI", "tier": "normal", "deps": []}
   ]
 }

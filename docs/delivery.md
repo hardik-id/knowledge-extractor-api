@@ -124,6 +124,15 @@ UI milestone "Modern look". "Polder for apps": lines instead of frames, small ra
 | `look-2-foundation` | UI #177 → #178 | 1 |
 | `look-3-screens` | UI #179 ∥ #180 ∥ #181 | 2 |
 
+## The deploy epic
+
+Tracked in #409. A Helm chart for the dev environment of a Kubernetes cluster. Templates only: checked by rendering, not on a cluster.
+
+| Workflow | PBIs (`→` in order, `∥` side by side) | Start it after |
+| --- | --- | --- |
+| `deploy-1-chart` | #406 → (#407 ∥ #408) | nothing |
+| `deploy-ui-1-image` | UI #182 | nothing |
+
 ## Single items
 
 | Workflow | PBIs | Start it after |

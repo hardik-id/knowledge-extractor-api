@@ -2,6 +2,9 @@
 
   api     {{ include "knowledge-extractor.fullname" . }}-api (Service port {{ .Values.api.service.port }})
   worker  {{ include "knowledge-extractor.fullname" . }}-worker
+{{- if .Values.ui.enabled }}
+  ui      {{ include "knowledge-extractor.fullname" . }}-ui (Service port {{ .Values.ui.service.port }})
+{{- end }}
 
 Try it:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "knowledge-extractor.fullname" . }}-api 8000:{{ .Values.api.service.port }}
-There is no Ingress yet (docs/deploy.md). The pods start only once the Secret is in place, and the migration has run before them.
+{{ if .Values.ingress.enabled }}The Ingress serves https://{{ .Values.ingress.host }}: / is the UI, /api and /ws are the API.{{ else }}The Ingress is off (ingress.enabled).{{ end }} The pods start only once the Secret is in place, and the migration has run before them.

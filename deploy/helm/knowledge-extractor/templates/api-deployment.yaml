@@ -4,7 +4,7 @@ and X-Forwarded-Proto headers the production settings expect: without a
 listed Host Django answers 400, and without X-Forwarded-Proto the TLS
 redirect answers 301 before the view (and so the database) is reached.
 */ -}}
-{{- $probeHost := .Values.api.probeHost | default ((splitList "," (toString .Values.config.DJANGO_ALLOWED_HOSTS)) | first | trim) }}
+{{- $probeHost := .Values.api.probeHost | default ((splitList "," (include "knowledge-extractor.allowedHosts" .)) | first | trim) }}
 {{- $probeHeaders := list (dict "name" "Host" "value" $probeHost) (dict "name" "X-Forwarded-Proto" "value" "https") }}
 apiVersion: apps/v1
 kind: Deployment

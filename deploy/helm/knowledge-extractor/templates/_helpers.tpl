@@ -69,9 +69,30 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- end }}
 
+{{/* The host names the API answers to: config.DJANGO_ALLOWED_HOSTS when set by hand, else the Ingress host. */}}
+{{- define "knowledge-extractor.allowedHosts" -}}
+{{- if .Values.config.DJANGO_ALLOWED_HOSTS }}
+{{- .Values.config.DJANGO_ALLOWED_HOSTS }}
+{{- else if and .Values.ingress.enabled .Values.ingress.host }}
+{{- .Values.ingress.host }}
+{{- end }}
+{{- end }}
+
+{{/* The origins of the UI: config.CORS_ALLOWED_ORIGINS when set by hand, else the Ingress host over https (one origin for the UI and the API). */}}
+{{- define "knowledge-extractor.corsOrigins" -}}
+{{- if .Values.config.CORS_ALLOWED_ORIGINS }}
+{{- .Values.config.CORS_ALLOWED_ORIGINS }}
+{{- else if and .Values.ingress.enabled .Values.ingress.host }}
+{{- printf "https://%s" .Values.ingress.host }}
+{{- end }}
+{{- end }}
+
 {{/* The data of the ConfigMap: the same in the release's own copy and in the migration's hook copy. */}}
 {{- define "knowledge-extractor.configData" -}}
-{{- range $name, $value := .Values.config }}
+{{- $config := deepCopy .Values.config }}
+{{- $_ := set $config "DJANGO_ALLOWED_HOSTS" (include "knowledge-extractor.allowedHosts" .) }}
+{{- $_ := set $config "CORS_ALLOWED_ORIGINS" (include "knowledge-extractor.corsOrigins" .) }}
+{{- range $name, $value := $config }}
 {{ $name }}: {{ $value | toString | quote }}
 {{- end }}
 {{- end }}
@@ -99,8 +120,11 @@ Refuse to render when the settings or secrets are not usable. The messages
 say what to set. Called once, from configmap.yaml (the migration's copies are rendered from the same values).
 */}}
 {{- define "knowledge-extractor.validate" -}}
-{{- if not .Values.config.DJANGO_ALLOWED_HOSTS }}
-{{- fail "config.DJANGO_ALLOWED_HOSTS is empty: set the host names the API answers to, comma separated (values-dev.yaml has an example)." }}
+{{- if not (include "knowledge-extractor.allowedHosts" .) }}
+{{- fail "config.DJANGO_ALLOWED_HOSTS is empty: set the host names the API answers to, comma separated, or enable the Ingress with ingress.host, from which it follows (values-dev.yaml has an example)." }}
+{{- end }}
+{{- if and .Values.ingress.enabled (not .Values.ingress.host) }}
+{{- fail "ingress.enabled is true but ingress.host is empty: set the one host name of the UI and the API." }}
 {{- end }}
 {{- if and .Values.workloadIdentity.enabled (not .Values.workloadIdentity.clientId) }}
 {{- fail "workloadIdentity.enabled is true but workloadIdentity.clientId is empty: set the client id of the user-assigned managed identity." }}

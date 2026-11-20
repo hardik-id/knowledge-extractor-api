@@ -171,6 +171,42 @@ worker:
     limits:
       memory: 512Mi
 
+# The UI: a Next.js server on port 3000, built in its own repository
+# (hardik-id/knowledge-extractor). Its public settings (API address, sign-in ids)
+# are compiled into the image at build time: this chart cannot change them.
+ui:
+  enabled: true
+  image:
+    repository: knowledge-extractor-ui
+    # Empty: the chart's appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 3000
+  # Answers without the backend and without sign-in (the image's docs).
+  probePath: /healthz
+  terminationGracePeriodSeconds: 30
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+# The way in: one host, one origin. /api and /ws go to the api, / to the ui.
+# DJANGO_ALLOWED_HOSTS and CORS_ALLOWED_ORIGINS follow from the host unless set in config.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ""
+  tls:
+    # Name of the Secret with the certificate (made by cert-manager or by hand).
+    # Empty: no tls block (the controller's default certificate, or TLS ended in front).
+    secretName: ""
+
 # The migration Job, a Helm hook that runs before every install and upgrade.
 migrate:
   backoffLimit: 1

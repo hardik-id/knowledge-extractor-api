@@ -18,7 +18,7 @@ def test_lists_the_samples(api_client: Any, user: Any) -> None:
     response = api_client.get(URL)
     assert response.status_code == 200
     items = response.json()["items"]
-    assert len(items) == 10
+    assert len(items) == 12
     assert ADR_DOCUMENTS <= {item["id"] for item in items}
     item = next(i for i in items if i["name"] == "platform-adrs.md")
     assert set(item) == {

@@ -201,3 +201,29 @@ def test_crlf_lines_and_labels_in_other_cases() -> None:
 )
 def test_parse_date(text: str, iso: str | None) -> None:
     assert parse_date(text) == iso
+
+
+def test_a_multiple_field_in_a_section_that_is_not_a_list_stays_one_value() -> None:
+    types = [
+        {
+            "id": "rt",
+            "name": "Note",
+            "description": "",
+            "fields": [
+                {
+                    "id": "f",
+                    "key": "points",
+                    "name": "Points",
+                    "description": "",
+                    "mode": "quote",
+                    "value_type": "text",
+                    "choices": [],
+                    "multiple": True,
+                }
+            ],
+        }
+    ]
+    text = "## Note 1\n\n### Points\n\nJust a sentence.\n"
+    assert [v.value for v in extract(text, types)[0].values] == ["Just a sentence."]
+    listed = "## Note 1\n\n### Points\n\n- a\n- b\n"
+    assert [v.value for v in extract(listed, types)[0].values] == ["a", "b"]

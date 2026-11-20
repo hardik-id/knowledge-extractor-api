@@ -80,6 +80,15 @@ DOC=enriched/engineering/architecture/architecture-decisions-2026.md
 call $API/documents/$DOC                   # read one: the Markdown text
 ```
 
+Each built-in template (`GET /api/v1/templates`) has a sample document the scripted extractor reads:
+
+| Template | Sample document |
+| --- | --- |
+| `adr` | `enriched/engineering/architecture/architecture-decisions-2026.md` (also `platform-adrs.md`) |
+| `skill` | `enriched/engineering/operations/operations-skills.md` (four skills with steps) |
+| `policy-rule` | `enriched/hr/policies/leave-rules-2027.md` (five rules) |
+| `blank` | none: it has no record types |
+
 The text starts with `---` front matter, then `# Architecture decisions 2026`, and holds three decisions (`## ADR-012: ...` to `## ADR-014: ...`).
 
 ### Start a project

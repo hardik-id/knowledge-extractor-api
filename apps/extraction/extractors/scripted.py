@@ -52,6 +52,7 @@ _SEPARATORS = re.compile(rf"[_\-{WS}]+")
 _TITLE_HEADING = re.compile(rf"##{_S}+(?:{_NOT_S}+-[0-9]+{_S}*[:–-]{_S}*)?")
 _LABELLED = re.compile(rf"\*\*({_ANY}+?):\*\*[ \t]*({_ANY}*)\Z")
 _SECTION = re.compile(rf"###{_S}+({_ANY}*)\Z")
+_LIST_ITEM = re.compile(rf"(?:[-*+]|[0-9]+[.)]){_S}+")
 _H2 = re.compile(rf"##{_S}")
 _ANY_HEADING = re.compile(rf"#{{1,6}}{_S}")
 
@@ -183,8 +184,30 @@ def _find_field(text: str, lines: list[_Line], field: Field) -> list[_Range] | N
             end = lines[-1].end if following == -1 else lines[following].start
             r = _trim_range(text, _Range(line.end + 1, end))
             if r.end > r.start:
+                if field.multiple:
+                    items = _list_items(text, r)
+                    if items:
+                        return items
                 return [r]
     return None
+
+
+def _list_items(text: str, r: _Range) -> list[_Range]:
+    """The items of a bulleted or numbered list that fills a section, marker left out.
+
+    A line that is not an item continues the one before it. Empty when the section
+    is not a list.
+    """
+    items: list[_Range] = []
+    for line in _split_lines(text, r.start, r.end):
+        marker = _LIST_ITEM.match(line.text)
+        if marker:
+            items.append(_Range(line.start + marker.end(), line.end))
+        elif items and _trim(line.text):
+            items[-1] = _Range(items[-1].start, line.end)
+        elif not items and _trim(line.text):
+            return []
+    return [t for t in (_trim_range(text, i) for i in items) if t.end > t.start]
 
 
 def _blocks_for(text: str, record_type: RecordType) -> list[_Range]:

@@ -19,17 +19,17 @@ from apps.assistant.agents.base import (
 from apps.assistant.selectors import OwnerWorkspace, workspace_of_run
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
-from apps.extraction.defaults import (
-    DEFAULT_OUTPUT,
-    DEFAULT_PROMPT,
-    DEFAULT_RECORD_TYPES,
-)
 from apps.extraction.definition import Draft
 from apps.extraction.models import (
     DefinitionVersion,
     Extraction,
     ExtractionRecord,
     FieldValue,
+)
+from apps.extraction.tests.default_definition import (
+    DEFAULT_OUTPUT,
+    DEFAULT_PROMPT,
+    DEFAULT_RECORD_TYPES,
 )
 from apps.extraction.tests.factories import DefinitionVersionFactory
 from apps.runs.models import Cell

@@ -11,10 +11,13 @@ from typing import Any
 import pytest
 
 from apps.documents import selectors as documents
-from apps.extraction.defaults import DEFAULT_OUTPUT, DEFAULT_RECORD_TYPES
 from apps.extraction.extractors.base import Definition, RawRecord, RawValue
 from apps.extraction.extractors.scripted import ScriptedExtractor, parse_date
 from apps.extraction.spans import Span
+from apps.extraction.tests.default_definition import (
+    DEFAULT_OUTPUT,
+    DEFAULT_RECORD_TYPES,
+)
 from apps.extraction.validation import parse_draft
 
 DECISIONS = "enriched/engineering/architecture/architecture-decisions-2026.md"

@@ -1,0 +1,71 @@
+{
+  "id": "skill",
+  "name": "Agent skills",
+  "description": "One reusable skill per record, to be written out as an agent skill file (SKILL.md).",
+  "definition": {
+    "prompt": "Extract every reusable skill in the document: a repeatable way of doing one task.",
+    "record_types": [
+      {
+        "id": "rt-skill",
+        "name": "Skill",
+        "description": "One reusable skill: what it does, when to use it and the steps.",
+        "fields": [
+          {
+            "id": "f-skill-name",
+            "key": "name",
+            "name": "Name",
+            "description": "The short name of the skill.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": false
+          },
+          {
+            "id": "f-skill-description",
+            "key": "description",
+            "name": "Description",
+            "description": "What the skill does and when to use it, in one or two sentences.",
+            "mode": "inferred",
+            "value_type": "text",
+            "choices": [],
+            "multiple": false
+          },
+          {
+            "id": "f-skill-when-to-use",
+            "key": "when_to_use",
+            "name": "When to use",
+            "description": "The situations in which the skill applies.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": true
+          },
+          {
+            "id": "f-skill-prerequisites",
+            "key": "prerequisites",
+            "name": "Prerequisites",
+            "description": "What must be in place before starting.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": true
+          },
+          {
+            "id": "f-skill-steps",
+            "key": "steps",
+            "name": "Steps",
+            "description": "The steps, in order.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": true
+          }
+        ]
+      }
+    ],
+    "output": {
+      "format": "markdown",
+      "template": "---\nname: {{name}}\ndescription: {{description}}\n---\n\n## When to use\n\n{{#when_to_use}}- {{.}}\n{{/when_to_use}}\n## Before you start\n\n{{#prerequisites}}- {{.}}\n{{/prerequisites}}\n## Steps\n\n{{#steps}}- {{.}}\n{{/steps}}"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "blank",
+  "name": "Blank",
+  "description": "Nothing set up: start from scratch, with the assistant.",
+  "definition": {
+    "prompt": "",
+    "record_types": [],
+    "output": {
+      "format": "markdown",
+      "template": ""
+    }
+  }
+}

@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from apps.assistant.agents.scripted import assistant_reply, key_from_name
-from apps.extraction.defaults import (
+from apps.extraction.definition import Draft
+from apps.extraction.tests.default_definition import (
     DEFAULT_OUTPUT,
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.definition import Draft
 
 Definition = dict[str, Any]
 

@@ -4,12 +4,12 @@ import pytest
 
 from apps.core.errors import ApiError
 from apps.extraction import selectors
-from apps.extraction.defaults import (
+from apps.extraction.services import save_definition
+from apps.extraction.tests.default_definition import (
     DEFAULT_OUTPUT,
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.services import save_definition
 from apps.extraction.validation import parse_draft
 from apps.runs.tests.factories import RunFactory
 

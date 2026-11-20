@@ -1,0 +1,85 @@
+{
+  "id": "policy-rule",
+  "name": "Policy rules",
+  "description": "One rule of a policy per record: what it says, who it applies to, its condition and exceptions.",
+  "definition": {
+    "prompt": "Extract every rule of the policy: each obligation, permission or prohibition.",
+    "record_types": [
+      {
+        "id": "rt-rule",
+        "name": "Rule",
+        "description": "One rule of a policy.",
+        "fields": [
+          {
+            "id": "f-rule-rule",
+            "key": "rule",
+            "name": "Rule",
+            "description": "The rule as written.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": false
+          },
+          {
+            "id": "f-rule-kind",
+            "key": "kind",
+            "name": "Kind",
+            "description": "Whether the rule requires, allows or forbids.",
+            "mode": "inferred",
+            "value_type": "choice",
+            "choices": [
+              "obligation",
+              "permission",
+              "prohibition"
+            ],
+            "multiple": false
+          },
+          {
+            "id": "f-rule-applies-to",
+            "key": "applies_to",
+            "name": "Applies to",
+            "description": "Who or what the rule applies to.",
+            "mode": "inferred",
+            "value_type": "text",
+            "choices": [],
+            "multiple": true
+          },
+          {
+            "id": "f-rule-condition",
+            "key": "condition",
+            "name": "Condition",
+            "description": "When the rule applies.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": false
+          },
+          {
+            "id": "f-rule-exceptions",
+            "key": "exceptions",
+            "name": "Exceptions",
+            "description": "The cases the rule does not cover.",
+            "mode": "quote",
+            "value_type": "text",
+            "choices": [],
+            "multiple": true
+          },
+          {
+            "id": "f-rule-effective-from",
+            "key": "effective_from",
+            "name": "Effective from",
+            "description": "The date the rule takes effect.",
+            "mode": "inferred",
+            "value_type": "date",
+            "choices": [],
+            "multiple": false
+          }
+        ]
+      }
+    ],
+    "output": {
+      "format": "json",
+      "template": ""
+    }
+  }
+}

@@ -3,6 +3,7 @@ from django.urls import path
 from apps.extraction.api import views
 
 urlpatterns = [
+    path("definition-templates", views.definition_templates),
     path("runs/<str:run_id>/stages/extract/definition", views.definition),
     path(
         "runs/<str:run_id>/stages/extract/definition/versions",

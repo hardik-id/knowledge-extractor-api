@@ -27,12 +27,8 @@ from dataclasses import dataclass
 
 from apps.assistant.agents.base import AgentEvent, Message, TextDelta, Workspace
 from apps.assistant.proposal import Proposal, Reason
-from apps.extraction.defaults import (
-    DEFAULT_OUTPUT,
-    DEFAULT_PROMPT,
-    DEFAULT_RECORD_TYPES,
-)
 from apps.extraction.definition import Draft, Field, Output, RecordType
+from apps.extraction.template_registry import default_template
 
 NewId = Callable[[], str]
 
@@ -207,12 +203,11 @@ def _propose(definition: Draft, text: str, ids: NewId) -> Reply:
     own_prompt = definition.prompt.strip()
 
     if re.search(r"\badrs?\b|architecture decision", haystack):
+        start = default_template().definition
         next_definition = Draft(
-            prompt=own_prompt or DEFAULT_PROMPT,
-            record_types=_fresh_ids(
-                [RecordType.model_validate(rt) for rt in DEFAULT_RECORD_TYPES], ids
-            ),
-            output=Output.model_validate(DEFAULT_OUTPUT),
+            prompt=own_prompt or start.prompt,
+            record_types=_fresh_ids(start.record_types, ids),
+            output=start.output.model_copy(),
         )
         reply = (
             "I set this up for architecture decision records: the title, the context and "

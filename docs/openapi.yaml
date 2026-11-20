@@ -3,6 +3,46 @@ info:
   title: Knowledge Extractor API
   version: v1
 paths:
+  /definition-templates:
+    get:
+      operationId: definition_templates_list
+      description: The built-in starting configurations for extraction, the default
+        first.
+      tags:
+      - definition-templates
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /documents:
     get:
       operationId: documents_list
@@ -2234,6 +2274,35 @@ components:
       description: |-
         * `streaming` - Streaming
         * `done` - Done
+    Template:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        definition:
+          $ref: '#/components/schemas/Draft'
+      required:
+      - definition
+      - description
+      - id
+      - name
+    TemplateList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Template'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
     ValueInputRequest:
       type: object
       properties:

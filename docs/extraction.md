@@ -144,3 +144,13 @@ Every save makes a new version; versions are never changed or deleted. A save ma
 - `POST .../definition/versions/{version}/restore` saves a copy of that version as the newest one, with the note `Restored from version N`, and answers it.
 
 All three are for the run's owner; someone else's run is 404 `run_not_found`.
+
+## Templates
+
+A template is a complete extraction configuration to start from: a prompt, record types with their fields, and an output (format and template text). It is a `Draft` with an `id`, a `name` and a `description` that says what it is for. The built-in ones are `adr` (the default, named in `DEFAULT_TEMPLATE_ID`), `skill` (one agent skill per record, written out as `SKILL.md`), `policy-rule` (one rule of a policy per record, as JSON) and `blank` (nothing set up).
+
+`GET /api/v1/definition-templates` answers `{ "items": [{ id, name, description, definition }], "next": null }`, the default first, then by name, for signed-in people. `template_registry.get_template(id)` raises 404 `template_not_found` for an unknown id. A run that says nothing starts with the default template's definition (`selectors.get_definition`), as the scripted assistant does when it sets up ADRs.
+
+To add one, put a file `apps/extraction/templates/<id>.json` with `{ "id", "name", "description", "definition": { "prompt", "record_types", "output" } }`. The id is the file name. Write the ids of record types and fields in the file and keep them: loading a template twice gives the same ids, and no id is used in two files. Run `uv run pytest apps/extraction/tests/test_templates.py`: it names the file and the problem (a file that does not parse, an id or field key used twice, a `{{key}}` in the output template that is not a field key). The files are read when the app starts, so a broken one stops the server too.
+
+Not there yet: a person's own templates (no table, no saving), and choosing a template when a project or run is created.

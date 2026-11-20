@@ -48,6 +48,7 @@ ERRORS: dict[str, ErrorCode] = {
     "definition_version_not_found": ErrorCode(
         404, "This version of the definition was not found."
     ),
+    "template_not_found": ErrorCode(404, "Template not found."),
     "assistant_busy": ErrorCode(409, "The assistant is still answering."),
     "empty_message": ErrorCode(422, "Write a message first."),
     "run_belongs_to_project": ErrorCode(

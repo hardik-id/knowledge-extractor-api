@@ -3,12 +3,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from apps.extraction.defaults import (
+from apps.extraction.definition import Draft, Field, Output, RecordType
+from apps.extraction.tests.default_definition import (
     DEFAULT_OUTPUT,
     DEFAULT_PROMPT,
     DEFAULT_RECORD_TYPES,
 )
-from apps.extraction.definition import Draft, Field, Output, RecordType
 
 
 def field(**changes: Any) -> dict[str, Any]:

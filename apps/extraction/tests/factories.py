@@ -1,15 +1,15 @@
 import factory
 
-from apps.extraction.defaults import (
-    DEFAULT_OUTPUT,
-    DEFAULT_PROMPT,
-    DEFAULT_RECORD_TYPES,
-)
 from apps.extraction.models import (
     DefinitionVersion,
     Extraction,
     ExtractionRecord,
     FieldValue,
+)
+from apps.extraction.tests.default_definition import (
+    DEFAULT_OUTPUT,
+    DEFAULT_PROMPT,
+    DEFAULT_RECORD_TYPES,
 )
 from apps.runs.tests.factories import RunFactory, RunFileFactory
 

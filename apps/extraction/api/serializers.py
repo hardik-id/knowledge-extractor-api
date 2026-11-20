@@ -257,3 +257,15 @@ class ExecutionSerializer(serializers.Serializer):  # type: ignore[type-arg]
     execution_id = serializers.CharField()
     stage = serializers.CharField()
     file_ids = serializers.ListField(child=serializers.CharField())
+
+
+class TemplateSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    id = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    definition = DraftSerializer()
+
+
+class TemplateListSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    items = TemplateSerializer(many=True)
+    next = serializers.CharField(allow_null=True)

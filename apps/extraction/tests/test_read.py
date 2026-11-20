@@ -6,7 +6,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.extraction import selectors
-from apps.extraction.defaults import DEFAULT_RECORD_TYPES
+from apps.extraction.tests.default_definition import DEFAULT_RECORD_TYPES
 from apps.extraction.tests.factories import (
     DefinitionVersionFactory,
     ExtractionFactory,

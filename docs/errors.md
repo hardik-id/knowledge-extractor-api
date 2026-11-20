@@ -38,6 +38,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `definition_conflict` | 409 | Someone saved a newer version of this definition. |
 | `invalid_definition` | 422 | The extraction definition is not valid. |
 | `definition_version_not_found` | 404 | This version of the definition was not found. |
+| `template_not_found` | 404 | Template not found. |
 | `assistant_busy` | 409 | The assistant is still answering. |
 | `empty_message` | 422 | Write a message first. |
 | `run_belongs_to_project` | 409 | This run belongs to a project. Delete the project instead. |

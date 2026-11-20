@@ -6,7 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ApiError
-from apps.extraction import selectors, services
+from apps.extraction import selectors, services, template_registry
 from apps.extraction.api.serializers import (
     AddRecordSerializer,
     DefinitionSerializer,
@@ -18,6 +18,7 @@ from apps.extraction.api.serializers import (
     RevisionQuerySerializer,
     SaveDefinitionSerializer,
     StartExecutionSerializer,
+    TemplateListSerializer,
     UpdateRecordSerializer,
     serialize_extraction,
     summarize_version,
@@ -185,3 +186,17 @@ def value(
         user, run_id, file_id, record_id, value_id, **body.validated_data
     )
     return Response(serialize_extraction(extraction))
+
+
+@extend_schema(
+    operation_id="definition_templates_list", responses=TemplateListSerializer
+)
+@api_view(["GET"])
+def definition_templates(request: Request) -> Response:
+    """The built-in starting configurations for extraction, the default first."""
+    return Response(
+        {
+            "items": [t.model_dump() for t in template_registry.list_templates()],
+            "next": None,
+        }
+    )

@@ -10,11 +10,6 @@ from django.db import IntegrityError, transaction
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.documents.selectors import DocumentText
-from apps.extraction.defaults import (
-    DEFAULT_OUTPUT,
-    DEFAULT_PROMPT,
-    DEFAULT_RECORD_TYPES,
-)
 from apps.extraction.definition import Draft
 from apps.extraction.extractors import get_extractor
 from apps.extraction.extractors.base import Definition, RawRecord, RawValue
@@ -27,6 +22,7 @@ from apps.extraction.models import (
     Review,
 )
 from apps.extraction.spans import Span
+from apps.extraction.template_registry import default_template
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
@@ -49,12 +45,13 @@ def get_definition(user: User, run_id: Any) -> DefinitionVersion:
         return current
     try:
         with transaction.atomic():
+            start = default_template().definition.model_dump()
             return DefinitionVersion.objects.create(
                 run=run,
                 version=1,
-                prompt=DEFAULT_PROMPT,
-                record_types=DEFAULT_RECORD_TYPES,
-                output=DEFAULT_OUTPUT,
+                prompt=start["prompt"],
+                record_types=start["record_types"],
+                output=start["output"],
             )
     except IntegrityError:  # a concurrent first read made it
         current = latest_version(run.pk)

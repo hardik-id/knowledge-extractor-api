@@ -111,6 +111,9 @@ def put_changed(client: Any, run: Any, change: Any) -> Any:
         lambda p: p["output"].update(format="xml"),
         lambda p: p.pop("prompt"),
         lambda p: p.pop("output"),
+        lambda p: p.update(prompt="a\x00b"),
+        lambda p: p["record_types"][0]["fields"][0].update(key="a\x00b"),
+        lambda p: p["record_types"][0]["fields"][0].update(name="a\x00b"),
     ],
 )
 def test_invalid_definitions_are_422(client: Any, run: Any, change: Any) -> None:

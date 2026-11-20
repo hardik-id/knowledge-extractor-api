@@ -11,10 +11,16 @@ blank is filled in.
 """
 
 import uuid
-from typing import Literal, Self, get_args
+from typing import Annotated, Literal, Self, get_args
 
 import pydantic
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 
 Mode = Literal["quote", "inferred"]
 ValueType = Literal["text", "date", "number", "choice"]
@@ -23,6 +29,17 @@ Format = Literal["json", "markdown", "csv"]
 MODES: tuple[str, ...] = get_args(Mode)
 VALUE_TYPES: tuple[str, ...] = get_args(ValueType)
 FORMATS: tuple[str, ...] = get_args(Format)
+
+
+def _without_nul(value: str) -> str:
+    if "\x00" in value:
+        raise ValueError("Null characters are not allowed.")
+    return value
+
+
+# Every string of a definition. A NUL cannot be stored in PostgreSQL text, so it is
+# refused here, as it always was on the wire.
+Text = Annotated[str, AfterValidator(_without_nul)]
 
 
 def _new_id(prefix: str) -> str:
@@ -34,13 +51,13 @@ class Field(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    id: str = pydantic.Field(default="", validate_default=True)
-    key: str
-    name: str
-    description: str = ""
+    id: Text = pydantic.Field(default="", validate_default=True)
+    key: Text
+    name: Text
+    description: Text = ""
     mode: Mode
     value_type: ValueType
-    choices: list[str] = []
+    choices: list[Text] = []
     multiple: bool = False
 
     @field_validator("id")
@@ -54,9 +71,9 @@ class RecordType(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    id: str = pydantic.Field(default="", validate_default=True)
-    name: str
-    description: str = ""
+    id: Text = pydantic.Field(default="", validate_default=True)
+    name: Text
+    description: Text = ""
     fields: list[Field]
 
     @field_validator("id")
@@ -80,7 +97,7 @@ class Output(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     format: Format
-    template: str
+    template: Text
 
 
 class Draft(BaseModel):
@@ -88,6 +105,6 @@ class Draft(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    prompt: str
+    prompt: Text
     record_types: list[RecordType]
     output: Output

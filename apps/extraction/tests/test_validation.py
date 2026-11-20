@@ -61,6 +61,13 @@ INVALID: list[Any] = [
     changed(lambda d: d["output"].update(format="xml")),
     changed(lambda d: d["output"].pop("template")),
     changed(lambda d: d.update(prompt=None)),
+    changed(lambda d: d.update(prompt="a\x00b")),
+    changed(lambda d: first_field(d).update(key="a\x00b")),
+    changed(lambda d: first_field(d).update(name="a\x00b")),
+    changed(lambda d: first_field(d).update(description="a\x00b")),
+    changed(lambda d: first_field(d).update(choices=["a\x00b"])),
+    changed(lambda d: d["record_types"][0].update(name="a\x00b")),
+    changed(lambda d: d["output"].update(template="a\x00b")),
 ]
 # The serializer cannot see these: they are rules of the record type.
 RULES = [

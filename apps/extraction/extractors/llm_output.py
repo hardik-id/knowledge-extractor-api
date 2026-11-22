@@ -84,8 +84,9 @@ def to_raw_records(
     """The records of ``output`` found in ``text[start:end]``, spans into the whole ``text``.
 
     1. A record of an unknown type, and a value of an unknown field key, are dropped.
-    2. A record starts at the first ``starts_with`` at or after the previous record's
-       start; its region runs to the next record's start (or ``end``). Without a
+    2. A record starts at the first ``starts_with`` after the previous record's
+       start (so records that open with the same words are found one after the
+       other); its region runs to the next record's start (or ``end``). Without a
        start the region is the whole ``start..end``.
     3. A quote is looked for in the record's region, then in ``start..end``; not
        found it is ``Span(0, 0, quote)`` (stored as not anchored). Empty quotes go.
@@ -118,7 +119,7 @@ def to_raw_records(
         wanted = record.starts_with
         at = text.find(wanted, cursor, hi) if wanted and "\x00" not in wanted else -1
         if at >= 0:
-            cursor = at
+            cursor = at + 1  # the next record starts after this one
         placed.append(_Placed(record, record_type, at if at >= 0 else None))
 
     following = hi

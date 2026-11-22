@@ -152,6 +152,23 @@ def test_rule2_a_record_starts_at_the_first_starts_with_after_the_previous() -> 
     assert third.span is not None and third.span.start == text.rindex("AA")
 
 
+def test_rule2_records_that_open_with_the_same_words_are_found_one_after_the_other() -> (
+    None
+):
+    text = "- Rule: one\n- Rule: two\n- Rule: three"
+    records = run(
+        text,
+        rec("- Rule:", val("title", None, "one")),
+        rec("- Rule:", val("title", None, "two")),
+        rec("- Rule:", val("title", None, "three")),
+    )
+    assert [r.span for r in records] == [
+        Span(0, 11, "- Rule: one"),
+        Span(12, 23, "- Rule: two"),
+        Span(24, 37, "- Rule: three"),
+    ]
+
+
 def test_rule2_starts_with_before_the_previous_start_is_not_found() -> None:
     text = "AA x\nBB y"
     _, second = run(

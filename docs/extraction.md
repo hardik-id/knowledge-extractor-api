@@ -34,7 +34,7 @@ The port was checked against the TypeScript: both give the same records for the 
 `to_raw_records(text, definition, output, start=0, end=None)` finds the quotes in the text and gives the real offsets (code points, into the whole `text`; `start`/`end` limit where records are looked for). Nothing in the answer is trusted:
 
 - Unknown record types and unknown field keys are dropped.
-- A record starts at the first `starts_with` at or after the previous record's start; its region runs to the next record's start. A quote is looked for in its record's region, then anywhere in `start..end`; one not found becomes `Span(0, 0, quote)`, which `stored_records` stores as not anchored.
+- A record starts at the first `starts_with` after the previous record's start (records that open with the same words are found one after the other); its region runs to the next record's start. A quote is looked for in its record's region, then anywhere in `start..end`; one not found becomes `Span(0, 0, quote)`, which `stored_records` stores as not anchored.
 - A `quote` field's value is the quote; an `inferred` field's value must fit its type (choice, `YYYY-MM-DD` date, number) or counts as not found. A field that is not `multiple` keeps its first value.
 - Every field of the record type gets at least one `RawValue`, in definition order; the record's span covers its start and found quotes; a record with no found start and no value is dropped; at most 1000 records are kept.
 

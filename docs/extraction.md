@@ -27,6 +27,17 @@ The port was checked against the TypeScript: both give the same records for the 
 
 `extractors/records.py`, `stored_records(text, raw_records)`. For one file it checks every span against the text, anchors a quote whose offsets do not fit (`spans.resolve_span`), keeps a quote that is not in the text with `anchored: false`, and marks every record and value `llm` and `suggested`. A record whose own span cannot be placed is kept without a span. It returns plain `StoredRecord` and `StoredValue` objects; writing them is the caller's job.
 
+## From a model's answer to raw records
+
+`apps/extraction/extractors/llm_output.py` is the pure half of an extractor that calls a model: no model, no network, no database. The model answers with `ModelOutput { records: [ModelRecord { record_type_id, starts_with, values: [ModelValue { field_key, value, quotes }] }] }` (every key required, so strict JSON schema mode accepts it). It returns quotes, not offsets: a model copies words reliably and counts characters badly.
+
+`to_raw_records(text, definition, output, start=0, end=None)` finds the quotes in the text and gives the real offsets (code points, into the whole `text`; `start`/`end` limit where records are looked for). Nothing in the answer is trusted:
+
+- Unknown record types and unknown field keys are dropped.
+- A record starts at the first `starts_with` after the previous record's start (records that open with the same words are found one after the other); its region runs to the next record's start. A quote is looked for in its record's region, then anywhere in `start..end`; one not found becomes `Span(0, 0, quote)`, which `stored_records` stores as not anchored.
+- A `quote` field's value is the quote; an `inferred` field's value must fit its type (choice, `YYYY-MM-DD` date, number) or counts as not found. A field that is not `multiple` keeps its first value.
+- Every field of the record type gets at least one `RawValue`, in definition order; the record's span covers its start and found quotes; a record with no found start and no value is dropped; at most 1000 records are kept.
+
 ## The merge rule
 
 `merge.py`, a port of `src/services/mock/extraction-merge.ts`. `merge_extracted_records(previous, fresh)`:

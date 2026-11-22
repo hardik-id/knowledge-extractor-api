@@ -97,7 +97,7 @@ def make_formatter(log_format: str = "console", **kwargs: Any) -> Any:
 
 
 def build_logging_config(log_level: str, log_format: str) -> dict[str, Any]:
-    # The OpenAI client and the Agents SDK log request bodies (prompts, document
+    # The OpenAI and Anthropic clients and the Agents SDK log request bodies (prompts, document
     # text) at DEBUG, and its HTTP transport the response headers (an error names
     # the key, masked): they never log below INFO, whatever LOG_LEVEL says.
     level = logging.getLevelNamesMapping().get(log_level.upper(), logging.INFO)
@@ -133,6 +133,7 @@ def build_logging_config(log_level: str, log_format: str) -> dict[str, Any]:
             # not see it: filter the logger itself.
             "uvicorn.error": {"filters": ["redact_ticket"]},
             "openai": {"level": model_level},
+            "anthropic": {"level": model_level},
             "httpcore2": {"level": model_level},
             "httpx2": {"level": model_level},
         },

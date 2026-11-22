@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env e2e e2e-report chart-check
+.PHONY: install lint format typecheck run migrate db worker test check app up logs token ui-env e2e e2e-report chart-check install-ant
 
 install:
 	uv sync
@@ -14,6 +14,17 @@ format:
 
 typecheck:
 	uv run mypy .
+
+# The Anthropic CLI, for LLM_PROVIDER=anthropic in local testing (docs/assistant.md). Needs sudo.
+ANT_VERSION = 2.12.1
+
+install-ant:
+	@set -e; \
+	os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	case $$(uname -m) in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; \
+	*) echo "install-ant: unsupported architecture $$(uname -m)"; exit 1 ;; esac; \
+	curl -fsSL "https://github.com/anthropics/anthropic-cli/releases/download/v$(ANT_VERSION)/ant_$(ANT_VERSION)_$${os}_$${arch}.tar.gz" | sudo tar -xz -C /usr/local/bin ant; \
+	echo "Installed ant $(ANT_VERSION). Next: ant auth login, then set LLM_PROVIDER=anthropic and LLM_MODEL=claude-haiku-5-5 in .env"
 
 run:
 	uv run python manage.py runserver

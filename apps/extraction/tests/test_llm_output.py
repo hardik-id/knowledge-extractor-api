@@ -158,7 +158,7 @@ def test_rule2_starts_with_before_the_previous_start_is_not_found() -> None:
         text, rec("BB", val("title", None, "y")), rec("AA", val("title", None, "x"))
     )
     # AA is only before BB: not found, so the record is judged without a start.
-    assert second.span == Span(3, 4, "x")  # only its quote, found anywhere
+    assert second.span is None  # no start, so no span (rule 8)
     assert by_field(second)["f-title"][0].spans == [Span(3, 4, "x")]
 
 
@@ -300,10 +300,23 @@ def test_rule8_the_record_span_runs_from_start_to_the_last_quote() -> None:
     assert record.span == Span(3, 18, text[3:18])
 
 
-def test_rule8_a_quote_before_the_start_widens_the_span() -> None:
+def test_rule8_a_quote_outside_the_region_does_not_widen_the_span() -> None:
     text = "pre AA one"
     (record,) = run(text, rec("AA", val("title", None, "one"), val("note", "n", "pre")))
-    assert record.span == Span(0, 10, text)
+    assert record.span == Span(4, 10, "AA one")
+    assert by_field(record)["f-note"][0].spans == [Span(0, 3, "pre")]
+
+
+def test_rule8_a_record_without_a_start_has_no_span() -> None:
+    (record,) = run("AA one", rec("ZZ", val("title", None, "one")))
+    assert record.span is None
+
+
+def test_rule8_one_far_quote_shared_by_many_records_stays_bounded() -> None:
+    text = "HEAD" + "x" * 10000 + "TAIL"
+    records = run(text, *[rec("HEAD", val("title", None, "TAIL")) for _ in range(300)])
+    assert len(records) == 300
+    assert sum(len(r.span.quote) for r in records if r.span) <= 2 * len(text)
 
 
 def test_rule8_nothing_found_means_no_span() -> None:
@@ -375,3 +388,23 @@ def test_the_result_goes_through_stored_records() -> None:
 
 def test_to_raw_records_is_the_exported_function() -> None:
     assert to_raw_records is llm_output.to_raw_records
+
+
+def test_rule6_a_non_multiple_inferred_field_keeps_a_first_invalid_value() -> None:
+    (record,) = run("AA", rec("AA", val("amount", "x"), val("amount", "5")))
+    assert by_field(record)["f-amount"] == [RawValue("f-amount", None, [])]
+
+
+def test_rule11_nul_in_a_value_or_quote_is_not_found() -> None:
+    (record,) = run(
+        "AA one",
+        rec("AA", val("note", "a\x00b", "one"), val("title", None, "no\x00pe")),
+    )
+    fields = by_field(record)
+    assert fields["f-note"] == [RawValue("f-note", None, [])]
+    assert fields["f-title"] == [RawValue("f-title", None, [])]
+
+
+def test_rule11_nul_in_starts_with_is_not_found() -> None:
+    (record,) = run("AA one", rec("A\x00", val("note", "kept")))
+    assert record.span is None

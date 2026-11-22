@@ -56,7 +56,7 @@ class _Placed:
 def _inferred(field: Field, value: str | None) -> str | None:
     """The model's value if it fits the field's value type, else None."""
     text = (value or "").strip()
-    if not text:
+    if not text or "\x00" in text:
         return None
     if field.value_type == "choice":
         wanted = text.casefold()
@@ -96,9 +96,15 @@ def to_raw_records(
     6. A field that is not ``multiple`` keeps its first value.
     7. Every field has at least one ``RawValue``, in definition order.
     8. The record's span runs from the earliest to the latest of its start and its
-       found quotes; none found, no span.
+       quotes found inside its own region (a quote found elsewhere anchors its value
+       but does not widen the record); no found start, or nothing found, no span.
+       So the spans of records add up to at most the size of ``start..end``.
     9. A record with no found start and no value is dropped.
     10. At most ``MAX_RECORDS`` records are kept.
+    11. A value, quote or ``starts_with`` containing NUL is treated as not found
+        (the database refuses NUL).
+
+    A repeated identical quote in one region resolves to its first occurrence.
     """
     lo = min(max(start, 0), len(text))
     hi = len(text) if end is None else min(max(end, lo), len(text))
@@ -109,7 +115,8 @@ def to_raw_records(
         record_type = definition.record_type(record.record_type_id)
         if record_type is None:
             continue
-        at = text.find(record.starts_with, cursor, hi) if record.starts_with else -1
+        wanted = record.starts_with
+        at = text.find(wanted, cursor, hi) if wanted and "\x00" not in wanted else -1
         if at >= 0:
             cursor = at
         placed.append(_Placed(record, record_type, at if at >= 0 else None))
@@ -150,11 +157,15 @@ def _raw_record(text: str, item: _Placed, lo: int, hi: int) -> RawRecord | None:
     values: list[RawValue] = []
     for field in item.type.fields:
         candidates: list[RawValue] = []
-        for model_value in by_key.get(field.key, []):
-            quotes = [q for q in model_value.quotes if q]
+        model_values = by_key.get(field.key, [])
+        if field.mode == "inferred" and not field.multiple:
+            model_values = model_values[:1]  # the first value, valid or not
+        for model_value in model_values:
+            quotes = [q for q in model_value.quotes if q and "\x00" not in q]
             if field.mode == "quote":
-                if not quotes and (model_value.value or "").strip():
-                    quotes = [model_value.value or ""]
+                own = model_value.value or ""
+                if not quotes and own.strip() and "\x00" not in own:
+                    quotes = [own]
                 candidates += [RawValue(field.id, q, [span_of(q)]) for q in quotes]
             else:
                 checked = _inferred(field, model_value.value)
@@ -167,12 +178,20 @@ def _raw_record(text: str, item: _Placed, lo: int, hi: int) -> RawRecord | None:
         values += candidates or [RawValue(field.id, None, [])]
 
     points: list[int] = []
+    region_start, region_end = item.region
     if item.start is not None:
-        points += [item.start, item.start + len(item.record.starts_with)]
-    for value in values:
-        for quote_span in value.spans:
-            if found(quote_span):
-                points += [quote_span.start, quote_span.end]
+        points += [
+            item.start,
+            min(item.start + len(item.record.starts_with), region_end),
+        ]
+        for value in values:
+            for quote_span in value.spans:
+                if (
+                    found(quote_span)
+                    and region_start <= quote_span.start
+                    and quote_span.end <= region_end
+                ):
+                    points += [quote_span.start, quote_span.end]
 
     if item.start is None and all(v.value is None for v in values):
         return None

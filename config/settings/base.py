@@ -282,7 +282,9 @@ EXTRACTION_MODEL_TIMEOUT_SECONDS = env.int(
     "EXTRACTION_MODEL_TIMEOUT_SECONDS", default=120
 )
 EXTRACTION_MAX_OUTPUT_TOKENS = env.int("EXTRACTION_MAX_OUTPUT_TOKENS", default=16000)
-EXTRACTION_CHUNK_CHARS = env.int("EXTRACTION_CHUNK_CHARS", default=24000)
+# Measured on claude-haiku-5-5 with a quote-heavy definition: the answer is about one
+# token per document character, so a part must stay well under the answer limit.
+EXTRACTION_CHUNK_CHARS = env.int("EXTRACTION_CHUNK_CHARS", default=8000)
 # A longer document is split into parts: at most this many parts, this many model
 # calls at a time, and this many seconds for all the calls of one file (keep it
 # below EXECUTION_TIMEOUT_SECONDS).

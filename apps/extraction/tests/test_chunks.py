@@ -68,3 +68,19 @@ def test_a_hash_inside_a_line_is_not_a_heading() -> None:
 def test_a_heading_at_the_start_of_the_part_is_not_a_cut() -> None:
     check_cover("# H\n" + "word " * 10, 12)  # no empty part, no endless loop
     assert parts("# H\nabcdefghij", 8)[0] == "# H\n"
+
+
+def test_a_title_near_the_top_does_not_make_a_tiny_part() -> None:
+    body = "".join(f"## Section {n}\n{'words ' * 30}\n" for n in range(8))
+    text = "front matter\n# Title\n" + body
+    first = parts(text, 600)[0]
+    # The level-1 title is in the first half of the part: a later section heading
+    # is the cut, and the title stays inside the first part.
+    assert "# Title" in first and len(first) > 300
+    assert parts(text, 600)[1].startswith("## Section")
+    check_cover(text, 600)
+
+
+def test_a_heading_in_the_first_half_is_still_used_when_there_is_no_other() -> None:
+    text = "intro\n# Only\n" + "x" * 100
+    assert parts(text, 60)[0] == "intro\n"

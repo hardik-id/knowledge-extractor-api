@@ -28,12 +28,15 @@ def split(text: str, limit: int) -> list[tuple[int, int]]:
 def _cut(text: str, start: int, limit: int) -> int:
     """Where the part that begins at ``start`` ends: the best boundary within ``limit``."""
     stop = start + limit
-    # A heading line starts the next part; the highest level (fewest #) first.
+    # A heading line starts the next part; the highest level (fewest #) first. One in
+    # the second half of the window is preferred, so a title near the top of a
+    # document does not make a tiny part.
     headings = [
         m
         for m in _HEADING.finditer(text, start, stop + 1)
         if m.start() > start and m.start() <= stop
     ]
+    headings = [m for m in headings if m.start() > start + limit // 2] or headings
     if headings:
         level = min(len(m.group(1)) for m in headings)
         return [m.start() for m in headings if len(m.group(1)) == level][-1]

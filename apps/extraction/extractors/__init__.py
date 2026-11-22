@@ -38,6 +38,20 @@ def get_extractor() -> Extractor:
     return _load()()  # type: ignore[no-any-return]
 
 
+def get_preview_extractor() -> Extractor:
+    """The extractor for a dry run (the assistant's preview).
+
+    The model extractor gets its preview limits, so a preview ends before the
+    assistant's reply is cut (``REPLY_TIMEOUT_SECONDS``).
+    """
+    if extractor_kind() == "llm":
+        return _load()(  # type: ignore[no-any-return]
+            settings.EXTRACTION_PREVIEW_MAX_CHUNKS,
+            settings.EXTRACTION_PREVIEW_TIMEOUT_SECONDS,
+        )
+    return get_extractor()
+
+
 def check_settings() -> None:
     """Raise ``ImproperlyConfigured`` when ``EXTRACTOR`` names no implementation."""
     _load()

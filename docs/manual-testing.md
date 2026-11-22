@@ -273,7 +273,7 @@ LLM_MODEL=<model name>
 OPENAI_API_KEY=<your key>
 ```
 
-For Azure OpenAI use `LLM_PROVIDER=azure`, `LLM_MODEL=<deployment name>` and `AZURE_OPENAI_ENDPOINT`. For Claude use `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-5-5` and `ANTHROPIC_API_KEY`: the containers do not see the login of `ant auth login` (without Docker, see [assistant.md](assistant.md)). Compose passes `.env` to `api` and `worker`, then:
+For Azure OpenAI use `LLM_PROVIDER=azure`, `LLM_MODEL=<deployment name>` and `AZURE_OPENAI_ENDPOINT`. For Claude use `LLM_PROVIDER=anthropic` and `LLM_MODEL=claude-haiku-5-5`, after `ant auth login`: the containers do not see the login, so `make up` passes them its token as `ANTHROPIC_API_KEY`. The token lasts about eight hours; when replies start ending with "I could not reach the language model", run `make up` again (and `ant auth login` first if the login itself has expired). A Console key in `ANTHROPIC_API_KEY` in `.env` is used instead when there is one. Plain `docker compose up` does not pass the token. Compose passes `.env` to `api` and `worker`, then:
 
 ```sh
 make up

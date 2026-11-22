@@ -33,7 +33,7 @@ from apps.assistant.agents.base import (
 from apps.assistant.agents.openai_sdk.agent import build_agent
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 from apps.assistant.agents.openai_sdk.inputs import build_input
-from apps.assistant.agents.openai_sdk.models import connect, missing_settings
+from apps.core.llm import connect, missing_settings
 from apps.extraction.definition import Draft
 
 log = structlog.get_logger(__name__)

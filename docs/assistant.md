@@ -156,7 +156,7 @@ apps/assistant/agents/openai_sdk/
   agent.py           build_agent(model): instructions + tools + model. Nothing else
   instructions.py    the instructions text
   inputs.py          the conversation as the model gets it (build_input)
-  models.py          model access: missing_settings(), connect(), the Azure sign-in
+                     (model access is not here: it is apps/core/llm.py, see Configuration)
   runner.py          OpenAIAgent: runs one reply, turns SDK events into TextDelta and Proposal, limits, endings
   context.py         ReplyContext: what the tools of one reply share
   tools/
@@ -179,6 +179,8 @@ apps/assistant/agents/openai_sdk/
 Nothing else changes: `build_agent` takes whatever `TOOLS` holds.
 
 ### Configuration
+
+Model access lives in `apps/core/llm.py` (`missing_settings()`, `connect()` and the Azure and Anthropic sign-ins), shared with the extraction. The providers:
 
 | Variable | Meaning | Default |
 | --- | --- | --- |

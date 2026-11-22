@@ -283,6 +283,14 @@ EXTRACTION_MODEL_TIMEOUT_SECONDS = env.int(
 )
 EXTRACTION_MAX_OUTPUT_TOKENS = env.int("EXTRACTION_MAX_OUTPUT_TOKENS", default=16000)
 EXTRACTION_CHUNK_CHARS = env.int("EXTRACTION_CHUNK_CHARS", default=24000)
+# A longer document is split into parts: at most this many parts, this many model
+# calls at a time, and this many seconds for all the calls of one file (keep it
+# below EXECUTION_TIMEOUT_SECONDS).
+EXTRACTION_MAX_CHUNKS = env.int("EXTRACTION_MAX_CHUNKS", default=10)
+EXTRACTION_CONCURRENCY = env.int("EXTRACTION_CONCURRENCY", default=4)
+EXTRACTION_FILE_TIMEOUT_SECONDS = env.int(
+    "EXTRACTION_FILE_TIMEOUT_SECONDS", default=480
+)
 # EXTRACTOR=llm: the most characters of the whole message (prompt, record types,
 # examples and document) sent in one call.
 EXTRACTION_MAX_INPUT_CHARS = env.int("EXTRACTION_MAX_INPUT_CHARS", default=60000)

@@ -281,6 +281,22 @@ make up
 
 Compose recreates `api` and `worker`. Send an assistant message again; the reply now comes from the model. Switch back by restoring `scripted`.
 
+## Switching the extractor to a model
+
+`EXTRACTOR=scripted` reads documents with a pattern matcher. To extract with the model, set up the model as above (`LLM_PROVIDER`, `LLM_MODEL` and its sign-in), then in your own `.env`:
+
+```
+EXTRACTOR=llm
+```
+
+and run `make up` again (compose passes `EXTRACTOR` to `api` and `worker`). Press Run in the Studio: each file costs one model call. Without a model configured the app still starts, with the warning `extraction.W001`, and each file fails with "No language model is configured for extraction.". To see what the model finds without the UI or storing anything:
+
+```sh
+docker compose exec api python manage.py try_extractor --run <run_id> [--file <name>]
+```
+
+Switch back by restoring `EXTRACTOR=scripted`. See [extraction.md](extraction.md).
+
 ## End-to-end tests
 
 ```sh

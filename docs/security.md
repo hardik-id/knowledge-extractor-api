@@ -25,3 +25,7 @@ django-cors-headers 4.9.0 declares support up to Django 6.0; it has no release t
 ## Content-Security-Policy
 
 Django's built-in `ContentSecurityPolicyMiddleware` and `SECURE_CSP` send an enforced policy: everything from `'self'`, images also from `data:`, no plugins, `frame-ancestors 'none'`. The admin renders under it. When Swagger UI is added (#20), allow it per view with `CSP.NONCE` or a view-level override, not by loosening the global policy.
+
+## What leaves the system
+
+With `ASSISTANT_AGENT=openai` the person's messages, definitions and the document text the assistant reads go to the configured model provider (`LLM_PROVIDER`: OpenAI, Azure OpenAI or, for local testing, Anthropic). With `EXTRACTOR=llm` the text of every document that is run, the prompt, the record types and up to five example records go there too, one call per file. Requests are sent with `store=False` and the SDK's tracing to OpenAI is off. Logs, spans and metrics never carry document text, quotes, values or prompts ([observability.md](observability.md)). The model has no tools, and the document is wrapped as data (see [extraction.md](extraction.md)).

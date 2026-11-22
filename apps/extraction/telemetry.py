@@ -11,12 +11,15 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from opentelemetry import metrics
+import structlog
+from opentelemetry import metrics, trace
 from opentelemetry.trace import Span
 
 from apps.core import telemetry
 
 SCOPE = "apps.extraction"
+
+log = structlog.get_logger(__name__)
 
 # How an extraction job ended.
 SUCCEEDED = "succeeded"  # the records are stored
@@ -95,3 +98,34 @@ def file_span(
             instruments = _instruments(telemetry.meter_provider())
             instruments.files.add(1, attributes)
             instruments.duration.record(time.perf_counter() - started, attributes)
+
+
+def model_call(
+    *,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    records: int,
+    seconds: float,
+) -> None:
+    """One model call of the model extractor: a log line and an event on the job's span.
+
+    The model, the tokens the provider reported, how many records came back and how
+    long it took. Never the document, a quote, a value, the prompt or a credential.
+    """
+    attributes: dict[str, str | int | float] = {
+        "gen_ai.response.model": model,
+        "gen_ai.usage.input_tokens": input_tokens,
+        "gen_ai.usage.output_tokens": output_tokens,
+        "extraction.records": records,
+        "extraction.model_call.duration_s": round(seconds, 3),
+    }
+    trace.get_current_span().add_event("extraction.model_call", attributes)
+    log.info(
+        "extraction_model_call",
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        records=records,
+        duration_s=round(seconds, 3),
+    )

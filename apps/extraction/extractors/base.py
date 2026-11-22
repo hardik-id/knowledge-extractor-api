@@ -16,6 +16,18 @@ from apps.extraction.spans import Span
 from apps.extraction.validation import parse_draft
 
 
+class ExtractionError(Exception):
+    """An extraction that failed for a reason a person can read.
+
+    ``message`` goes into the failed cell as it is: one sentence, never the
+    document's text, a quote or a credential.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 @dataclass(frozen=True)
 class Definition:
     """A definition version: the prompt and the record types with their fields.

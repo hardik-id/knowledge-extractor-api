@@ -273,7 +273,7 @@ LLM_MODEL=<model name>
 OPENAI_API_KEY=<your key>
 ```
 
-For Azure OpenAI use `LLM_PROVIDER=azure`, `LLM_MODEL=<deployment name>` and `AZURE_OPENAI_ENDPOINT`. Compose passes `.env` to `api` and `worker`, then:
+For Azure OpenAI use `LLM_PROVIDER=azure`, `LLM_MODEL=<deployment name>` and `AZURE_OPENAI_ENDPOINT`. For Claude use `LLM_PROVIDER=anthropic`, `LLM_MODEL=claude-haiku-5-5` and `ANTHROPIC_API_KEY`: the containers do not see the login of `ant auth login` (without Docker, see [assistant.md](assistant.md)). Compose passes `.env` to `api` and `worker`, then:
 
 ```sh
 make up

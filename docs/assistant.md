@@ -182,13 +182,27 @@ Nothing else changes: `build_agent` takes whatever `TOOLS` holds.
 
 | Variable | Meaning | Default |
 | --- | --- | --- |
-| `LLM_PROVIDER` | `openai` or `azure` | `openai` |
-| `LLM_MODEL` | the model (`openai`) or the deployment name (`azure`) | empty |
+| `LLM_PROVIDER` | `openai`, `azure` or `anthropic` (local testing only) | `openai` |
+| `LLM_MODEL` | the model (`openai`, `anthropic`) or the deployment name (`azure`) | empty |
 | `OPENAI_API_KEY` | the key, for `openai`. A secret: in your own `.env` or the platform's secret store only | empty |
 | `AZURE_OPENAI_ENDPOINT` | the resource, for `azure`, e.g. `https://my-resource.openai.azure.com/` | empty |
+| `ANTHROPIC_API_KEY` | a Console key, for `anthropic`, optional: without it the `ant auth login` sign-in is used. A secret, in your own `.env` only | empty |
+| `ANTHROPIC_BASE_URL` | the OpenAI-compatible endpoint, for `anthropic`; set it for a gateway | `https://api.anthropic.com/v1/` |
 
 - **OpenAI**: `LLM_PROVIDER=openai`, `LLM_MODEL` and `OPENAI_API_KEY`. The agent uses the Responses API with `store` off.
 - **Azure OpenAI**: `LLM_PROVIDER=azure`, `LLM_MODEL` (the deployment) and `AZURE_OPENAI_ENDPOINT`. There is no key: the app signs in with its own identity through `azure-identity` (`DefaultAzureCredential`, scope `https://cognitiveservices.azure.com/.default`). In Azure that is the app's managed identity; locally it is the developer's sign-in (`az login`, `azd auth login`, or the other sources `DefaultAzureCredential` tries). The identity needs the role *Cognitive Services OpenAI User* on the resource. The agent calls the resource's v1 API (`<endpoint>/openai/v1/`, no `api-version`) with Chat Completions, which every deployment serves.
+- **Anthropic (local testing)**: `LLM_PROVIDER=anthropic` and `LLM_MODEL` (for example `claude-haiku-5-5`, the cheapest). Azure stays the production provider: production settings refuse `anthropic` and stop at start. The agent uses Chat Completions through Anthropic's OpenAI compatibility layer, the same client and model class as Azure. Locally:
+
+  ```sh
+  make install-ant      # once: installs the `ant` CLI (needs sudo)
+  ant auth login        # once, and when the sign-in expires
+  # .env: ASSISTANT_AGENT=openai  LLM_PROVIDER=anthropic  LLM_MODEL=claude-haiku-5-5
+  make run
+  ```
+
+  The app signs in through the `anthropic` package (`default_credentials()` and `TokenCache`: it reads the `ant` profile and refreshes the token), not by calling `ant`. The package is a dev dependency; the production image does not have it. With `ANTHROPIC_API_KEY` set, the key is used and the package is not needed. A compose container does not see the host's login: give it `ANTHROPIC_API_KEY`. When the sign-in fails (no profile, expired, no network) the reply ends with the "could not reach the language model" sentence; no token is logged.
+
+  The compatibility layer is documented by Anthropic as not for production: no prompt caching, no thinking in the reply, `strict` on tools and `store` ignored, and forced tool choice fails on some models (the agent uses `auto`). Why not LiteLLM: all providers speak the OpenAI protocol through the one client, so a provider is a base URL and a credential; LiteLLM adds about 30 packages and its PyPI package was compromised twice in 2026; and it would not solve the sign-in. If a provider ever needs another protocol, the Agents SDK's `LitellmModel` plugs in behind `connect()`.
 
 **Not configured** (`ASSISTANT_AGENT=openai` and a setting above missing): the system check `assistant.W001` warns when the app or the worker starts (`manage.py check`, `migrate`, `runserver`, `db_worker`) and names the missing settings. Nothing crashes: each reply is one sentence, "No language model is configured for the assistant yet, so I cannot answer.", then `assistant.done`.
 

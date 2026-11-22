@@ -3,7 +3,7 @@
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *
-from .base import AUTH_MODE, env
+from .base import AUTH_MODE, LLM_PROVIDER, env
 
 # env.str without a default raises ImproperlyConfigured naming the variable.
 SECRET_KEY = env.str("DJANGO_SECRET_KEY")
@@ -13,6 +13,12 @@ DEBUG = False
 if AUTH_MODE == "dev":
     raise ImproperlyConfigured(
         "AUTH_MODE=dev is not allowed in production; set AUTH_MODE=entra."
+    )
+
+if LLM_PROVIDER == "anthropic":
+    raise ImproperlyConfigured(
+        "LLM_PROVIDER=anthropic is for local testing and is not allowed in "
+        "production; set LLM_PROVIDER=azure."
     )
 
 # HTTPS. TLS ends at the proxy, which must send X-Forwarded-Proto.

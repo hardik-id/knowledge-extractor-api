@@ -190,7 +190,7 @@ def test_openai_is_a_built_in_agent(settings: Any) -> None:
 
 def test_the_openai_client_and_the_sdk_never_log_below_info() -> None:
     config = build_logging_config("DEBUG", "console")
-    for name in ("openai", "httpcore2", "httpx2"):
+    for name in ("openai", "anthropic", "httpcore2", "httpx2"):
         assert config["loggers"][name]["level"] == "INFO"
     config = build_logging_config("WARNING", "console")
     assert config["loggers"]["openai"]["level"] == "WARNING"

@@ -278,10 +278,15 @@ ASSISTANT_REPLY_TIMEOUT_SECONDS = env.int(
 EXTRACTOR = env.str("EXTRACTOR", default="scripted")
 # A queued or running cell older than this counts as failed (a dead worker).
 EXECUTION_TIMEOUT_SECONDS = env.int("EXECUTION_TIMEOUT_SECONDS", default=600)
-LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure
+LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure | anthropic
 LLM_MODEL = env.str("LLM_MODEL", default="")
 OPENAI_API_KEY = env.str("OPENAI_API_KEY", default="")  # secret
 AZURE_OPENAI_ENDPOINT = env.str("AZURE_OPENAI_ENDPOINT", default="")  # no key
+# anthropic is for local testing: the key is optional, `ant auth login` replaces it.
+ANTHROPIC_API_KEY = env.str("ANTHROPIC_API_KEY", default="")  # secret
+ANTHROPIC_BASE_URL = env.str(
+    "ANTHROPIC_BASE_URL", default="https://api.anthropic.com/v1/"
+)
 
 # Telemetry (OpenTelemetry, exported over OTLP/HTTP).
 OTEL_SDK_DISABLED = env.bool("OTEL_SDK_DISABLED", default=True)

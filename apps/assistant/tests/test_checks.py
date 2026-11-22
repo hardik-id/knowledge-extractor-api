@@ -7,7 +7,16 @@ import pytest
 
 from apps.assistant.checks import check_llm_settings
 from apps.assistant.tests.openai_sdk.helpers import configure
-from apps.core.tests.test_llm import FakeCredentials, anthropic_settings
+
+
+class FakeCredentials:
+    """What `anthropic.default_credentials()` returns, with no profile on disk."""
+
+
+def anthropic_settings(settings: Any) -> None:
+    settings.ANTHROPIC_API_KEY = ""
+    settings.ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1/"
+    configure(settings, LLM_PROVIDER="anthropic", LLM_MODEL="claude-haiku-5-5")
 
 
 def test_the_system_check_warns_only_for_openai_without_a_model(settings: Any) -> None:

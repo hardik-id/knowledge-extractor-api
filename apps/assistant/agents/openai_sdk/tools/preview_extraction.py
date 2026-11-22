@@ -19,6 +19,7 @@ from apps.assistant.agents.openai_sdk.tools.propose_definition import (
 )
 from apps.core.errors import ApiError
 from apps.extraction.definition import Draft, Field
+from apps.extraction.extractors.base import ExtractionError
 from apps.extraction.validation import parse_draft
 
 MAX_PREVIEWS = 3  # previews per reply
@@ -103,6 +104,8 @@ async def _preview(state: ReplyContext, arguments: str) -> str:
         records = await state.workspace.preview(definition, args.document_id)
     except ApiError:
         return error("this document cannot be previewed now.")
+    except ExtractionError as err:
+        return error(err.message)
     return _summary(definition, records, ref.name)
 
 

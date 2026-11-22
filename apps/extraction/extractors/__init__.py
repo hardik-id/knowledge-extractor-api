@@ -2,8 +2,7 @@
 
 The setting is a built-in name (``scripted``) or a dotted path to a class, which
 is how a test swaps in a fake. An unknown value stops the app at start (see
-``ExtractionConfig.ready``). An extractor that calls a model, or a bridge to the
-existing extraction service, comes later behind the same interface.
+``ExtractionConfig.ready``). ``llm`` calls the configured language model.
 """
 
 from django.conf import settings
@@ -12,7 +11,10 @@ from django.utils.module_loading import import_string
 
 from apps.extraction.extractors.base import Extractor
 
-_BUILT_IN = {"scripted": "apps.extraction.extractors.scripted.ScriptedExtractor"}
+_BUILT_IN = {
+    "scripted": "apps.extraction.extractors.scripted.ScriptedExtractor",
+    "llm": "apps.extraction.extractors.llm.LlmExtractor",
+}
 
 
 def _load() -> type:

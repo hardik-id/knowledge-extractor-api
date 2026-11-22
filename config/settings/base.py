@@ -275,7 +275,14 @@ ASSISTANT_AGENT = env.str("ASSISTANT_AGENT", default="scripted")  # scripted | o
 ASSISTANT_REPLY_TIMEOUT_SECONDS = env.int(
     "ASSISTANT_REPLY_TIMEOUT_SECONDS", default=300
 )
-EXTRACTOR = env.str("EXTRACTOR", default="scripted")
+EXTRACTOR = env.str("EXTRACTOR", default="scripted")  # scripted | llm
+# The extractor that calls the model (docs/extraction.md): seconds for one call, the
+# most tokens it may answer with, and the most document characters sent in one call.
+EXTRACTION_MODEL_TIMEOUT_SECONDS = env.int(
+    "EXTRACTION_MODEL_TIMEOUT_SECONDS", default=120
+)
+EXTRACTION_MAX_OUTPUT_TOKENS = env.int("EXTRACTION_MAX_OUTPUT_TOKENS", default=16000)
+EXTRACTION_CHUNK_CHARS = env.int("EXTRACTION_CHUNK_CHARS", default=24000)
 # A queued or running cell older than this counts as failed (a dead worker).
 EXECUTION_TIMEOUT_SECONDS = env.int("EXECUTION_TIMEOUT_SECONDS", default=600)
 LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure | anthropic

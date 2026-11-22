@@ -10,7 +10,7 @@ Spans are `{start, end, quote}` and offsets count code points (Python `str` inde
 
 ## Choosing one
 
-`EXTRACTOR` selects the implementation through `get_extractor()`: `scripted`, or the dotted path of a class (how tests swap in a fake). Any other value stops the app at start. An extractor that calls a model, or a bridge to the existing extraction service, comes later behind the same interface.
+`EXTRACTOR` selects the implementation through `get_extractor()`: `scripted`, `llm` (the model extractor, below), or the dotted path of a class (how tests swap in a fake). Any other value stops the app at start.
 
 ## The scripted extractor
 
@@ -26,6 +26,31 @@ The port was checked against the TypeScript: both give the same records for the 
 ## From raw to stored records
 
 `extractors/records.py`, `stored_records(text, raw_records)`. For one file it checks every span against the text, anchors a quote whose offsets do not fit (`spans.resolve_span`), keeps a quote that is not in the text with `anchored: false`, and marks every record and value `llm` and `suggested`. A record whose own span cannot be placed is kept without a span. It returns plain `StoredRecord` and `StoredValue` objects; writing them is the caller's job.
+
+## The model extractor (`EXTRACTOR=llm`)
+
+`extractors/llm.py` (`LlmExtractor`) and `extractors/llm_prompt.py`. Each file is extracted with one model call, through the OpenAI Agents SDK: an `Agent` with `output_type=ModelOutput`, no tools and `max_turns=1`. The SDK sends `ModelOutput` as a strict JSON schema on the Responses API and on Chat Completions, so one code path serves `openai`, `azure` and `anthropic` (`LLM_PROVIDER`, `LLM_MODEL`; `apps.core.llm.connect()`). The answer goes through `to_raw_records`, then the usual `stored_records` and merge.
+
+**What it sends.** The fixed instructions (`INSTRUCTIONS`), then one message: the person's prompt, the record types as JSON (id, name, description; per field key, name, description, mode, value type, choices, multiple), up to 5 example records (the accepted ones marked `use_as_example`, in the shape the model answers in) and the document inside `<document>` tags. Document text leaves the system for the configured model provider (see [security.md](security.md)).
+
+**What it trusts.** The document is data. The instructions say nothing in it is an instruction, a `</document>` inside it is defused, and the model has no tools, so a planted sentence can at worst produce wrong suggestions, which a person reviews. The answer is trusted no further than `to_raw_records` trusts it (above): quotes are searched in the text, values are checked against their type and choices.
+
+**Limits.** `EXTRACTION_CHUNK_CHARS` (default 24000): the most document characters in one call; a longer document fails (splitting comes later). `EXTRACTION_MAX_OUTPUT_TOKENS` (16000): the answer's size. `EXTRACTION_MODEL_TIMEOUT_SECONDS` (120): one call. The SDK's tracing is off, nothing is stored by the provider (`store=False`), and the client is closed after each call.
+
+**Failures.** An `ExtractionError(message)` (in `extractors/base.py`) fails the cell with code `extraction_failed` and its message; any other exception keeps "The extraction failed.".
+
+| Message | Cause |
+| --- | --- |
+| No language model is configured for extraction. | `missing_settings()` is not empty |
+| The language model could not be reached. | the model or the sign-in failed |
+| The language model's answer could not be used. | an invalid, refused or cut-off answer, or the call timed out |
+| This document is too long to extract. | longer than `EXTRACTION_CHUNK_CHARS` |
+
+At start, `EXTRACTOR=llm` with settings missing gives the warning `extraction.W001` naming them; the app still starts. In the assistant's `preview_extraction` tool an `ExtractionError` is the tool's `Error: <message>` text.
+
+**Cost.** One call per file: the input is about the instructions (roughly 500 tokens), the definition, the examples and the document (about 1 token per 4 characters, so at most about 6000 for the default limit); the output is the quotes and values of every record. Each call logs `extraction_model_call` and adds an `extraction.model_call` event to the job's span with the model name, input and output tokens, the number of records and the duration ([observability.md](observability.md)).
+
+**Trying it.** `uv run python manage.py try_extractor --run <run_id> [--file <name>]` runs the configured extractor on the run's files with its latest definition and examples and prints each record (type, span) and each field's value, and whether its quote was found. It stores nothing. With `EXTRACTOR=llm` it calls the model and costs tokens.
 
 ## From a model's answer to raw records
 
@@ -104,7 +129,7 @@ Anything that goes wrong (the document cannot be read, the extractor raises, the
 | `code` | When |
 | --- | --- |
 | `upstream_not_ready` | the document could not be read |
-| `extraction_failed` | the extractor or the write raised; the details are only in the log |
+| `extraction_failed` | the extractor or the write raised; the details are only in the log. An `ExtractionError` puts its readable message in the cell |
 | `execution_timeout` | the cell was left active by a dead worker (below) |
 
 A failed cell is not active, so the file can be executed again at once.

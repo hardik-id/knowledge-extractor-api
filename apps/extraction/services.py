@@ -20,7 +20,7 @@ from apps.extraction import selectors, tasks, telemetry, template_registry
 from apps.extraction.api.serializers import serialize_extraction
 from apps.extraction.definition import Field
 from apps.extraction.extractors import extractor_kind, get_extractor
-from apps.extraction.extractors.base import Definition
+from apps.extraction.extractors.base import Definition, ExtractionError
 from apps.extraction.extractors.records import StoredRecord, stored_records
 from apps.extraction.merge import merge_extracted_records
 from apps.extraction.models import (
@@ -635,6 +635,8 @@ def _output(run_file: Any, execution_id: str, extraction: Extraction) -> dict[st
 def _fail(file_id: str, execution_id: str, error: Exception) -> None:
     if isinstance(error, ApiError):
         reason = {"code": error.code, "message": error.message}
+    elif isinstance(error, ExtractionError):
+        reason = {"code": "extraction_failed", "message": error.message}
     else:
         reason = {"code": "extraction_failed", "message": "The extraction failed."}
     with transaction.atomic():

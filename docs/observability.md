@@ -98,9 +98,11 @@ For an agent that talks to a language model, `apps.assistant.telemetry.model_cal
 | `extraction.run_id` | the run (left out when the cell was gone) |
 | `extraction.file_id` | the run file |
 | `extraction.definition_version` | the definition version extracted with |
-| `extraction.extractor` | the kind of extractor: `scripted`, or the class name of one named by dotted path |
+| `extraction.extractor` | the kind of extractor: `scripted`, `llm`, or the class name of one named by dotted path |
 | `extraction.records` | the number of records the extractor found (left out when it did not finish) |
 | `extraction.outcome` | `succeeded`, `failed` (the cell is `failed`, the records are as they were) or `skipped` (the cell no longer belongs to this execution) |
+
+With `EXTRACTOR=llm` each model call adds an `extraction.model_call` event to the job's span and an `extraction_model_call` log line, both with `gen_ai.response.model` / `model`, input and output tokens, the number of records and the duration in seconds. Never the document's text, a quote, a value, the prompt or a credential.
 
 A job that fails has span status `error` and the attribute `error.type` (the exception's class). It has no status description and no `exception` event: an exception's message can quote what the person wrote.
 

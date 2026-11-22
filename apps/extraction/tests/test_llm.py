@@ -624,11 +624,77 @@ def test_a_quote_in_an_earlier_part_is_placed_in_its_own_part(
     size = len(section(1))
     settings.EXTRACTION_CHUNK_CHARS = size
     settings.EXTRACTION_CONCURRENCY = 1
+    # No start for the record: its region is the whole part, so only the part bounds
+    # keep the quote from being found in part 1.
     model.enqueue(part_answer(1))
-    model.enqueue(part_answer(2, quote=same))
+    model.enqueue(
+        answer(
+            {
+                "record_type_id": "rt-adr",
+                "starts_with": "no such start",
+                "values": [{"field_key": "title", "value": same, "quotes": [same]}],
+            }
+        )
+    )
     records = LlmExtractor().extract(doc, definition())
     value = next(v for v in records[1].values if v.value == same)
     assert value.spans[0].start == doc.index(same, size)
+
+
+def test_an_empty_document_makes_no_call(model: ScriptedModel) -> None:
+    assert LlmExtractor().extract("", definition()) == []
+    assert model.calls == ()
+
+
+def test_a_file_keeps_at_most_max_records_over_all_parts(
+    model: ScriptedModel, settings: Any, monkeypatch: Any
+) -> None:
+    from apps.extraction.extractors import llm
+
+    monkeypatch.setattr(llm, "MAX_RECORDS", 2)
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_CONCURRENCY = 1
+    for n in (1, 2, 3):
+        model.enqueue(part_answer(n))
+    assert len(LlmExtractor().extract(long_text(3), definition())) == 2
+
+
+def test_a_failing_part_still_leaves_events_for_the_finished_parts(
+    model: ScriptedModel, settings: Any, otel: Telemetry
+) -> None:
+    from apps.extraction import telemetry
+
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_CONCURRENCY = 1
+    model.enqueue(part_answer(1))
+    model.enqueue(ModelStep(output=[assistant_message("{bad")]))
+    with telemetry.file_span("f", 1, "llm"), pytest.raises(ExtractionError):
+        LlmExtractor().extract(long_text(3), definition())
+    (span,) = otel.named("extraction.file")
+    assert len([e for e in span.events if e.name == "extraction.model_call"]) == 1
+
+
+def test_a_preview_is_bounded_to_its_own_part_limit(
+    user: Any, run: Any, model: ScriptedModel, settings: Any
+) -> None:
+    from apps.extraction.selectors import preview_records
+
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_PREVIEW_MAX_CHUNKS = 2
+    with pytest.raises(ExtractionError, match="too long"):
+        preview_records(
+            user,
+            run.pk,
+            long_text(3),
+            parse_draft(
+                {
+                    "prompt": DEFAULT_PROMPT,
+                    "record_types": DEFAULT_RECORD_TYPES,
+                    "output": DEFAULT_OUTPUT,
+                }
+            ),
+        )
+    assert model.calls == ()
 
 
 def test_one_failing_part_fails_the_file_and_stores_nothing(
@@ -734,3 +800,19 @@ def test_the_file_event_has_the_parts_and_each_part_one_call_event(
     assert span.attributes is not None
     assert span.attributes["extraction.chunks"] == 3
     assert len([e for e in span.events if e.name == "extraction.model_call"]) == 3
+
+
+def test_the_limits_check_warns_on_a_file_timeout_the_cell_outlasts(
+    settings: Any,
+) -> None:
+    from apps.extraction.checks import check_extraction_limits
+
+    settings.EXTRACTOR = "llm"
+    assert check_extraction_limits() == []
+    settings.EXTRACTION_FILE_TIMEOUT_SECONDS = settings.EXECUTION_TIMEOUT_SECONDS
+    assert [m.id for m in check_extraction_limits()] == ["extraction.W002"]
+    settings.EXTRACTION_FILE_TIMEOUT_SECONDS = 100
+    settings.EXECUTION_TIMEOUT_SECONDS = 600
+    assert [m.id for m in check_extraction_limits()] == ["extraction.W002"]
+    settings.EXTRACTOR = "scripted"
+    assert check_extraction_limits() == []

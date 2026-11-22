@@ -47,7 +47,7 @@ The port was checked against the TypeScript: both give the same records for the 
 | This document is too long to extract. | more than `EXTRACTION_MAX_CHUNKS` parts; no call is made |
 | This definition is too large to extract with. | the whole message is longer than `EXTRACTION_MAX_INPUT_CHARS` |
 
-At start, `EXTRACTOR=llm` with settings missing gives the warning `extraction.W001` naming them; the app still starts. In the assistant's `preview_extraction` tool an `ExtractionError` is the tool's `Error: <message>` text.
+At start, `EXTRACTOR=llm` with settings missing gives the warning `extraction.W001` naming them; the app still starts. `extraction.W002` warns when `EXTRACTION_FILE_TIMEOUT_SECONDS` is not below `EXECUTION_TIMEOUT_SECONDS`, or when `EXTRACTION_MAX_CHUNKS` parts cannot finish in it. In the assistant's `preview_extraction` tool an `ExtractionError` is the tool's `Error: <message>` text.
 
 **Cost.** One call per part (at most `EXTRACTION_MAX_CHUNKS` per file), each: the input is about the instructions (roughly 500 tokens), the definition, the examples and the document. The limits count characters, not tokens: English is about 1 token per 4 characters (about 6000 tokens for the default document limit), but CJK, emoji or rare-script text can cost 1 to 3 tokens per character, so the worst case for 24000 characters is about 70000 tokens, and the whole message is capped at `EXTRACTION_MAX_INPUT_CHARS` characters; the output is the quotes and values of every record. The job's span has `extraction.chunks`, the number of parts. Each call logs `extraction_model_call` and adds an `extraction.model_call` event to the job's span with the model name, input and output tokens, the number of records and the duration ([observability.md](observability.md)).
 
@@ -56,6 +56,8 @@ At start, `EXTRACTOR=llm` with settings missing gives the warning `extraction.W0
 ### Long documents
 
 `extractors/chunks.py`, `split(text, limit)`, pure: the parts of a document as `(start, end)` offsets that cover the text exactly, in order, without overlap, each at most `limit` (`EXTRACTION_CHUNK_CHARS`) characters. Each part ends at the best boundary within the limit, in this order: before a heading line (`#` at the start of a line; the highest level present first, the last one of that level), after a blank line, after a line end, after a space; a hard cut only when a run has none. Every part is one model call with the same instructions, definition and examples, at most `EXTRACTION_CONCURRENCY` at a time. `to_raw_records(text, definition, output, start, end)` looks for each part's quotes only in that part, so a quote that also occurs in an earlier part is placed in its own; the records are joined in document order. All or nothing: if one part fails, the other calls are cancelled and the file fails with nothing stored. More than `EXTRACTION_MAX_CHUNKS` parts fails before any call.
+
+An empty document has no part and makes no call. Each call's `extraction.model_call` event is added as the call finishes, so a file that fails keeps the events of the parts that completed. The assistant's `preview_extraction` is bounded separately, as its reply is cut at 120 seconds: at most `EXTRACTION_PREVIEW_MAX_CHUNKS` parts (default 2, longer fails with the too-long message) and `EXTRACTION_PREVIEW_TIMEOUT_SECONDS` (default 100).
 
 **Known limit.** A record that crosses a cut is found in pieces (two records, each with part of the fields) or missed. Parts do not overlap and no context is shared between them, so a field in one part cannot be tied to a record in another.
 
@@ -68,7 +70,7 @@ At start, `EXTRACTOR=llm` with settings missing gives the warning `extraction.W0
 - Unknown record types and unknown field keys are dropped.
 - A record starts at the first `starts_with` after the previous record's start (records that open with the same words are found one after the other); its region runs to the next record's start. A quote is looked for in its record's region, then anywhere in `start..end`; one not found becomes `Span(0, 0, quote)`, which `stored_records` stores as not anchored.
 - A `quote` field's value is the quote; an `inferred` field's value must fit its type (choice, `YYYY-MM-DD` date, number) or counts as not found. A field that is not `multiple` keeps its first value.
-- Every field of the record type gets at least one `RawValue`, in definition order; the record's span covers its start and found quotes; a record with no found start and no value is dropped; at most 1000 records are kept.
+- Every field of the record type gets at least one `RawValue`, in definition order; the record's span covers its start and found quotes; a record with no found start and no value is dropped; at most 1000 records are kept (for a file of several parts, in all).
 
 ## The merge rule
 

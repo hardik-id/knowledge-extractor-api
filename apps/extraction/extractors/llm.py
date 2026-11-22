@@ -31,7 +31,11 @@ from apps.core.llm import connect, missing_settings
 from apps.extraction import telemetry
 from apps.extraction.extractors.base import Definition, ExtractionError, RawRecord
 from apps.extraction.extractors.chunks import split
-from apps.extraction.extractors.llm_output import ModelOutput, to_raw_records
+from apps.extraction.extractors.llm_output import (
+    MAX_RECORDS,
+    ModelOutput,
+    to_raw_records,
+)
 from apps.extraction.extractors.llm_prompt import INSTRUCTIONS, build_input
 
 log = structlog.get_logger(__name__)
@@ -46,12 +50,19 @@ TOO_LONG = "This document is too long to extract."
 TOO_LARGE = "This definition is too large to extract with."
 
 
-# One part's answer: the output, (input tokens, output tokens) and the seconds it took.
-_Answer = tuple[ModelOutput, tuple[int, int], float]
-
-
 class LlmExtractor:
-    """Extracts with the model named by ``LLM_PROVIDER`` and ``LLM_MODEL``."""
+    """Extracts with the model named by ``LLM_PROVIDER`` and ``LLM_MODEL``.
+
+    ``max_chunks`` and ``timeout`` replace the file limits
+    (``EXTRACTION_MAX_CHUNKS``, ``EXTRACTION_FILE_TIMEOUT_SECONDS``), as the
+    assistant's preview does.
+    """
+
+    def __init__(
+        self, max_chunks: int | None = None, timeout: float | None = None
+    ) -> None:
+        self._max_chunks = max_chunks
+        self._timeout = timeout
 
     def extract(
         self,
@@ -64,7 +75,8 @@ class LlmExtractor:
             log.warning("extraction_not_configured", missing=missing)
             raise ExtractionError(NOT_CONFIGURED)
         parts = split(text, settings.EXTRACTION_CHUNK_CHARS)
-        if len(parts) > settings.EXTRACTION_MAX_CHUNKS:
+        limit = self._max_chunks or settings.EXTRACTION_MAX_CHUNKS
+        if len(parts) > limit:
             raise ExtractionError(TOO_LONG)
         messages = [
             build_input(text[start:end], definition, examples) for start, end in parts
@@ -72,6 +84,8 @@ class LlmExtractor:
         if any(len(m) > settings.EXTRACTION_MAX_INPUT_CHARS for m in messages):
             raise ExtractionError(TOO_LARGE)
         telemetry.chunks(len(parts))
+        if not parts:
+            return []
         try:
             # Called from the worker and from a thread of the assistant's preview:
             # neither has a running loop.
@@ -84,16 +98,11 @@ class LlmExtractor:
             # The model, the SDK or a sign-in failed.
             raise self._failed(UNREACHABLE) from None
         records: list[RawRecord] = []
-        for (start, end), (output, usage, seconds) in zip(parts, answers, strict=True):
+        for (start, end), output in zip(parts, answers, strict=True):
+            if len(records) >= MAX_RECORDS:
+                break
             part = to_raw_records(text, definition, output, start, end)
-            telemetry.model_call(
-                model=settings.LLM_MODEL,
-                input_tokens=usage[0],
-                output_tokens=usage[1],
-                records=len(part),
-                seconds=seconds,
-            )
-            records.extend(part)
+            records.extend(part[: MAX_RECORDS - len(records)])
         return records
 
     @staticmethod
@@ -102,7 +111,7 @@ class LlmExtractor:
         log.warning("extraction_model_failed", reason=message)
         return ExtractionError(message)
 
-    async def _ask_all(self, messages: list[str]) -> list[_Answer]:
+    async def _ask_all(self, messages: list[str]) -> list[ModelOutput]:
         """One call per message, at most ``EXTRACTION_CONCURRENCY`` at a time.
 
         All or nothing: the first failure cancels the other calls, and all of them
@@ -111,12 +120,14 @@ class LlmExtractor:
         model, client = connect()
         gate = asyncio.Semaphore(max(settings.EXTRACTION_CONCURRENCY, 1))
 
-        async def one(message: str) -> _Answer:
+        async def one(message: str) -> ModelOutput:
             async with gate:
                 return await self._ask(model, message)
 
         try:
-            async with asyncio.timeout(settings.EXTRACTION_FILE_TIMEOUT_SECONDS):
+            async with asyncio.timeout(
+                self._timeout or settings.EXTRACTION_FILE_TIMEOUT_SECONDS
+            ):
                 async with asyncio.TaskGroup() as group:
                     tasks = [group.create_task(one(m)) for m in messages]
             return [task.result() for task in tasks]
@@ -126,7 +137,7 @@ class LlmExtractor:
         finally:
             await client.close()
 
-    async def _ask(self, model: Any, message: str) -> _Answer:
+    async def _ask(self, model: Any, message: str) -> ModelOutput:
         started = time.perf_counter()
         agent: Agent[Any] = Agent(
             name="Knowledge Extractor extraction",
@@ -152,8 +163,12 @@ class LlmExtractor:
         if not isinstance(output, ModelOutput):
             raise ModelBehaviorError("no answer")
         usage = result.context_wrapper.usage
-        return (
-            output,
-            (usage.input_tokens, usage.output_tokens),
-            (time.perf_counter() - started),
+        # At once, so a file that fails later still shows what its finished parts cost.
+        telemetry.model_call(
+            model=settings.LLM_MODEL,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            records=len(output.records),
+            seconds=time.perf_counter() - started,
         )
+        return output

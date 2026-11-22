@@ -291,6 +291,12 @@ EXTRACTION_CONCURRENCY = env.int("EXTRACTION_CONCURRENCY", default=4)
 EXTRACTION_FILE_TIMEOUT_SECONDS = env.int(
     "EXTRACTION_FILE_TIMEOUT_SECONDS", default=480
 )
+# The assistant's preview of an extraction: at most this many parts and seconds
+# (keep the seconds below the assistant's reply bound of 120).
+EXTRACTION_PREVIEW_MAX_CHUNKS = env.int("EXTRACTION_PREVIEW_MAX_CHUNKS", default=2)
+EXTRACTION_PREVIEW_TIMEOUT_SECONDS = env.int(
+    "EXTRACTION_PREVIEW_TIMEOUT_SECONDS", default=100
+)
 # EXTRACTOR=llm: the most characters of the whole message (prompt, record types,
 # examples and document) sent in one call.
 EXTRACTION_MAX_INPUT_CHARS = env.int("EXTRACTION_MAX_INPUT_CHARS", default=60000)

@@ -128,7 +128,18 @@ def preview_records(
     """
     run = runs.get_run(user, run_id)
     definition = Definition(0, draft.prompt, draft.record_types)
-    raw = get_extractor().extract(text, definition, example_records(run.pk))
+    from django.conf import settings
+
+    from apps.extraction.extractors.llm import LlmExtractor
+
+    extractor = get_extractor()
+    if isinstance(extractor, LlmExtractor):
+        # A preview must end before the assistant's reply is cut (REPLY_TIMEOUT_SECONDS).
+        extractor = LlmExtractor(
+            settings.EXTRACTION_PREVIEW_MAX_CHUNKS,
+            settings.EXTRACTION_PREVIEW_TIMEOUT_SECONDS,
+        )
+    raw = extractor.extract(text, definition, example_records(run.pk))
     return merge_extracted_records([], stored_records(text, raw))
 
 

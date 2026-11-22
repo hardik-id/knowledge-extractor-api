@@ -43,7 +43,22 @@ test:
 	uv run pytest
 
 # The whole stack in Docker (docs/manual-testing.md): db, redis, otel-collector, api and worker.
+# With LLM_PROVIDER=anthropic and no ANTHROPIC_API_KEY, the containers get the token of the
+# host's `ant auth login` (they cannot see the login itself). It lasts about eight hours:
+# make up again renews it. The token is never printed.
 up:
+	@if grep -qx 'LLM_PROVIDER=anthropic' .env 2>/dev/null \
+		&& ! grep -qE '^ANTHROPIC_API_KEY=.' .env \
+		&& [ -z "$$ANTHROPIC_API_KEY" ] && command -v ant >/dev/null; then \
+		if ANTHROPIC_API_KEY=$$(ant auth print-credentials --access-token 2>/dev/null) \
+			&& [ -n "$$ANTHROPIC_API_KEY" ]; then \
+			export ANTHROPIC_API_KEY; \
+			echo "make up: the containers use the token of ant auth login (about eight hours)"; \
+		else \
+			unset ANTHROPIC_API_KEY; \
+			echo "make up: no ant sign-in found; run ant auth login, then make up again"; \
+		fi; \
+	fi; \
 	docker compose up -d --build --wait
 
 logs:

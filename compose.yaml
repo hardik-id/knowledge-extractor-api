@@ -73,6 +73,8 @@ services:
       DEV_AUTH_KEY_PATH: /tmp/dev-keys/issuer.pem
       ASSISTANT_AGENT: ${ASSISTANT_AGENT:-scripted}
       EXTRACTOR: ${EXTRACTOR:-scripted}
+      # A key from .env, or the token of the host's ant login, which make up passes.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Inside the compose network the services are reached by their names.
       DATABASE_URL: postgres://ke:ke@db:5432/ke
       REDIS_URL: redis://redis:6379/0

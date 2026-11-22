@@ -129,3 +129,8 @@ def model_call(
         records=records,
         duration_s=round(seconds, 3),
     )
+
+
+def chunks(count: int) -> None:
+    """The number of parts a document was split into, on the job's span."""
+    trace.get_current_span().set_attribute("extraction.chunks", count)

@@ -11,7 +11,7 @@ from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.documents.selectors import DocumentText
 from apps.extraction.definition import Draft
-from apps.extraction.extractors import get_extractor
+from apps.extraction.extractors import get_preview_extractor
 from apps.extraction.extractors.base import Definition, RawRecord, RawValue
 from apps.extraction.extractors.records import StoredRecord, stored_records
 from apps.extraction.merge import merge_extracted_records
@@ -128,7 +128,7 @@ def preview_records(
     """
     run = runs.get_run(user, run_id)
     definition = Definition(0, draft.prompt, draft.record_types)
-    raw = get_extractor().extract(text, definition, example_records(run.pk))
+    raw = get_preview_extractor().extract(text, definition, example_records(run.pk))
     return merge_extracted_records([], stored_records(text, raw))
 
 

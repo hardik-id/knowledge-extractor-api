@@ -29,6 +29,7 @@ from apps.extraction.extractors.base import (
     RawRecord,
     RawValue,
 )
+from apps.extraction.extractors.chunks import split
 from apps.extraction.extractors.llm import LlmExtractor
 from apps.extraction.extractors.llm_prompt import INSTRUCTIONS, build_input
 from apps.extraction.models import Extraction, ExtractionRecord, FieldValue
@@ -355,10 +356,11 @@ def test_a_failed_call_gives_a_readable_message_and_keeps_earlier_records(
     assert model.client.closed  # type: ignore[attr-defined]
 
 
-def test_a_document_over_the_limit_is_not_sent(
+def test_a_document_in_too_many_parts_is_not_sent(
     client: Any, file: Any, model: ScriptedModel, settings: Any
 ) -> None:
-    settings.EXTRACTION_CHUNK_CHARS = len(text()) - 1
+    settings.EXTRACTION_CHUNK_CHARS = 100
+    settings.EXTRACTION_MAX_CHUNKS = len(split(text(), 100)) - 1
     failed_with(job(client, file), "This document is too long to extract.")
     assert model.calls == ()
     assert not Extraction.objects.filter(file=file).exists()
@@ -567,3 +569,250 @@ def test_try_extractor_refuses_an_unknown_run_or_file(file: Any) -> None:
         run_command("--run", "00000000-0000-0000-0000-000000000000")
     with pytest.raises(CommandError):
         run_command("--run", str(file.run_id), "--file", "nothing.md")
+
+
+# --- long documents in parts ----------------------------------------------------------
+
+
+def section(n: int) -> str:
+    return (
+        f"## ADR-{n}: Decision number {n}\n\nStatus: Accepted\n\n"
+        + "word " * 20
+        + "\n\n"
+    )
+
+
+def part_answer(n: int, quote: str | None = None) -> ModelStep:
+    title = f"Decision number {n}"
+    return answer(
+        {
+            "record_type_id": "rt-adr",
+            "starts_with": f"## ADR-{n}",
+            "values": [
+                {"field_key": "title", "value": title, "quotes": [quote or title]}
+            ],
+        }
+    )
+
+
+def long_text(parts_count: int) -> str:
+    return "".join(section(n) for n in range(1, parts_count + 1))
+
+
+def test_a_three_part_document_gives_records_from_all_parts_in_order(
+    model: ScriptedModel, settings: Any
+) -> None:
+    doc = long_text(3)
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_CONCURRENCY = 1  # the scripted answers are taken in order
+    assert len(split(doc, len(section(1)))) == 3
+    for n in (1, 2, 3):
+        model.enqueue(part_answer(n))
+    records = LlmExtractor().extract(doc, definition())
+    assert len(model.calls) == 3
+    starts = [r.span.start for r in records if r.span]
+    assert starts == [doc.index(f"## ADR-{n}") for n in (1, 2, 3)]
+    for r in records:
+        assert r.span and doc[r.span.start : r.span.end] == r.span.quote
+
+
+def test_a_quote_in_an_earlier_part_is_placed_in_its_own_part(
+    model: ScriptedModel, settings: Any
+) -> None:
+    same = "Status: Accepted"
+    doc = long_text(2)
+    size = len(section(1))
+    settings.EXTRACTION_CHUNK_CHARS = size
+    settings.EXTRACTION_CONCURRENCY = 1
+    # No start for the record: its region is the whole part, so only the part bounds
+    # keep the quote from being found in part 1.
+    model.enqueue(part_answer(1))
+    model.enqueue(
+        answer(
+            {
+                "record_type_id": "rt-adr",
+                "starts_with": "no such start",
+                "values": [{"field_key": "title", "value": same, "quotes": [same]}],
+            }
+        )
+    )
+    records = LlmExtractor().extract(doc, definition())
+    value = next(v for v in records[1].values if v.value == same)
+    assert value.spans[0].start == doc.index(same, size)
+
+
+def test_an_empty_document_makes_no_call(model: ScriptedModel) -> None:
+    assert LlmExtractor().extract("", definition()) == []
+    assert model.calls == ()
+
+
+def test_a_file_keeps_at_most_max_records_over_all_parts(
+    model: ScriptedModel, settings: Any, monkeypatch: Any
+) -> None:
+    from apps.extraction.extractors import llm
+
+    monkeypatch.setattr(llm, "MAX_RECORDS", 2)
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_CONCURRENCY = 1
+    for n in (1, 2, 3):
+        model.enqueue(part_answer(n))
+    assert len(LlmExtractor().extract(long_text(3), definition())) == 2
+
+
+def test_a_failing_part_still_leaves_events_for_the_finished_parts(
+    model: ScriptedModel, settings: Any, otel: Telemetry
+) -> None:
+    from apps.extraction import telemetry
+
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_CONCURRENCY = 1
+    model.enqueue(part_answer(1))
+    model.enqueue(ModelStep(output=[assistant_message("{bad")]))
+    with telemetry.file_span("f", 1, "llm"), pytest.raises(ExtractionError):
+        LlmExtractor().extract(long_text(3), definition())
+    (span,) = otel.named("extraction.file")
+    assert len([e for e in span.events if e.name == "extraction.model_call"]) == 1
+
+
+def test_a_preview_is_bounded_to_its_own_part_limit(
+    user: Any, run: Any, model: ScriptedModel, settings: Any
+) -> None:
+    from apps.extraction.selectors import preview_records
+
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_PREVIEW_MAX_CHUNKS = 2
+    with pytest.raises(ExtractionError, match="too long"):
+        preview_records(
+            user,
+            run.pk,
+            long_text(3),
+            parse_draft(
+                {
+                    "prompt": DEFAULT_PROMPT,
+                    "record_types": DEFAULT_RECORD_TYPES,
+                    "output": DEFAULT_OUTPUT,
+                }
+            ),
+        )
+    assert model.calls == ()
+
+
+def test_one_failing_part_fails_the_file_and_stores_nothing(
+    client: Any, file: Any, model: ScriptedModel, settings: Any
+) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = 400
+    settings.EXTRACTION_CONCURRENCY = 1
+    assert len(split(text(), 400)) >= 3
+    model.enqueue(answer(adr_answer()))
+    model.enqueue(ModelStep(output=[assistant_message("{bad")]))
+    failed_with(job(client, file), "The language model's answer could not be used.")
+    assert not Extraction.objects.filter(file=file).exists()
+    assert not ExtractionRecord.objects.exists()
+
+
+def test_too_many_parts_fail_before_any_call_and_the_limit_is_inclusive(
+    model: ScriptedModel, settings: Any
+) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = len(section(11))
+    settings.EXTRACTION_MAX_CHUNKS = 10
+    with pytest.raises(ExtractionError, match="too long"):
+        LlmExtractor().extract(long_text(11), definition())
+    assert model.calls == ()
+    for _ in range(10):
+        model.enqueue(answer())
+    assert LlmExtractor().extract(long_text(10), definition()) == []
+    assert len(model.calls) == 10
+
+
+def test_just_over_the_limit_is_two_parts(model: ScriptedModel, settings: Any) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = 5
+    model.enqueue(answer())
+    model.enqueue(answer())
+    assert LlmExtractor().extract("123456", definition()) == []
+    assert len(model.calls) == 2
+
+
+def test_every_part_gets_the_same_instructions_and_definition(
+    model: ScriptedModel, settings: Any
+) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    for _ in range(3):
+        model.enqueue(answer())
+    LlmExtractor().extract(long_text(3), definition())
+    assert {c.system_instructions for c in model.calls} == {INSTRUCTIONS}
+    for call in model.calls:
+        message = (
+            call.input if isinstance(call.input, str) else call.input[0]["content"]
+        )
+        assert definition().prompt in message
+
+
+def test_the_concurrency_bound_holds(model: ScriptedModel, settings: Any) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    settings.EXTRACTION_CONCURRENCY = 2
+    running = 0
+    peak = 0
+
+    async def respond(_call: Any) -> Any:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.05)
+        running -= 1
+        return answer()
+
+    for _ in range(6):
+        model.enqueue(ModelStep.respond(respond))
+    LlmExtractor().extract(long_text(6), definition())
+    assert len(model.calls) == 6
+    assert peak == 2
+
+
+def test_the_file_timeout_fails_the_file_readably(
+    client: Any, file: Any, model: ScriptedModel, settings: Any
+) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = 400
+    settings.EXTRACTION_CONCURRENCY = 1
+    settings.EXTRACTION_FILE_TIMEOUT_SECONDS = 0.3
+
+    async def pause(_call: Any) -> Any:
+        await asyncio.sleep(0.2)
+        return answer()
+
+    for _ in range(6):
+        model.enqueue(ModelStep.respond(pause))
+    failed_with(job(client, file), "The language model's answer could not be used.")
+    assert len(model.calls) < 6  # the remaining parts were never asked
+    assert not Extraction.objects.filter(file=file).exists()
+
+
+def test_the_file_event_has_the_parts_and_each_part_one_call_event(
+    model: ScriptedModel, settings: Any, otel: Telemetry
+) -> None:
+    from apps.extraction import telemetry
+
+    settings.EXTRACTION_CHUNK_CHARS = len(section(1))
+    for _ in range(3):
+        model.enqueue(answer())
+    with telemetry.file_span("f", 1, "llm"):
+        LlmExtractor().extract(long_text(3), definition())
+    (span,) = otel.named("extraction.file")
+    assert span.attributes is not None
+    assert span.attributes["extraction.chunks"] == 3
+    assert len([e for e in span.events if e.name == "extraction.model_call"]) == 3
+
+
+def test_the_limits_check_warns_on_a_file_timeout_the_cell_outlasts(
+    settings: Any,
+) -> None:
+    from apps.extraction.checks import check_extraction_limits
+
+    settings.EXTRACTOR = "llm"
+    assert check_extraction_limits() == []
+    settings.EXTRACTION_FILE_TIMEOUT_SECONDS = settings.EXECUTION_TIMEOUT_SECONDS
+    assert [m.id for m in check_extraction_limits()] == ["extraction.W002"]
+    settings.EXTRACTION_FILE_TIMEOUT_SECONDS = 100
+    settings.EXECUTION_TIMEOUT_SECONDS = 600
+    assert [m.id for m in check_extraction_limits()] == ["extraction.W002"]
+    settings.EXTRACTOR = "scripted"
+    assert check_extraction_limits() == []

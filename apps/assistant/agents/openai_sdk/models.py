@@ -3,11 +3,18 @@
 import asyncio
 import functools
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import httpx2
+import structlog
 from agents import Model, OpenAIChatCompletionsModel, OpenAIResponsesModel
 from django.conf import settings
 from openai import APIConnectionError, AsyncOpenAI
+
+if TYPE_CHECKING:
+    from anthropic import TokenCache
+
+log = structlog.get_logger(__name__)
 
 AZURE_SCOPE = "https://cognitiveservices.azure.com/.default"
 ANTHROPIC_SIGN_IN = (
@@ -58,8 +65,8 @@ async def _azure_token() -> str:
 
 
 @functools.cache
-def _anthropic_sign_in() -> tuple[Callable[[], str], dict[str, str]]:
-    """The token source and headers of the developer's `ant auth login` profile, through
+def _anthropic_sign_in() -> tuple[TokenCache, dict[str, str]]:
+    """The token cache and headers of the developer's `ant auth login` profile, through
     the `anthropic` package (a dev dependency: production refuses this provider).
     Made once; the cache refreshes the token before it expires."""
     import anthropic
@@ -68,17 +75,21 @@ def _anthropic_sign_in() -> tuple[Callable[[], str], dict[str, str]]:
     if credentials is None:
         raise RuntimeError("no Anthropic sign-in")
     cache = anthropic.TokenCache(credentials.provider)
-    return cache.get_token, dict(credentials.extra_headers or {})
+    return cache, dict(credentials.extra_headers or {})
 
 
 async def _anthropic_token() -> str:
     try:
-        get_token, _ = _anthropic_sign_in()
-        return await asyncio.to_thread(get_token)
+        cache, _ = _anthropic_sign_in()
+        return await cache.async_get_token()
     except Exception as error:
-        # One error type for the reply to handle; the cause is chained, never logged.
+        # One error type for the reply to handle. The log names the cause's class,
+        # never its message: ImportError (no package), RuntimeError (no sign-in), ...
+        log.warning("assistant_sign_in_failed", cause=type(error).__name__)
         request = httpx2.Request("POST", settings.ANTHROPIC_BASE_URL)
-        raise APIConnectionError(request=request) from error
+        raise APIConnectionError(
+            message="Anthropic sign-in failed.", request=request
+        ) from error
 
 
 def connect() -> tuple[Model, AsyncOpenAI]:

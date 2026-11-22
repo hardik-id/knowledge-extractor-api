@@ -4,6 +4,7 @@ from typing import Any
 
 import anthropic
 import pytest
+import structlog
 from agents import OpenAIChatCompletionsModel, OpenAIResponsesModel
 
 from apps.assistant.agents.openai_sdk import models
@@ -170,8 +171,15 @@ async def test_a_failed_anthropic_sign_in_is_an_api_error_the_reply_handles(
     monkeypatch.setattr(anthropic, "default_credentials", broken)
     models._anthropic_sign_in.cache_clear()
     _, client = connect()
-    with pytest.raises(APIError):
+    with structlog.testing.capture_logs() as logs, pytest.raises(APIError):
         await models._anthropic_token()
+    assert logs == [
+        {
+            "event": "assistant_sign_in_failed",
+            "cause": "OSError",
+            "log_level": "warning",
+        }
+    ], "the log names the cause, never its message"
     await client.close()
 
 

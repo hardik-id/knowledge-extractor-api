@@ -42,6 +42,7 @@ NOT_CONFIGURED = "No language model is configured for extraction."
 UNREACHABLE = "The language model could not be reached."
 UNUSABLE = "The language model's answer could not be used."
 TOO_LONG = "This document is too long to extract."
+TOO_LARGE = "This definition is too large to extract with."
 
 
 class LlmExtractor:
@@ -60,6 +61,8 @@ class LlmExtractor:
         if len(text) > settings.EXTRACTION_CHUNK_CHARS:
             raise ExtractionError(TOO_LONG)
         message = build_input(text, definition, examples)
+        if len(message) > settings.EXTRACTION_MAX_INPUT_CHARS:
+            raise ExtractionError(TOO_LARGE)
         started = time.perf_counter()
         try:
             # Called from the worker and from a thread of the assistant's preview:

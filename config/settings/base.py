@@ -283,6 +283,9 @@ EXTRACTION_MODEL_TIMEOUT_SECONDS = env.int(
 )
 EXTRACTION_MAX_OUTPUT_TOKENS = env.int("EXTRACTION_MAX_OUTPUT_TOKENS", default=16000)
 EXTRACTION_CHUNK_CHARS = env.int("EXTRACTION_CHUNK_CHARS", default=24000)
+# EXTRACTOR=llm: the most characters of the whole message (prompt, record types,
+# examples and document) sent in one call.
+EXTRACTION_MAX_INPUT_CHARS = env.int("EXTRACTION_MAX_INPUT_CHARS", default=60000)
 # A queued or running cell older than this counts as failed (a dead worker).
 EXECUTION_TIMEOUT_SECONDS = env.int("EXECUTION_TIMEOUT_SECONDS", default=600)
 LLM_PROVIDER = env.str("LLM_PROVIDER", default="openai")  # openai | azure | anthropic

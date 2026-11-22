@@ -6,12 +6,16 @@ planted in a document can do is produce wrong suggestions, which a person review
 """
 
 import json
+import re
 from collections.abc import Sequence
 
 from apps.extraction.extractors.base import Definition, RawRecord
 
 MAX_EXAMPLES = 5
 STARTS_WITH_CHARS = 80  # of an example record's first words
+EXAMPLE_TEXT_CHARS = 300  # of an example value or quote
+EXAMPLE_VALUES = 20  # per example record
+EXAMPLE_QUOTES = 3  # per example value
 
 INSTRUCTIONS = """\
 You extract structured records from one document, following the person's definition.
@@ -42,7 +46,7 @@ Rules:
 
 def _data(text: str, tag: str) -> str:
     """Text that cannot close the element it is wrapped in."""
-    return text.replace(f"</{tag}>", f"</ {tag}>")
+    return re.sub(rf"<\s*/\s*{tag}", f"</ {tag}", text, flags=re.IGNORECASE)
 
 
 def _record_types(definition: Definition) -> str:
@@ -89,12 +93,15 @@ def _examples(definition: Definition, examples: Sequence[RawRecord]) -> str:
                 "values": [
                     {
                         "field_key": keys[value.field_id],
-                        "value": value.value,
-                        "quotes": [span.quote for span in value.spans],
+                        "value": (value.value or "")[:EXAMPLE_TEXT_CHARS],
+                        "quotes": [
+                            span.quote[:EXAMPLE_TEXT_CHARS]
+                            for span in value.spans[:EXAMPLE_QUOTES]
+                        ],
                     }
                     for value in example.values
                     if value.field_id in keys
-                ],
+                ][:EXAMPLE_VALUES],
             }
         )
         if len(shown) == MAX_EXAMPLES:

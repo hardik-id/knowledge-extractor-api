@@ -49,7 +49,7 @@ UNUSABLE = "The language model's answer could not be used."
 TOO_LONG = "This document is too long to extract."
 TOO_LONG_FOR_SIZE = (
     "This document is too long to extract with this chunk size. "
-    "A larger chunk size, or the Automatic strategy, allows a longer document."
+    "A larger chunk size, or the Automatic strategy, may allow a longer document."
 )
 UNREADABLE = "This document contains characters that cannot be read."
 TOO_LARGE = "This definition is too large to extract with."
@@ -128,8 +128,8 @@ class LlmExtractor:
         most ``EXTRACTION_CHUNK_CHARS``. A part is never longer than the size, so a
         text longer than ``limit * size`` cannot fit in ``limit`` parts: it fails
         before the splitter runs (the library strategies are quadratic on a long run
-        without whitespace). ``auto`` parts may be shorter than the size, so a shorter
-        text can still fail after the split.
+        without whitespace). Parts may be shorter than the size (every strategy), so a
+        shorter text can still fail after the split.
         """
         chunking = definition.chunking
         largest = settings.EXTRACTION_CHUNK_CHARS

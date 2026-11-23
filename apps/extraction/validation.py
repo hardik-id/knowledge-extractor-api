@@ -27,6 +27,7 @@ __all__ = [
     "NOTE_MAX_LENGTH",
     "VALUE_TYPES",
     "ChunkingSerializer",
+    "DraftAnswerSerializer",
     "DraftSerializer",
     "parse_draft",
 ]
@@ -71,6 +72,15 @@ class DraftSerializer(serializers.Serializer):  # type: ignore[type-arg]
     record_types = RecordTypeSerializer(many=True)
     output = OutputSerializer()
     chunking = ChunkingSerializer(required=False)
+
+
+class DraftAnswerSerializer(DraftSerializer):
+    """A definition in an answer: ``chunking`` is always there."""
+
+    chunking = ChunkingSerializer()
+
+    class Meta:
+        ref_name = "Draft"
 
 
 def parse_draft(data: Any) -> Draft:

@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.db import models
+from django.db.models import Value
 
 from apps.core.models import BaseModel
 
@@ -20,7 +21,12 @@ class DefinitionVersion(BaseModel):
     prompt = models.TextField()
     record_types = models.JSONField()
     output = models.JSONField()
-    chunking = models.JSONField(default=auto_chunking)
+    # Both defaults: the database one lets code that does not know the column (the
+    # previous release, during a rolling deploy) still insert a row.
+    chunking = models.JSONField(
+        default=auto_chunking,
+        db_default=Value(auto_chunking(), output_field=models.JSONField()),
+    )
     note = models.CharField(max_length=200, blank=True, default="")
 
     class Meta:

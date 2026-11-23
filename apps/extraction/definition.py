@@ -19,6 +19,7 @@ from pydantic import (
     AfterValidator,
     BaseModel,
     ConfigDict,
+    StrictInt,
     field_validator,
     model_validator,
 )
@@ -105,17 +106,23 @@ class Output(BaseModel):
     template: Text
 
 
+def chunk_size_range() -> tuple[int, int]:
+    """The smallest and largest allowed chunk size under today's setting."""
+    largest = int(settings.EXTRACTION_CHUNK_CHARS)
+    return min(CHUNK_MIN_SIZE, largest), largest
+
+
 class Chunking(BaseModel):
     """How a long document is cut into parts: a strategy and a part size in characters.
 
     ``auto`` is the built-in behaviour and has no size: whatever was sent is dropped and
-    ``size`` is None. The other strategies take a size from 1000 up to
-    ``settings.EXTRACTION_CHUNK_CHARS``; a missing size is 4000 (or the largest allowed
-    size when that is smaller).
+    ``size`` is None. The other strategies take a whole-number size from
+    ``min(1000, EXTRACTION_CHUNK_CHARS)`` up to ``settings.EXTRACTION_CHUNK_CHARS``; a
+    missing size is 4000 (or the largest allowed size when that is smaller).
     """
 
     strategy: ChunkStrategy = "auto"
-    size: int | None = None
+    size: StrictInt | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -128,31 +135,38 @@ class Chunking(BaseModel):
     def _size_in_range(self) -> Self:
         if self.strategy == "auto":
             return self
-        largest = int(settings.EXTRACTION_CHUNK_CHARS)
+        smallest, largest = chunk_size_range()
         if self.size is None:
             self.size = min(CHUNK_DEFAULT_SIZE, largest)
-        elif not CHUNK_MIN_SIZE <= self.size <= largest:
+        elif not smallest <= self.size <= largest:
             raise ValueError(
-                f"The chunk size must be between {CHUNK_MIN_SIZE} and {largest} characters."
+                f"The chunk size must be between {smallest} and {largest} characters."
             )
         return self
 
 
 def stored_chunking(value: Any) -> Chunking:
-    """The chunking of a saved version: ``auto`` when it has none.
+    """The chunking of a saved version: ``auto`` when it has none or it is unusable.
 
-    A saved size outside today's range (the setting was lowered since) is moved into
-    it, so an old version stays readable.
+    A saved size outside today's range (the setting was changed since) is moved into
+    it, so an old version stays readable. This never raises.
     """
     data = value if isinstance(value, dict) else {}
     strategy = data.get("strategy")
-    if strategy not in CHUNK_STRATEGIES or strategy == "auto":
+    if not isinstance(strategy, str) or strategy not in CHUNK_STRATEGIES:
+        return Chunking()
+    if strategy == "auto":
         return Chunking()
     size = data.get("size")
-    largest = int(settings.EXTRACTION_CHUNK_CHARS)
     if not isinstance(size, int) or isinstance(size, bool):
-        return Chunking(strategy=strategy, size=None)
-    return Chunking(strategy=strategy, size=min(largest, max(CHUNK_MIN_SIZE, size)))
+        size = None
+    else:
+        smallest, largest = chunk_size_range()
+        size = min(largest, max(smallest, size))
+    try:
+        return Chunking(strategy=strategy, size=size)  # type: ignore[arg-type]
+    except pydantic.ValidationError:
+        return Chunking()
 
 
 class Draft(BaseModel):

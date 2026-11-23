@@ -1670,7 +1670,7 @@ components:
       - items
     Draft:
       type: object
-      description: A definition without ``version`` and ``base_version``.
+      description: 'A definition in an answer: ``chunking`` is always there.'
       properties:
         prompt:
           type: string
@@ -1683,6 +1683,7 @@ components:
         chunking:
           $ref: '#/components/schemas/Chunking'
       required:
+      - chunking
       - output
       - prompt
       - record_types
@@ -2230,7 +2231,10 @@ components:
         output:
           $ref: '#/components/schemas/OutputRequest'
         chunking:
-          $ref: '#/components/schemas/ChunkingRequest'
+          allOf:
+          - $ref: '#/components/schemas/ChunkingRequest'
+          description: 'Left out: the new version keeps the chunking of the latest
+            version.'
         base_version:
           type: integer
           minimum: 1

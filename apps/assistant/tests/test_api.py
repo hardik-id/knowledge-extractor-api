@@ -456,3 +456,20 @@ def test_delete_on_someone_elses_run_is_404(client: Any) -> None:
     response = client.delete(url(other))
     assert response.status_code == 404
     assert Message.objects.filter(run=other).count() == 1
+
+
+def test_an_old_stored_proposal_without_chunking_is_still_served(
+    client: Any, run: Any
+) -> None:
+    """A proposal saved before configurations had a chunking has no such key."""
+    old = {
+        "definition": {k: v for k, v in adr().items() if k != "chunking"},
+        "reasons": [{"path": "ADR", "reason": "Looks for decision records."}],
+    }
+    MessageFactory(run=run, role=Role.ASSISTANT, text="Here.", proposal=old)
+    [message] = client.get(url(run)).json()["messages"]
+    assert message["proposal"]["definition"]["record_types"][0]["name"] == "ADR"
+    assert message["proposal"]["definition"]["chunking"] == {
+        "strategy": "auto",
+        "size": None,
+    }

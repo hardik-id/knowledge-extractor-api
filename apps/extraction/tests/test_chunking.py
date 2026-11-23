@@ -1,8 +1,10 @@
 """The chunking of a configuration: saved per version, read back, kept by every copy."""
 
+import uuid
 from typing import Any
 
 import pytest
+from django.db import connection
 
 from apps.extraction import selectors, template_registry
 from apps.extraction.definition import Draft, stored_chunking
@@ -69,13 +71,78 @@ def test_a_missing_size_is_4000(client: Any, run: Any, strategy: str) -> None:
         assert saved.json()["chunking"] == {"strategy": strategy, "size": 4000}
 
 
-def test_a_request_without_chunking_means_auto(client: Any, run: Any) -> None:
-    put(client, run, chunking={"strategy": "fixed", "size": 3000})
+def test_a_save_without_the_key_keeps_the_latest_chunking(
+    client: Any, run: Any
+) -> None:
+    saved = put(client, run, chunking={"strategy": "paragraph", "size": 3000})
+    assert saved.json()["chunking"] == {"strategy": "paragraph", "size": 3000}
     older_client = put(
         client, run, chunking=None
     )  # a client that does not know the key
     assert older_client.status_code == 200
-    assert older_client.json()["chunking"] == AUTO
+    assert older_client.json()["version"] == 3
+    assert older_client.json()["chunking"] == {"strategy": "paragraph", "size": 3000}
+    assert client.get(url(run)).json()["chunking"] == {
+        "strategy": "paragraph",
+        "size": 3000,
+    }
+
+
+def test_a_save_without_the_key_on_a_new_definition_is_auto(
+    client: Any, run: Any
+) -> None:
+    assert put(client, run, chunking=None).json()["chunking"] == AUTO
+
+
+def test_an_explicit_auto_sets_auto(client: Any, run: Any) -> None:
+    put(client, run, chunking={"strategy": "paragraph", "size": 3000})
+    saved = put(client, run, chunking={"strategy": "auto"})
+    assert saved.json()["chunking"] == AUTO
+
+
+def test_chunking_null_is_422(client: Any, run: Any) -> None:
+    current = client.get(url(run)).json()
+    body = {k: current[k] for k in ("prompt", "record_types", "output")}
+    response = client.put(
+        url(run), {"base_version": 1, **body, "chunking": None}, format="json"
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_definition"
+
+
+@pytest.mark.parametrize("size", [True, False, 2500.0, "2500", 2500.5, 10**30])
+def test_a_size_that_is_not_a_whole_number_in_range_is_422(
+    client: Any, run: Any, size: Any
+) -> None:
+    response = put(client, run, chunking={"strategy": "fixed", "size": size})
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_definition"
+
+
+def test_a_huge_size_names_the_range(client: Any, run: Any) -> None:
+    response = put(client, run, chunking={"strategy": "fixed", "size": 10**30})
+    [problem] = response.json()["details"]["errors"]
+    assert "between 1000 and 8000" in problem["message"]
+
+
+def test_a_row_inserted_without_the_column_reads_as_auto(client: Any, run: Any) -> None:
+    """Code that does not know the column (the previous release) can still insert."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_default FROM information_schema.columns "
+            "WHERE table_name = %s AND column_name = 'chunking'",
+            [DefinitionVersion._meta.db_table],
+        )
+        [(column_default,)] = cursor.fetchall()
+        assert column_default
+        cursor.execute(
+            "INSERT INTO extraction_definitionversion "
+            "(id, created_at, updated_at, run_id, version, prompt, record_types, output, note) "
+            "VALUES (%s, now(), now(), %s, 1, 'p', '[]', %s, '')",
+            [uuid.uuid4(), run.pk, '{"format": "json", "template": ""}'],
+        )
+    assert client.get(url(run)).json()["chunking"] == AUTO
+    assert client.get(url(run, "/versions/1")).json()["chunking"] == AUTO
 
 
 def test_an_empty_chunking_object_means_auto(client: Any, run: Any) -> None:
@@ -228,3 +295,59 @@ def test_preview_hands_the_drafts_chunking_to_the_extractor(
     )
     selectors.preview_records(user, run.pk, "text", draft)
     assert seen[0].chunking.model_dump() == {"strategy": "fixed", "size": 1500}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        [],
+        "fixed",
+        5,
+        {"strategy": ["x"]},
+        {"strategy": "fixed", "size": [1]},
+        {"strategy": "fixed", "size": 10**30},
+        {"strategy": "fixed", "size": True},
+    ],
+)
+def test_stored_chunking_never_raises(value: Any, settings: Any) -> None:
+    for chars in (8000, 500, 5):
+        settings.EXTRACTION_CHUNK_CHARS = chars
+        chunking = stored_chunking(value)
+        assert chunking.strategy in ("auto", "fixed")
+
+
+def test_the_range_with_the_setting_at_500(
+    client: Any, run: Any, settings: Any
+) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = 500
+    assert stored_chunking({"strategy": "fixed", "size": 3000}).size == 500
+    assert stored_chunking({"strategy": "fixed", "size": 10}).size == 500
+    assert stored_chunking({"strategy": "fixed"}).size == 500
+    ok = put(client, run, chunking={"strategy": "fixed", "size": 500})
+    assert ok.status_code == 200
+    assert put(client, run, chunking={"strategy": "fixed"}).json()["chunking"] == {
+        "strategy": "fixed",
+        "size": 500,
+    }
+    refused = put(client, run, chunking={"strategy": "fixed", "size": 501})
+    assert "between 500 and 500" in str(refused.json())
+    assert client.get(url(run)).status_code == 200
+
+
+def test_the_range_with_the_setting_at_5(client: Any, run: Any, settings: Any) -> None:
+    settings.EXTRACTION_CHUNK_CHARS = 5
+    assert (
+        put(client, run, chunking={"strategy": "heading", "size": 5}).status_code == 200
+    )
+    assert (
+        put(client, run, chunking={"strategy": "heading", "size": 6}).status_code == 422
+    )
+    assert (
+        put(client, run, chunking={"strategy": "heading", "size": 4}).status_code == 422
+    )
+    assert stored_chunking({"strategy": "fixed", "size": 3000}).size == 5
+    version = client.get(url(run, "/versions/2")).json()
+    assert version["chunking"] == {"strategy": "heading", "size": 5}
+    found = DefinitionVersion.objects.get(run=run, version=2)
+    assert Definition.from_version(found).chunking.size == 5

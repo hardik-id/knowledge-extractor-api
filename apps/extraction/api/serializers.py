@@ -14,7 +14,11 @@ from apps.extraction.models import (
     Origin,
     Review,
 )
-from apps.extraction.validation import ChunkingSerializer, DraftSerializer
+from apps.extraction.validation import (
+    ChunkingSerializer,
+    DraftAnswerSerializer,
+    DraftSerializer,
+)
 
 
 class DefinitionSerializer(serializers.ModelSerializer[DefinitionVersion]):
@@ -66,6 +70,10 @@ def summarize_version(version: DefinitionVersion) -> dict[str, Any]:
 class SaveDefinitionSerializer(DraftSerializer):
     """The body of a save: the draft plus the version it was edited from."""
 
+    chunking = ChunkingSerializer(
+        required=False,
+        help_text="Left out: the new version keeps the chunking of the latest version.",
+    )
     base_version = serializers.IntegerField(min_value=1)
     note = serializers.CharField(required=False, allow_blank=True, max_length=200)
 
@@ -272,7 +280,7 @@ class TemplateSerializer(serializers.Serializer):  # type: ignore[type-arg]
     id = serializers.CharField()
     name = serializers.CharField()
     description = serializers.CharField()
-    definition = DraftSerializer()
+    definition = DraftAnswerSerializer()
 
 
 class TemplateListSerializer(serializers.Serializer):  # type: ignore[type-arg]

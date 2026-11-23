@@ -3,6 +3,7 @@
 from typing import Any
 
 import anthropic
+import httpx2
 import pytest
 import structlog
 from agents import OpenAIChatCompletionsModel, OpenAIResponsesModel
@@ -216,3 +217,118 @@ def test_production_refuses_the_anthropic_provider() -> None:
     assert "LLM_PROVIDER=anthropic is for local testing" in result.stderr
     assert "LLM_PROVIDER=azure" in result.stderr
     assert import_production(LLM_PROVIDER="azure").returncode == 0
+
+
+# --- the output limit and the failure log ---------------------------------------
+
+
+async def sent_request(settings: Any, provider: str) -> dict[str, Any]:
+    """The arguments of the call the model makes, with the client's call replaced."""
+    from agents import ModelSettings, ModelTracing
+    from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+
+    from apps.core.llm import output_limit
+
+    configure(
+        settings,
+        LLM_PROVIDER=provider,
+        LLM_MODEL="m",
+        OPENAI_API_KEY="k",
+        AZURE_OPENAI_ENDPOINT="https://x.openai.azure.com/",
+        ANTHROPIC_API_KEY="k",
+    )
+    model, client = connect()
+    sent: dict[str, Any] = {}
+
+    async def create(**kwargs: Any) -> Any:
+        sent.update(kwargs)
+        raise RuntimeError("stop")
+
+    client.chat.completions.create = create  # type: ignore[method-assign]
+    client.responses.create = create  # type: ignore[method-assign]
+    assert provider == "openai" or isinstance(model, OpenAIChatCompletionsModel)
+    with pytest.raises(RuntimeError, match="stop"):
+        await model.get_response(
+            "x",
+            [{"role": "user", "content": "hi"}],
+            ModelSettings(store=False, **output_limit(77)),
+            [],
+            None,
+            [],
+            ModelTracing.DISABLED,
+            previous_response_id=None,
+            conversation_id=None,
+            prompt=None,
+        )
+    await client.close()
+    return sent
+
+
+@pytest.mark.asyncio
+async def test_azure_sends_max_completion_tokens_and_no_max_tokens(
+    settings: Any,
+) -> None:
+    sent = await sent_request(settings, "azure")
+    assert sent["max_completion_tokens"] == 77
+    assert "max_tokens" not in sent or not isinstance(sent["max_tokens"], int)
+
+
+@pytest.mark.asyncio
+async def test_anthropic_still_sends_max_tokens(settings: Any) -> None:
+    sent = await sent_request(settings, "anthropic")
+    assert sent["max_tokens"] == 77
+    assert "max_completion_tokens" not in sent
+
+
+@pytest.mark.asyncio
+async def test_openai_still_maps_the_limit_to_max_output_tokens(
+    settings: Any,
+) -> None:
+    sent = await sent_request(settings, "openai")
+    assert sent["max_output_tokens"] == 77
+
+
+def test_the_output_limit_per_provider(settings: Any) -> None:
+    from apps.core.llm import output_limit
+
+    for provider in ("openai", "anthropic"):
+        settings.LLM_PROVIDER = provider
+        assert output_limit(5) == {"max_tokens": 5}
+    settings.LLM_PROVIDER = "azure"
+    assert output_limit(5) == {"extra_args": {"max_completion_tokens": 5}}
+
+
+def test_a_failure_is_described_by_identifiers_never_by_message() -> None:
+    from openai import BadRequestError
+
+    from apps.core.llm import describe_failure
+
+    request = httpx2.Request("POST", "https://x.invalid/")
+    response = httpx2.Response(400, request=request)
+    error = BadRequestError(
+        "Unsupported parameter: 'max_tokens' SECRET-DOCUMENT-TEXT",
+        response=response,
+        body={"message": "SECRET-BODY", "code": "x"},
+    )
+    error.code = "unsupported_parameter"
+    error.param = "max_tokens"
+    described = describe_failure(error)
+    assert described == {
+        "error": "BadRequestError",
+        "status_code": 400,
+        "error_code": "unsupported_parameter",
+        "error_param": "max_tokens",
+    }
+    assert "SECRET" not in str(described)
+
+
+def test_the_identifiers_are_cut_and_a_plain_error_has_only_its_class() -> None:
+    from apps.core.llm import describe_failure
+
+    assert describe_failure(TimeoutError()) == {
+        "error": "TimeoutError",
+        "status_code": None,
+    }
+    error = RuntimeError("m")
+    error.code = "c" * 500  # type: ignore[attr-defined]
+    assert len(describe_failure(error)["error_code"]) == 80

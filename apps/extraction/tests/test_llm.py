@@ -816,3 +816,28 @@ def test_the_limits_check_warns_on_a_file_timeout_the_cell_outlasts(
     assert [m.id for m in check_extraction_limits()] == ["extraction.W002"]
     settings.EXTRACTOR = "scripted"
     assert check_extraction_limits() == []
+
+
+def test_a_refused_parameter_is_logged_by_code_and_param_without_the_message(
+    client: Any, file: Any, model: ScriptedModel
+) -> None:
+    from openai import BadRequestError
+    from structlog.testing import capture_logs
+
+    request = httpx2.Request("POST", "https://example.invalid/")
+    error = BadRequestError(
+        "Unsupported parameter: 'max_tokens' DOCUMENT-QUOTE",
+        response=httpx2.Response(400, request=request),
+        body=None,
+    )
+    error.code = "unsupported_parameter"
+    error.param = "max_tokens"
+    model.enqueue(ModelStep.raise_error(error))
+    with capture_logs() as logs:
+        failed_with(job(client, file), "The language model could not be reached.")
+    (event,) = [log for log in logs if log["event"] == "extraction_model_failed"]
+    assert event["error"] == "BadRequestError"
+    assert event["status_code"] == 400
+    assert event["error_code"] == "unsupported_parameter"
+    assert event["error_param"] == "max_tokens"
+    assert "DOCUMENT-QUOTE" not in str(logs)

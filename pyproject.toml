@@ -25,6 +25,7 @@ dependencies = [
     "psycopg[binary]>=3.3.9",
     "pydantic>=2.14.3",
     "pyjwt[crypto]>=2.15.1",
+    "semantic-text-splitter>=0.33.6,<0.34",
     "uvicorn[standard]>=0.54.0",
     "whitenoise>=6.12.0",
 ]

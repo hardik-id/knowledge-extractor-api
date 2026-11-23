@@ -1,6 +1,13 @@
+from typing import Any
+
 from django.db import models
 
 from apps.core.models import BaseModel
+
+
+def auto_chunking() -> dict[str, Any]:
+    """The chunking of a version that never had one (and of the rows before it existed)."""
+    return {"strategy": "auto", "size": None}
 
 
 class DefinitionVersion(BaseModel):
@@ -13,6 +20,7 @@ class DefinitionVersion(BaseModel):
     prompt = models.TextField()
     record_types = models.JSONField()
     output = models.JSONField()
+    chunking = models.JSONField(default=auto_chunking)
     note = models.CharField(max_length=200, blank=True, default="")
 
     class Meta:

@@ -52,6 +52,7 @@ def get_definition(user: User, run_id: Any) -> DefinitionVersion:
                 prompt=start["prompt"],
                 record_types=start["record_types"],
                 output=start["output"],
+                chunking=start["chunking"],
             )
     except IntegrityError:  # a concurrent first read made it
         current = latest_version(run.pk)
@@ -127,7 +128,7 @@ def preview_records(
     a version. Someone else's run is a 404.
     """
     run = runs.get_run(user, run_id)
-    definition = Definition(0, draft.prompt, draft.record_types)
+    definition = Definition(0, draft.prompt, draft.record_types, draft.chunking)
     raw = get_preview_extractor().extract(text, definition, example_records(run.pk))
     return merge_extracted_records([], stored_records(text, raw))
 

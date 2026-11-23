@@ -38,7 +38,7 @@ def build_input(
         documents = "This run has no documents to read."
     context = (
         "The definition on my screen:\n"
-        f"```json\n{json.dumps(definition.model_dump(), ensure_ascii=False, indent=2)}\n```\n\n"
+        f"```json\n{json.dumps(definition.model_dump(exclude={'chunking'}), ensure_ascii=False, indent=2)}\n```\n\n"
         f"{documents}\n\n"
         f"My request:\n{text}"
     )

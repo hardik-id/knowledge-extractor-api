@@ -53,7 +53,9 @@ async def _propose(state: ReplyContext, arguments: str) -> str:
             f"{_schema_errors(err)}. Correct them and call propose_definition again."
         )
     try:
-        definition = parse_draft(given["definition"])
+        definition = parse_draft(
+            {**given["definition"], "chunking": state.chunking.model_dump()}
+        )
     except ApiError as err:
         state.rejected += 1
         return error(

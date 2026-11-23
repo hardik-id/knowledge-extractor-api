@@ -93,6 +93,7 @@ def start_definition(run: Any, template_id: str | None = None) -> DefinitionVers
         prompt=start["prompt"],
         record_types=start["record_types"],
         output=start["output"],
+        chunking=start["chunking"],
         note=f"From template: {template.name}",
     )
 
@@ -111,6 +112,7 @@ def restore_definition(user: User, run_id: Any, version: int) -> DefinitionVersi
                     prompt=source.prompt,
                     record_types=source.record_types,
                     output=source.output,
+                    chunking=source.chunking,
                     note=f"Restored from version {source.version}",
                 )
         except IntegrityError:

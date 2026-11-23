@@ -1,8 +1,10 @@
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.extraction import selectors
+from apps.extraction.definition import stored_chunking
 from apps.extraction.extractors.base import Definition
 from apps.extraction.models import (
     DefinitionVersion,
@@ -12,12 +14,18 @@ from apps.extraction.models import (
     Origin,
     Review,
 )
-from apps.extraction.validation import DraftSerializer
+from apps.extraction.validation import ChunkingSerializer, DraftSerializer
 
 
 class DefinitionSerializer(serializers.ModelSerializer[DefinitionVersion]):
     record_types = serializers.JSONField()
     output = serializers.JSONField()
+    chunking = serializers.SerializerMethodField()
+
+    @extend_schema_field(ChunkingSerializer)
+    def get_chunking(self, version: DefinitionVersion) -> dict[str, Any]:
+        """Always ``{strategy, size}``: a version that never had one is ``auto``."""
+        return stored_chunking(version.chunking).model_dump()
 
     class Meta:
         model = DefinitionVersion
@@ -26,6 +34,7 @@ class DefinitionSerializer(serializers.ModelSerializer[DefinitionVersion]):
             "prompt",
             "record_types",
             "output",
+            "chunking",
             "note",
             "created_at",
         ]

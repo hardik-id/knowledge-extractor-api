@@ -81,6 +81,7 @@ def test_the_default_is_the_adr_as_it_always_was() -> None:
         (Path(__file__).parent / "old_default.json").read_text("utf-8")
     )
     now = template_registry.default_template().definition.model_dump()
+    assert now.pop("chunking") == {"strategy": "auto", "size": None}
     assert now == old
     assert now["output"]["template"].endswith("{{decision}}\n")
 
@@ -103,7 +104,12 @@ class TestListEndpoint:
         ]
         skill = body["items"][1]
         assert set(skill) == {"id", "name", "description", "definition"}
-        assert set(skill["definition"]) == {"prompt", "record_types", "output"}
+        assert set(skill["definition"]) == {
+            "prompt",
+            "record_types",
+            "output",
+            "chunking",
+        }
         assert skill["definition"]["output"]["format"] == "markdown"
 
     def test_needs_a_signed_in_person(self, api_client: Any) -> None:

@@ -7,16 +7,21 @@ from pydantic import ValidationError
 
 from apps.assistant.agents.openai_sdk.tools._definition_schema import DefinitionArgs
 from apps.assistant.proposal import Proposal, Reason
-from apps.assistant.tests.test_scripted import adr, validated
+from apps.assistant.tests.test_scripted import adr, as_model_writes, validated
 from apps.extraction.definition import Draft
 
 
 def test_a_definition_fits_and_unknown_keys_are_refused() -> None:
-    assert DefinitionArgs.model_validate(validated(adr())).model_dump() == validated(
-        adr()
-    )
+    assert DefinitionArgs.model_validate(
+        as_model_writes(adr())
+    ).model_dump() == as_model_writes(adr())
     with pytest.raises(ValidationError):
-        DefinitionArgs.model_validate({**validated(adr()), "extra": 1})
+        DefinitionArgs.model_validate({**as_model_writes(adr()), "extra": 1})
+
+
+def test_the_model_does_not_write_the_chunking() -> None:
+    with pytest.raises(ValidationError):
+        DefinitionArgs.model_validate(validated(adr()))
 
 
 def _shapes(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
@@ -36,6 +41,7 @@ def test_the_strict_schema_names_every_property_of_the_core_models() -> None:
     strict = DefinitionArgs.model_json_schema()
     ours = _shapes(strict, strict.get("$defs", {}))
     theirs = _shapes(core, core.get("$defs", {}))
+    theirs.pop("chunking")  # the person's setting, not written by the model
 
     def check(a: dict[str, Any], b: dict[str, Any]) -> None:
         names = sorted(k for k in b if k != "__required__")

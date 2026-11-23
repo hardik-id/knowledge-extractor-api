@@ -91,7 +91,9 @@ class OpenAIAgent:
             model, client = connect()
         try:
             refs = await workspace.documents()
-            state = ReplyContext(workspace=workspace, refs=refs)
+            state = ReplyContext(
+                workspace=workspace, refs=refs, chunking=definition.chunking
+            )
             async for event in self._run(model, state, text, definition, history):
                 yield event
         finally:

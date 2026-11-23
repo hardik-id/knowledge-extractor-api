@@ -1524,6 +1524,28 @@ components:
       - record_type_id
       - revision
       - span
+    Chunking:
+      type: object
+      description: How a long document is cut into parts. ``size`` is null for ``auto``.
+      properties:
+        strategy:
+          allOf:
+          - $ref: '#/components/schemas/StrategyEnum'
+          default: auto
+        size:
+          type: integer
+          nullable: true
+    ChunkingRequest:
+      type: object
+      description: How a long document is cut into parts. ``size`` is null for ``auto``.
+      properties:
+        strategy:
+          allOf:
+          - $ref: '#/components/schemas/StrategyEnum'
+          default: auto
+        size:
+          type: integer
+          nullable: true
     CreateProjectRequest:
       type: object
       properties:
@@ -1558,6 +1580,10 @@ components:
           type: string
         record_types: {}
         output: {}
+        chunking:
+          allOf:
+          - $ref: '#/components/schemas/Chunking'
+          readOnly: true
         note:
           type: string
           maxLength: 200
@@ -1566,6 +1592,7 @@ components:
           format: date-time
           readOnly: true
       required:
+      - chunking
       - created_at
       - output
       - prompt
@@ -1653,6 +1680,8 @@ components:
             $ref: '#/components/schemas/RecordType'
         output:
           $ref: '#/components/schemas/Output'
+        chunking:
+          $ref: '#/components/schemas/Chunking'
       required:
       - output
       - prompt
@@ -1669,6 +1698,8 @@ components:
             $ref: '#/components/schemas/RecordTypeRequest'
         output:
           $ref: '#/components/schemas/OutputRequest'
+        chunking:
+          $ref: '#/components/schemas/ChunkingRequest'
       required:
       - output
       - prompt
@@ -2198,6 +2229,8 @@ components:
             $ref: '#/components/schemas/RecordTypeRequest'
         output:
           $ref: '#/components/schemas/OutputRequest'
+        chunking:
+          $ref: '#/components/schemas/ChunkingRequest'
         base_version:
           type: integer
           minimum: 1
@@ -2277,6 +2310,18 @@ components:
       description: |-
         * `streaming` - Streaming
         * `done` - Done
+    StrategyEnum:
+      enum:
+      - auto
+      - heading
+      - paragraph
+      - fixed
+      type: string
+      description: |-
+        * `auto` - auto
+        * `heading` - heading
+        * `paragraph` - paragraph
+        * `fixed` - fixed
     Template:
       type: object
       properties:

@@ -32,7 +32,7 @@ An unknown value for either setting stops the app at start with a message naming
 
 ## The samples
 
-`samples` is the built-in pair. The files are in `apps/documents/samples/`, with a `manifest.json` (id, name, display location, modified time). The text is the UI mock's enriched Markdown (YAML front matter, then the body); two documents hold ADRs that the default extraction definition finds. The id is the path of the file under `samples/`, shaped like a container path (`enriched/engineering/architecture/platform-adrs.md`), and doubles as the storage location. The ETag is a hash of the content.
+`samples` is the built-in pair. The files are in `apps/documents/samples/`, with a `manifest.json` (id, name, display location, modified time). The text is the UI mock's enriched Markdown (YAML front matter, then the body); three documents hold ADRs that the default extraction definition finds (one is long, for the chunking strategies). The id is the path of the file under `samples/`, shaped like a container path (`enriched/engineering/architecture/platform-adrs.md`), and doubles as the storage location. The ETag is a hash of the content.
 
 ## Plugging in Azure (not built yet)
 

@@ -30,7 +30,7 @@ from openai import APIError
 from apps.core.llm import connect, describe_failure, missing_settings, output_limit
 from apps.extraction import telemetry
 from apps.extraction.extractors.base import Definition, ExtractionError, RawRecord
-from apps.extraction.extractors.chunks import split
+from apps.extraction.extractors.chunks import split_by
 from apps.extraction.extractors.llm_output import (
     MAX_RECORDS,
     ModelOutput,
@@ -47,7 +47,16 @@ NOT_CONFIGURED = "No language model is configured for extraction."
 UNREACHABLE = "The language model could not be reached."
 UNUSABLE = "The language model's answer could not be used."
 TOO_LONG = "This document is too long to extract."
+TOO_LONG_FOR_SIZE = (
+    "This document is too long to extract with this chunk size. "
+    "A larger chunk size, or the Automatic strategy, allows a longer document."
+)
+UNREADABLE = "This document contains characters that cannot be read."
 TOO_LARGE = "This definition is too large to extract with."
+
+
+def _too_long(definition: Definition) -> str:
+    return TOO_LONG if definition.chunking.strategy == "auto" else TOO_LONG_FOR_SIZE
 
 
 class LlmExtractor:
@@ -74,10 +83,9 @@ class LlmExtractor:
         if missing:
             log.warning("extraction_not_configured", missing=missing)
             raise ExtractionError(NOT_CONFIGURED)
-        parts = split(text, settings.EXTRACTION_CHUNK_CHARS)
-        limit = self._max_chunks or settings.EXTRACTION_MAX_CHUNKS
-        if len(parts) > limit:
-            raise ExtractionError(TOO_LONG)
+        parts = self._parts(text, definition)
+        if len(parts) > self._limit():
+            raise ExtractionError(_too_long(definition))
         messages = [
             build_input(text[start:end], definition, examples) for start, end in parts
         ]
@@ -109,6 +117,34 @@ class LlmExtractor:
             part = to_raw_records(text, definition, output, start, end)
             records.extend(part[: MAX_RECORDS - len(records)])
         return records
+
+    def _limit(self) -> int:
+        return self._max_chunks or settings.EXTRACTION_MAX_CHUNKS
+
+    def _parts(self, text: str, definition: Definition) -> list[tuple[int, int]]:
+        """The ``(start, end)`` parts of ``text`` for the definition's chunking.
+
+        ``auto`` uses ``EXTRACTION_CHUNK_CHARS``; another strategy uses its size, at
+        most ``EXTRACTION_CHUNK_CHARS``. A part is never longer than the size, so a
+        text longer than ``limit * size`` cannot fit in ``limit`` parts: it fails
+        before the splitter runs (the library strategies are quadratic on a long run
+        without whitespace). ``auto`` parts may be shorter than the size, so a shorter
+        text can still fail after the split.
+        """
+        chunking = definition.chunking
+        largest = settings.EXTRACTION_CHUNK_CHARS
+        size = (
+            largest
+            if chunking.strategy == "auto" or chunking.size is None
+            else min(chunking.size, largest)
+        )
+        if len(text) > self._limit() * size:
+            raise ExtractionError(_too_long(definition))
+        try:
+            return split_by(text, chunking.strategy, size)
+        except UnicodeEncodeError:
+            # A lone surrogate (a JSON body can carry one) cannot go to the splitter.
+            raise ExtractionError(UNREADABLE) from None
 
     @staticmethod
     def _failed(message: str, error: BaseException) -> ExtractionError:

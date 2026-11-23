@@ -4,7 +4,9 @@ import asyncio
 import io
 import json
 import re
+import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import httpx2
@@ -20,8 +22,10 @@ from openai.types.responses import ResponseOutputMessage, ResponseOutputRefusal
 
 from apps.assistant.selectors import workspace_of_run
 from apps.core.tests.otel import Telemetry
+from apps.documents.samples import SAMPLES_DIR
 from apps.extraction import services
 from apps.extraction.checks import check_llm_settings
+from apps.extraction.definition import Chunking
 from apps.extraction.extractors import extractor_kind, get_extractor
 from apps.extraction.extractors.base import (
     Definition,
@@ -29,7 +33,7 @@ from apps.extraction.extractors.base import (
     RawRecord,
     RawValue,
 )
-from apps.extraction.extractors.chunks import split
+from apps.extraction.extractors.chunks import split, split_by
 from apps.extraction.extractors.llm import LlmExtractor
 from apps.extraction.extractors.llm_prompt import INSTRUCTIONS, build_input
 from apps.extraction.models import Extraction, ExtractionRecord, FieldValue
@@ -841,3 +845,144 @@ def test_a_refused_parameter_is_logged_by_code_and_param_without_the_message(
     assert event["error_code"] == "unsupported_parameter"
     assert event["error_param"] == "max_tokens"
     assert "DOCUMENT-QUOTE" not in str(logs)
+
+
+# --- the chunking strategy of a configuration ---------------------------------
+
+LOG = "enriched/engineering/architecture/engineering-decision-log-2026.md"
+
+
+def log_text() -> str:
+    return (SAMPLES_DIR / LOG).read_text("utf-8")
+
+
+def chunked(strategy: str, size: int | None = None) -> Definition:
+    return replace(definition(), chunking=Chunking(strategy=strategy, size=size))  # type: ignore[arg-type]
+
+
+def calls_for(model: ScriptedModel, doc: str, defn: Definition) -> int:
+    for _ in range(12):
+        model.enqueue(answer())
+    before = len(model.calls)
+    assert LlmExtractor().extract(doc, defn) == []
+    return len(model.calls) - before
+
+
+@pytest.mark.parametrize(
+    ("strategy", "size", "calls"),
+    [
+        ("auto", None, 2),
+        ("heading", 4000, 6),
+        ("paragraph", 4000, 4),
+        ("fixed", 4000, 4),
+        ("heading", 8000, 3),
+        ("paragraph", 8000, 2),
+        ("fixed", 8000, 2),
+    ],
+)
+def test_the_long_sample_is_sent_in_the_parts_of_its_strategy(
+    model: ScriptedModel, strategy: str, size: int | None, calls: int
+) -> None:
+    doc = log_text()
+    assert len(doc) > 8000
+    assert calls_for(model, doc, chunked(strategy, size)) == calls
+
+
+def test_auto_cuts_as_before(model: ScriptedModel, settings: Any) -> None:
+    doc = log_text()
+    settings.EXTRACTION_CONCURRENCY = 1
+    assert calls_for(model, doc, definition()) == len(split(doc, 8000))
+
+
+def test_a_record_of_a_later_part_has_positions_in_the_whole_document(
+    model: ScriptedModel, settings: Any
+) -> None:
+    doc = log_text()
+    settings.EXTRACTION_CONCURRENCY = 1
+    title = "Cache product pages at the edge"
+    heading = f"## ADR-208: {title}"
+    parts = split_by(doc, "heading", 4000)
+    assert doc.index(heading) >= parts[1][0]
+    for start, end in parts:
+        if start <= doc.index(heading) < end:
+            model.enqueue(
+                answer(
+                    {
+                        "record_type_id": "rt-adr",
+                        "starts_with": heading,
+                        "values": [
+                            {"field_key": "title", "value": title, "quotes": [title]}
+                        ],
+                    }
+                )
+            )
+        else:
+            model.enqueue(answer())
+    (record,) = LlmExtractor().extract(doc, chunked("heading", 4000))
+    assert record.span is not None
+    assert record.span.start == doc.index(heading)
+    value = next(v for v in record.values if v.field_id == TITLE)
+    assert (value.spans[0].start, value.spans[0].quote) == (doc.index(title), title)
+    assert doc[value.spans[0].start : value.spans[0].end] == title
+
+
+def test_a_size_is_capped_by_the_chunk_setting_at_run_time(
+    model: ScriptedModel, settings: Any
+) -> None:
+    doc = log_text()
+    defn = chunked("fixed", 4000)  # valid when stored
+    settings.EXTRACTION_CHUNK_CHARS = 2000
+    assert calls_for(model, doc, defn) == len(split_by(doc, "fixed", 2000)) == 8
+
+
+def test_a_preview_splits_with_the_strategy_and_its_own_part_limit(
+    model: ScriptedModel, settings: Any
+) -> None:
+    doc = log_text()
+    with pytest.raises(ExtractionError, match="larger chunk size"):
+        LlmExtractor(2).extract(doc, chunked("heading", 4000))  # 6 parts
+    with pytest.raises(ExtractionError, match="larger chunk size"):
+        LlmExtractor(2).extract(doc, chunked("heading", 8000))  # 3 parts
+    assert model.calls == ()
+    model.enqueue(answer())
+    model.enqueue(answer())
+    assert LlmExtractor(2).extract(doc, chunked("paragraph", 8000)) == []
+    assert len(model.calls) == 2
+
+
+def test_a_hostile_document_is_refused_before_the_splitter_runs(
+    model: ScriptedModel, settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spy = []
+    monkeypatch.setattr(f"{LLM}.split_by", lambda *a: spy.append(a))
+    hostile = "#" * 1_000_000
+    for defn in (chunked("heading", 1000), chunked("paragraph", 4000)):
+        started = time.monotonic()
+        with pytest.raises(ExtractionError, match="larger chunk size"):
+            LlmExtractor().extract(hostile, defn)
+        assert time.monotonic() - started < 1
+    with pytest.raises(ExtractionError) as auto:
+        LlmExtractor().extract(hostile, definition())
+    assert str(auto.value) == "This document is too long to extract."
+    with pytest.raises(ExtractionError):
+        LlmExtractor(2).extract("x" * 2001, chunked("fixed", 1000))
+    assert spy == [] and model.calls == ()
+
+
+def test_the_guard_keeps_a_document_of_exactly_parts_times_size(
+    model: ScriptedModel, settings: Any
+) -> None:
+    doc = "word " * 2000  # 10000 characters: 10 parts of 1000, never more
+    for _ in range(10):
+        model.enqueue(answer())
+    assert LlmExtractor().extract(doc, chunked("fixed", 1000)) == []
+    assert len(model.calls) == 10
+
+
+@pytest.mark.parametrize("strategy", ["heading", "paragraph"])
+def test_a_lone_surrogate_is_an_extraction_error(
+    model: ScriptedModel, strategy: str
+) -> None:
+    with pytest.raises(ExtractionError, match="cannot be read"):
+        LlmExtractor().extract("# Title\n\nbad \ud800 text", chunked(strategy, 4000))
+    assert model.calls == ()

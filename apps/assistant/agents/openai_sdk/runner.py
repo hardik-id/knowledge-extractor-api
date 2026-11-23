@@ -33,7 +33,7 @@ from apps.assistant.agents.base import (
 from apps.assistant.agents.openai_sdk.agent import build_agent
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 from apps.assistant.agents.openai_sdk.inputs import build_input
-from apps.core.llm import connect, missing_settings
+from apps.core.llm import connect, describe_failure, missing_settings
 from apps.extraction.definition import Draft
 
 log = structlog.get_logger(__name__)
@@ -50,14 +50,6 @@ NOT_CONFIGURED = (
 )
 CUT_OFF = "I had to stop here because this reply took too long; please ask again, perhaps for less at once."
 MODEL_FAILED = "I could not reach the language model, so I could not finish this reply."
-
-
-def _failure(error: BaseException) -> dict[str, Any]:
-    """What is logged about a failure: its kind, never its message (it can quote the request)."""
-    return {
-        "error": type(error).__name__,
-        "status_code": getattr(error, "status_code", None),
-    }
 
 
 def _unannounced(state: ReplyContext) -> list[ToolUsed]:
@@ -154,16 +146,18 @@ class OpenAIAgent:
                     wrote = True
                     yield TextDelta(delta)
         except TimeoutError as error:
-            log.warning("assistant_reply_cut_off", reason="timeout", **_failure(error))
+            log.warning(
+                "assistant_reply_cut_off", reason="timeout", **describe_failure(error)
+            )
             ending = CUT_OFF
         except MaxTurnsExceeded as error:
             log.warning(
-                "assistant_reply_cut_off", reason="max_turns", **_failure(error)
+                "assistant_reply_cut_off", reason="max_turns", **describe_failure(error)
             )
             ending = CUT_OFF
         except (APIError, AgentsException, AzureError) as error:
             # The model, the SDK or the Azure sign-in failed.
-            log.warning("assistant_model_failed", **_failure(error))
+            log.warning("assistant_model_failed", **describe_failure(error))
             ending = MODEL_FAILED
         finally:
             result.cancel()

@@ -3,7 +3,7 @@
 import asyncio
 import functools
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx2
 import structlog
@@ -118,3 +118,40 @@ def connect() -> tuple[Model, AsyncOpenAI]:
         return OpenAIChatCompletionsModel(settings.LLM_MODEL, client), client
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     return OpenAIResponsesModel(settings.LLM_MODEL, client), client
+
+
+def output_limit(tokens: int) -> dict[str, Any]:
+    """The part of ``ModelSettings`` that limits the answer to ``tokens``, for the provider.
+
+    Azure's newer deployments refuse ``max_tokens`` on Chat Completions and want
+    ``max_completion_tokens``, which the SDK passes through ``extra_args``. The other
+    providers take ``max_tokens`` (the Responses API maps it to ``max_output_tokens``).
+    """
+    if settings.LLM_PROVIDER == "azure":
+        return {"extra_args": {"max_completion_tokens": tokens}}
+    return {"max_tokens": tokens}
+
+
+_MAX_FIELD = 80
+
+
+def _short(value: object) -> str | None:
+    """A provider's identifier (``unsupported_parameter``), cut short; never free text."""
+    if value is None:
+        return None
+    return str(value)[:_MAX_FIELD]
+
+
+def describe_failure(error: BaseException) -> dict[str, Any]:
+    """What is logged about a failed model call: the error's class, the HTTP status and
+    the provider's ``code``, ``param`` and ``type``. Never the message or the body: they
+    can quote the request, the document or a masked key."""
+    described: dict[str, Any] = {
+        "error": type(error).__name__,
+        "status_code": getattr(error, "status_code", None),
+    }
+    for name in ("code", "param", "type"):
+        value = _short(getattr(error, name, None))
+        if value is not None:
+            described[f"error_{name}"] = value
+    return described

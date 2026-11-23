@@ -27,7 +27,7 @@ from azure.core.exceptions import AzureError
 from django.conf import settings
 from openai import APIError
 
-from apps.core.llm import connect, missing_settings
+from apps.core.llm import connect, describe_failure, missing_settings, output_limit
 from apps.extraction import telemetry
 from apps.extraction.extractors.base import Definition, ExtractionError, RawRecord
 from apps.extraction.extractors.chunks import split
@@ -92,11 +92,16 @@ class LlmExtractor:
             answers = asyncio.run(self._ask_all(messages))
         except ExtractionError:
             raise
-        except TimeoutError, ModelTimeoutError, ModelBehaviorError, ModelRefusalError:
-            raise self._failed(UNUSABLE) from None
-        except APIError, AzureError, AgentsException, OSError:
+        except (
+            TimeoutError,
+            ModelTimeoutError,
+            ModelBehaviorError,
+            ModelRefusalError,
+        ) as error:
+            raise self._failed(UNUSABLE, error) from None
+        except (APIError, AzureError, AgentsException, OSError) as error:
             # The model, the SDK or a sign-in failed.
-            raise self._failed(UNREACHABLE) from None
+            raise self._failed(UNREACHABLE, error) from None
         records: list[RawRecord] = []
         for (start, end), output in zip(parts, answers, strict=True):
             if len(records) >= MAX_RECORDS:
@@ -106,9 +111,12 @@ class LlmExtractor:
         return records
 
     @staticmethod
-    def _failed(message: str) -> ExtractionError:
-        # The failure's kind is logged by the job (never its message: it can quote the request).
-        log.warning("extraction_model_failed", reason=message)
+    def _failed(message: str, error: BaseException) -> ExtractionError:
+        # The error's class, status and provider code, never its message: it can quote
+        # the request or the document.
+        log.warning(
+            "extraction_model_failed", reason=message, **describe_failure(error)
+        )
         return ExtractionError(message)
 
     async def _ask_all(self, messages: list[str]) -> list[ModelOutput]:
@@ -144,7 +152,7 @@ class LlmExtractor:
             instructions=INSTRUCTIONS,
             model=model,
             model_settings=ModelSettings(
-                store=False, max_tokens=settings.EXTRACTION_MAX_OUTPUT_TOKENS
+                store=False, **output_limit(settings.EXTRACTION_MAX_OUTPUT_TOKENS)
             ),
             output_type=ModelOutput,
         )

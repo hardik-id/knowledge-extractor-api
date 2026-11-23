@@ -25,10 +25,9 @@ Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.14 as pinned in 
 ```sh
 uv sync --locked
 uv run python manage.py check
-uv run python manage.py runserver
 ```
 
-The development server answers on http://127.0.0.1:8000/. Do not run `migrate` yet: the custom user model has to be in the first migration.
+`make up` starts the whole stack in Docker ([docs/manual-testing.md](docs/manual-testing.md)). To run the API on the host, see the next section.
 
 ### Without Docker for the API
 

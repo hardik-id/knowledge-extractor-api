@@ -20,6 +20,9 @@ services:
 
   redis:
     image: redis:8
+    # Protected mode off, set explicitly (the image's default too). No password and the port
+    # is published on every interface: dev only, nothing is kept.
+    command: ["redis-server", "--protected-mode", "no"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     healthcheck:

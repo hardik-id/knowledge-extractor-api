@@ -26,14 +26,18 @@ install-ant:
 	curl -fsSL "https://github.com/anthropics/anthropic-cli/releases/download/v$(ANT_VERSION)/ant_$(ANT_VERSION)_$${os}_$${arch}.tar.gz" | sudo tar -xz -C /usr/local/bin ant; \
 	echo "Installed ant $(ANT_VERSION). Next: ant auth login, then set LLM_PROVIDER=anthropic and LLM_MODEL=claude-haiku-5-5 in .env"
 
+# The API on the host, with WebSockets (runserver does not serve them). Usage: make run [PORT=8000]
+PORT ?= 8000
+
 run:
-	uv run python manage.py runserver
+	uv run uvicorn config.asgi:application --reload --no-access-log --host 127.0.0.1 --port $(PORT)
 
 migrate:
 	uv run python manage.py migrate
 
+# The database and Redis (live updates need Redis).
 db:
-	docker compose up -d --wait db
+	docker compose up -d --wait db redis
 
 # The background job worker (docs/jobs.md). Stop it with Ctrl+C.
 worker:
@@ -64,9 +68,16 @@ up:
 logs:
 	docker compose logs -f --tail=100 api worker otel-collector
 
-# A dev token from the running api, valid for eight hours.
+# A dev token, valid for eight hours. Minted in the api container when it runs, else on the host
+# (the key of `make run`). Only the token goes to stdout; the two keys differ.
 token:
-	@docker compose exec -T api python manage.py mint_dev_token --ttl 28800
+	@if command -v docker >/dev/null 2>&1 \
+		&& docker compose ps --status running --services 2>/dev/null | grep -qx api; then \
+		docker compose exec -T api python manage.py mint_dev_token --ttl 28800; \
+	else \
+		echo "make token: no api container running, minting on the host" >&2; \
+		uv run python manage.py mint_dev_token --ttl 28800; \
+	fi
 
 # The .env.local for the UI, with a fresh token. Usage: make ui-env > ../knowledge-extractor/.env.local
 ui-env:

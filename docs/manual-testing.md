@@ -26,6 +26,20 @@ make ui-env              # the .env.local for the UI, with a fresh token
 
 A dev token is signed by a key kept inside the `api` container. When the `api` container is recreated (for example by `make up` after a code change) the key is new and older tokens are refused: run `make token` or `make ui-env` again.
 
+## Without Docker for the API
+
+The API and the worker can also run on the host. Only the database and Redis stay in Docker.
+
+```sh
+make db                  # db and redis
+make migrate
+make run                 # the API with WebSockets on 127.0.0.1:8000 (make run PORT=8001 for another port)
+make worker              # in a second terminal: assistant replies and extraction need it
+make token               # a dev token
+```
+
+`make token` mints in the `api` container when it runs, and on the host otherwise. The two are signed by different keys: a token from the container is refused by `make run`, and the other way round. Run `make token` again after you switch. Do not run the `api` container and `make run` on the same port.
+
 ## The UI
 
 ```sh

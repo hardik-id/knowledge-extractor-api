@@ -98,7 +98,7 @@ Each built-in template (`GET /api/v1/templates`) has a sample document the scrip
 
 | Template | Sample document |
 | --- | --- |
-| `adr` | `enriched/engineering/architecture/architecture-decisions-2026.md` (also `platform-adrs.md`) |
+| `adr` | `enriched/engineering/architecture/architecture-decisions-2026.md` (also `platform-adrs.md`, and the long `engineering-decision-log-2026.md` for chunking) |
 | `skill` | `enriched/engineering/operations/operations-skills.md` (four skills with steps) |
 | `policy-rule` | `enriched/hr/policies/leave-rules-2027.md` (five rules) |
 | `blank` | none: it has no record types |

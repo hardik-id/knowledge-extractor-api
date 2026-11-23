@@ -38,7 +38,7 @@ class Definition:
     version: int
     prompt: str
     record_types: list[RecordType]
-    chunking: Chunking = field(default_factory=Chunking)  # not used by an extractor yet
+    chunking: Chunking = field(default_factory=Chunking)
 
     @classmethod
     def from_version(cls, version: Any) -> Definition:

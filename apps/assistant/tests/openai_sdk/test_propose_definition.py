@@ -121,3 +121,35 @@ def test_the_tool_schema_matches_the_definition_rules() -> None:
     output = schema["$defs"]["OutputArgs"]["properties"]
     assert set(output["format"]["enum"]) == set(validation.FORMATS)
     assert propose_definition.TOOL.strict_json_schema
+
+
+@pytest.mark.asyncio
+async def test_a_proposal_keeps_the_chunking_of_the_definition_it_was_made_from() -> (
+    None
+):
+    chunking = {"strategy": "fixed", "size": 2500}
+    model = ScriptedModel([[propose(proposal_args())], [assistant_message("Done.")]])
+    events = await collect(
+        OpenAIAgent(model), definition={**bare(), "chunking": chunking}
+    )
+    _, [proposal] = split(events)
+    assert proposal.definition.chunking.model_dump() == chunking
+
+
+@pytest.mark.asyncio
+async def test_a_chunking_the_model_writes_is_refused_or_overridden() -> None:
+    given = {"strategy": "fixed", "size": 2500}
+    wanted = {
+        **proposal_args(),
+        "definition": {**adr(), "chunking": {"strategy": "heading", "size": 1000}},
+    }
+    model = ScriptedModel(
+        [
+            [propose(wanted, "p1")],
+            [propose(proposal_args(), "p2")],
+            [assistant_message("Done.")],
+        ]
+    )
+    events = await collect(OpenAIAgent(model), definition={**bare(), "chunking": given})
+    _, proposals = split(events)
+    assert [p.definition.chunking.model_dump() for p in proposals] == [given]

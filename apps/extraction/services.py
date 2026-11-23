@@ -18,7 +18,7 @@ from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
 from apps.extraction import selectors, tasks, telemetry, template_registry
 from apps.extraction.api.serializers import serialize_extraction
-from apps.extraction.definition import Field
+from apps.extraction.definition import Field, stored_chunking
 from apps.extraction.extractors import extractor_kind, get_extractor
 from apps.extraction.extractors.base import Definition, ExtractionError
 from apps.extraction.extractors.records import StoredRecord, stored_records
@@ -50,6 +50,9 @@ def save_definition(
     succeed: the database refuses a second row for one version number.
     """
     current = selectors.get_definition(user, run_id)
+    if isinstance(data, dict) and "chunking" not in data:
+        # A client that does not know the key keeps what the latest version has.
+        data = {**data, "chunking": stored_chunking(current.chunking).model_dump()}
     draft = parse_draft(data)
     if len(note) > NOTE_MAX_LENGTH:
         raise ApiError(
@@ -93,6 +96,7 @@ def start_definition(run: Any, template_id: str | None = None) -> DefinitionVers
         prompt=start["prompt"],
         record_types=start["record_types"],
         output=start["output"],
+        chunking=start["chunking"],
         note=f"From template: {template.name}",
     )
 
@@ -111,6 +115,7 @@ def restore_definition(user: User, run_id: Any, version: int) -> DefinitionVersi
                     prompt=source.prompt,
                     record_types=source.record_types,
                     output=source.output,
+                    chunking=source.chunking,
                     note=f"Restored from version {source.version}",
                 )
         except IntegrityError:

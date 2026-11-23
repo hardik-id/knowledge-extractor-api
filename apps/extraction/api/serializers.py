@@ -1,8 +1,10 @@
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.extraction import selectors
+from apps.extraction.definition import stored_chunking
 from apps.extraction.extractors.base import Definition
 from apps.extraction.models import (
     DefinitionVersion,
@@ -12,12 +14,22 @@ from apps.extraction.models import (
     Origin,
     Review,
 )
-from apps.extraction.validation import DraftSerializer
+from apps.extraction.validation import (
+    ChunkingSerializer,
+    DraftAnswerSerializer,
+    DraftSerializer,
+)
 
 
 class DefinitionSerializer(serializers.ModelSerializer[DefinitionVersion]):
     record_types = serializers.JSONField()
     output = serializers.JSONField()
+    chunking = serializers.SerializerMethodField()
+
+    @extend_schema_field(ChunkingSerializer)
+    def get_chunking(self, version: DefinitionVersion) -> dict[str, Any]:
+        """Always ``{strategy, size}``: a version that never had one is ``auto``."""
+        return stored_chunking(version.chunking).model_dump()
 
     class Meta:
         model = DefinitionVersion
@@ -26,6 +38,7 @@ class DefinitionSerializer(serializers.ModelSerializer[DefinitionVersion]):
             "prompt",
             "record_types",
             "output",
+            "chunking",
             "note",
             "created_at",
         ]
@@ -57,6 +70,10 @@ def summarize_version(version: DefinitionVersion) -> dict[str, Any]:
 class SaveDefinitionSerializer(DraftSerializer):
     """The body of a save: the draft plus the version it was edited from."""
 
+    chunking = ChunkingSerializer(
+        required=False,
+        help_text="Left out: the new version keeps the chunking of the latest version.",
+    )
     base_version = serializers.IntegerField(min_value=1)
     note = serializers.CharField(required=False, allow_blank=True, max_length=200)
 
@@ -263,7 +280,7 @@ class TemplateSerializer(serializers.Serializer):  # type: ignore[type-arg]
     id = serializers.CharField()
     name = serializers.CharField()
     description = serializers.CharField()
-    definition = DraftSerializer()
+    definition = DraftAnswerSerializer()
 
 
 class TemplateListSerializer(serializers.Serializer):  # type: ignore[type-arg]

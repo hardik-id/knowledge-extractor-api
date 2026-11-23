@@ -27,7 +27,7 @@ from apps.assistant.tests.openai_sdk.helpers import (
     split,
     tool_outputs,
 )
-from apps.assistant.tests.test_scripted import adr, bare, validated
+from apps.assistant.tests.test_scripted import adr, as_model_writes, bare, validated
 
 DOCS = {
     "adr-1.md": "# Decisions\n\n## ADR-1: Use Postgres\n\n**Status:** accepted\n"
@@ -62,7 +62,7 @@ async def test_what_can_i_extract_on_an_empty_definition() -> None:
             [
                 function_call(
                     "preview_extraction",
-                    {"definition": validated(adr()), "document_id": "adr-1.md"},
+                    {"definition": as_model_writes(adr()), "document_id": "adr-1.md"},
                     call_id="c3",
                 )
             ],

@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from apps.extraction.definition import RecordType
+from apps.extraction.definition import Chunking, RecordType, stored_chunking
 from apps.extraction.spans import Span
 from apps.extraction.validation import parse_draft
 
@@ -38,6 +38,7 @@ class Definition:
     version: int
     prompt: str
     record_types: list[RecordType]
+    chunking: Chunking = field(default_factory=Chunking)  # not used by an extractor yet
 
     @classmethod
     def from_version(cls, version: Any) -> Definition:
@@ -47,9 +48,10 @@ class Definition:
                 "prompt": version.prompt,
                 "record_types": version.record_types,
                 "output": version.output,
+                "chunking": stored_chunking(version.chunking).model_dump(),
             }
         )
-        return cls(version.version, draft.prompt, draft.record_types)
+        return cls(version.version, draft.prompt, draft.record_types, draft.chunking)
 
     def record_type(self, record_type_id: str) -> RecordType | None:
         return next((t for t in self.record_types if t.id == record_type_id), None)

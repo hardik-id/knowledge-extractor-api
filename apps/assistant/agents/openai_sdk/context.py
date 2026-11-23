@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from apps.assistant.agents.base import DocumentRef, ToolUsed, Workspace
 from apps.assistant.proposal import Proposal
+from apps.extraction.definition import Chunking
 
 
 @dataclass
@@ -12,6 +13,9 @@ class ReplyContext:
 
     workspace: Workspace
     refs: list[DocumentRef]
+    chunking: Chunking = field(
+        default_factory=Chunking
+    )  # of the definition asked about
     proposal: Proposal | None = None
     reads: int = 0
     previews: int = 0  # previews run so far

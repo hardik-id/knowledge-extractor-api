@@ -208,6 +208,7 @@ def _propose(definition: Draft, text: str, ids: NewId) -> Reply:
             prompt=own_prompt or start.prompt,
             record_types=_fresh_ids(start.record_types, ids),
             output=start.output.model_copy(),
+            chunking=definition.chunking.model_copy(),
         )
         reply = (
             "I set this up for architecture decision records: the title, the context and "
@@ -241,6 +242,7 @@ def _propose(definition: Draft, text: str, ids: NewId) -> Reply:
             prompt=own_prompt or "Extract every requirement in the document.",
             record_types=[record_type],
             output=Output(format="markdown", template=_template_for(record_type)),
+            chunking=definition.chunking.model_copy(),
         )
         reply = (
             "I chose exact quotes for the requirement and who it applies to, because "
@@ -264,6 +266,7 @@ def _propose(definition: Draft, text: str, ids: NewId) -> Reply:
             prompt=own_prompt or f"Extract every {lower} in the document.",
             record_types=[record_type],
             output=Output(format="markdown", template=_template_for(record_type)),
+            chunking=definition.chunking.model_copy(),
         )
         reply = (
             f"I started with one record type, {name}, with a title copied exactly and a "

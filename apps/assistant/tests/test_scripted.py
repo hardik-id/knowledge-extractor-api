@@ -60,6 +60,11 @@ def validated(definition: Definition) -> Definition:
     return Draft.model_validate(definition).model_dump()
 
 
+def as_model_writes(definition: Definition) -> Definition:
+    """A definition as the model writes it: everything but the chunking, which is the person's."""
+    return {k: v for k, v in validated(definition).items() if k != "chunking"}
+
+
 def reply(text: str, definition: Definition | None = None) -> Reply:
     given = Draft.model_validate(adr() if definition is None else definition)
     result = assistant_reply(text, given, ids)
@@ -292,3 +297,15 @@ def test_no_match_says_what_it_can_do_with_two_examples_and_proposes_nothing() -
     assert result.proposal is None
     assert re.search("add a field for approval date", result.text)
     assert re.search("make approved by exact", result.text)
+
+
+def test_every_proposal_keeps_the_chunking_of_the_draft_it_was_made_from() -> None:
+    chunking = {"strategy": "paragraph", "size": 2000}
+    for message, start in [
+        ("set this up for ADRs", {**bare(), "chunking": chunking}),
+        ("find every policy requirement", {**bare(), "chunking": chunking}),
+        ("find all widgets", {**bare(), "chunking": chunking}),
+        ("add a field called Owner", {**adr(), "chunking": chunking}),
+        ("output as json", {**adr(), "chunking": chunking}),
+    ]:
+        assert proposed(message, start).definition["chunking"] == chunking, message

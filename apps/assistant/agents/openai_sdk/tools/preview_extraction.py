@@ -84,7 +84,9 @@ async def _preview(state: ReplyContext, arguments: str) -> str:
             f"{_schema_errors(err)}. Correct them and call preview_extraction again."
         )
     try:
-        definition = parse_draft(args.model_dump()["definition"])
+        definition = parse_draft(
+            {**args.model_dump()["definition"], "chunking": state.chunking.model_dump()}
+        )
     except ApiError as err:
         return error(
             f"the definition is not valid: {_definition_errors(err)} "

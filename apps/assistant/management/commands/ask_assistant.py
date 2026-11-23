@@ -36,6 +36,7 @@ BARE = Draft.model_validate(
         "prompt": "",
         "record_types": [],
         "output": {"format": "markdown", "template": ""},
+        "chunking": {"strategy": "auto", "size": None},
     }
 )
 
@@ -83,6 +84,7 @@ class Command(BaseCommand):
                     "prompt": saved.prompt,
                     "record_types": saved.record_types,
                     "output": saved.output,
+                    "chunking": saved.chunking,
                 }
             )
             workspace = workspace_of_run(run)

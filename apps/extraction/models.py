@@ -1,6 +1,14 @@
+from typing import Any
+
 from django.db import models
+from django.db.models import Value
 
 from apps.core.models import BaseModel
+
+
+def auto_chunking() -> dict[str, Any]:
+    """The chunking of a version that never had one (and of the rows before it existed)."""
+    return {"strategy": "auto", "size": None}
 
 
 class DefinitionVersion(BaseModel):
@@ -13,6 +21,12 @@ class DefinitionVersion(BaseModel):
     prompt = models.TextField()
     record_types = models.JSONField()
     output = models.JSONField()
+    # Both defaults: the database one lets code that does not know the column (the
+    # previous release, during a rolling deploy) still insert a row.
+    chunking = models.JSONField(
+        default=auto_chunking,
+        db_default=Value(auto_chunking(), output_field=models.JSONField()),
+    )
     note = models.CharField(max_length=200, blank=True, default="")
 
     class Meta:

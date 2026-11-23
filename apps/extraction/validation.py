@@ -11,7 +11,13 @@ from pydantic import ValidationError
 from rest_framework import serializers
 
 from apps.core.errors import ApiError
-from apps.extraction.definition import FORMATS, MODES, VALUE_TYPES, Draft
+from apps.extraction.definition import (
+    CHUNK_STRATEGIES,
+    FORMATS,
+    MODES,
+    VALUE_TYPES,
+    Draft,
+)
 
 NOTE_MAX_LENGTH = 200
 
@@ -20,6 +26,8 @@ __all__ = [
     "MODES",
     "NOTE_MAX_LENGTH",
     "VALUE_TYPES",
+    "ChunkingSerializer",
+    "DraftAnswerSerializer",
     "DraftSerializer",
     "parse_draft",
 ]
@@ -50,12 +58,29 @@ class OutputSerializer(serializers.Serializer):  # type: ignore[type-arg]
     template = serializers.CharField(allow_blank=True)
 
 
+class ChunkingSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """How a long document is cut into parts. ``size`` is null for ``auto``."""
+
+    strategy = serializers.ChoiceField(CHUNK_STRATEGIES, required=False, default="auto")
+    size = serializers.IntegerField(required=False, allow_null=True, default=None)
+
+
 class DraftSerializer(serializers.Serializer):  # type: ignore[type-arg]
     """A definition without ``version`` and ``base_version``."""
 
     prompt = serializers.CharField(allow_blank=True)
     record_types = RecordTypeSerializer(many=True)
     output = OutputSerializer()
+    chunking = ChunkingSerializer(required=False)
+
+
+class DraftAnswerSerializer(DraftSerializer):
+    """A definition in an answer: ``chunking`` is always there."""
+
+    chunking = ChunkingSerializer()
+
+    class Meta:
+        ref_name = "Draft"
 
 
 def parse_draft(data: Any) -> Draft:

@@ -199,7 +199,8 @@ Model access lives in `apps/core/llm.py` (`missing_settings()`, `connect()` and 
   make install-ant      # once: installs the `ant` CLI (needs sudo)
   ant auth login        # once, and when the sign-in expires
   # .env: ASSISTANT_AGENT=openai  LLM_PROVIDER=anthropic  LLM_MODEL=claude-haiku-5-5
-  make run
+  make db && make migrate
+  make run              # and make worker in a second terminal: the worker answers the chat
   ```
 
   The app signs in through the `anthropic` package (`default_credentials()` and `TokenCache`: it reads the `ant` profile and refreshes the token), not by calling `ant`. The package is a dev dependency; the production image does not have it. With `ANTHROPIC_API_KEY` set, the key is used and the package is not needed. A compose container does not see the host's login: `make up` passes it the login's token as `ANTHROPIC_API_KEY`, for about eight hours (`docs/manual-testing.md`). When the sign-in fails (no profile, expired, no network) the reply ends with the "could not reach the language model" sentence; no token is logged.

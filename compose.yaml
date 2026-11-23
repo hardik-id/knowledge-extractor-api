@@ -20,6 +20,8 @@ services:
 
   redis:
     image: redis:8
+    # Reachable from the host and the other containers; dev only, nothing is kept.
+    command: ["redis-server", "--protected-mode", "no"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     healthcheck:

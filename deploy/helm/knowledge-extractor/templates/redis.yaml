@@ -66,7 +66,7 @@ spec:
           image: {{ .Values.redis.image | quote }}
           imagePullPolicy: IfNotPresent
           # No snapshots: nothing is kept (dev only). The password is read from the environment.
-          command: ["sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$REDIS_PASSWORD\""]
+          command: ["sh", "-c", "exec redis-server --protected-mode no --save '' --appendonly no --requirepass \"$REDIS_PASSWORD\""]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

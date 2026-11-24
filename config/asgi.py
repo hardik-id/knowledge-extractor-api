@@ -26,6 +26,10 @@ setup_telemetry()
 # below need.
 django_asgi_app = get_asgi_application()
 
+from apps.core.status import log_backend_status  # noqa: E402
+
+log_backend_status()  # once per process start
+
 from apps.realtime.middleware import OriginMiddleware, TicketAuthMiddleware  # noqa: E402
 from apps.realtime.routing import websocket_urlpatterns  # noqa: E402
 

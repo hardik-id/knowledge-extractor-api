@@ -28,6 +28,7 @@ from django.conf import settings
 from openai import APIError
 
 from apps.core.llm import connect, describe_failure, missing_settings, output_limit
+from apps.core.status import record_call
 from apps.extraction import telemetry
 from apps.extraction.extractors.base import Definition, ExtractionError, RawRecord
 from apps.extraction.extractors.chunks import split_by
@@ -57,6 +58,24 @@ TOO_LARGE = "This definition is too large to extract with."
 
 def _too_long(definition: Definition) -> str:
     return TOO_LONG if definition.chunking.strategy == "auto" else TOO_LONG_FOR_SIZE
+
+
+class ModelCallTimeout(TimeoutError):
+    """One model call took longer than ``EXTRACTION_MODEL_TIMEOUT_SECONDS``."""
+
+
+def _record_failure(error: BaseException) -> None:
+    """Tell the status what a failed run says about the model.
+
+    An answer that could not be used means the model was reached. The file's own time
+    budget running out (a plain ``TimeoutError``) says nothing about the model.
+    """
+    if isinstance(error, ModelBehaviorError | ModelRefusalError):
+        record_call("extraction")
+    elif type(error) is TimeoutError:
+        return
+    else:
+        record_call("extraction", error)
 
 
 class LlmExtractor:
@@ -106,10 +125,13 @@ class LlmExtractor:
             ModelBehaviorError,
             ModelRefusalError,
         ) as error:
+            _record_failure(error)
             raise self._failed(UNUSABLE, error) from None
         except (APIError, AzureError, AgentsException, OSError) as error:
             # The model, the SDK or a sign-in failed.
+            _record_failure(error)
             raise self._failed(UNREACHABLE, error) from None
+        record_call("extraction")
         records: list[RawRecord] = []
         for (start, end), output in zip(parts, answers, strict=True):
             if len(records) >= MAX_RECORDS:
@@ -192,17 +214,20 @@ class LlmExtractor:
             ),
             output_type=ModelOutput,
         )
-        result = await asyncio.wait_for(
-            Runner.run(
-                agent,
-                message,
-                max_turns=1,
-                run_config=RunConfig(
-                    tracing_disabled=True, trace_include_sensitive_data=False
+        try:
+            result = await asyncio.wait_for(
+                Runner.run(
+                    agent,
+                    message,
+                    max_turns=1,
+                    run_config=RunConfig(
+                        tracing_disabled=True, trace_include_sensitive_data=False
+                    ),
                 ),
-            ),
-            settings.EXTRACTION_MODEL_TIMEOUT_SECONDS,
-        )
+                settings.EXTRACTION_MODEL_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as error:
+            raise ModelCallTimeout from error
         output = result.final_output
         if not isinstance(output, ModelOutput):
             raise ModelBehaviorError("no answer")

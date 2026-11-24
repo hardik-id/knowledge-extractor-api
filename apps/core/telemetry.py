@@ -81,6 +81,11 @@ def _resource_attributes() -> dict[str, str]:
     return attributes
 
 
+def environment() -> str:
+    """The deployment environment name (``local`` unless OTEL_RESOURCE_ATTRIBUTES says)."""
+    return _resource_attributes()["deployment.environment"]
+
+
 def build_resource() -> Resource:
     return Resource.create(_resource_attributes())
 

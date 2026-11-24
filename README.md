@@ -18,6 +18,10 @@ make ui-env              # the .env.local for the UI, with a fresh dev token
 
 [docs/manual-testing.md](docs/manual-testing.md) shows how to try each part by hand: the UI, every Studio call with curl, the live socket, telemetry and switching the assistant to a model.
 
+## Is it a stub or the real thing?
+
+Sign in and call `GET /api/v1/status`: it lists the assistant, extraction, storage, sign-in, live updates and the worker as `stub` or `real`, with the state of what is real. The API and the worker also log one `backend status` line when they start. Details in [docs/status.md](docs/status.md).
+
 ## Getting started
 
 Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.14 as pinned in `.python-version`.

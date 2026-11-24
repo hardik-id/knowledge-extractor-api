@@ -28,6 +28,7 @@ from django.conf import settings
 from openai import APIError
 
 from apps.core.llm import connect, describe_failure, missing_settings, output_limit
+from apps.core.status import record_call
 from apps.extraction import telemetry
 from apps.extraction.extractors.base import Definition, ExtractionError, RawRecord
 from apps.extraction.extractors.chunks import split_by
@@ -106,10 +107,13 @@ class LlmExtractor:
             ModelBehaviorError,
             ModelRefusalError,
         ) as error:
+            record_call("extraction", error)
             raise self._failed(UNUSABLE, error) from None
         except (APIError, AzureError, AgentsException, OSError) as error:
             # The model, the SDK or a sign-in failed.
+            record_call("extraction", error)
             raise self._failed(UNREACHABLE, error) from None
+        record_call("extraction")
         records: list[RawRecord] = []
         for (start, end), output in zip(parts, answers, strict=True):
             if len(records) >= MAX_RECORDS:

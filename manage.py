@@ -20,6 +20,14 @@ def main() -> None:
     from apps.core.telemetry import setup_telemetry
 
     setup_telemetry()
+    if sys.argv[1:2] == ["db_worker"]:
+        # The worker says once, at start, which parts are real (docs/status.md).
+        import django
+
+        django.setup()
+        from apps.core.status import log_backend_status
+
+        log_backend_status()
     execute_from_command_line(sys.argv)
 
 

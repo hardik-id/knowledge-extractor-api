@@ -1460,6 +1460,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /status:
+    get:
+      operationId: status_retrieve
+      description: |-
+        Each part (assistant, extraction, storage, sign-in, live updates, worker) as a
+        stub or real, with the state of what is real. Reads settings and stored state and
+        pings the channel layer; it never calls the model.
+      tags:
+      - status
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendStatus'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /ws-ticket:
     post:
       operationId: ws_ticket_create
@@ -1524,6 +1566,18 @@ components:
       - record_type_id
       - revision
       - span
+    BackendStatus:
+      type: object
+      properties:
+        environment:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Part'
+      required:
+      - environment
+      - parts
     Chunking:
       type: object
       description: How a long document is cut into parts. ``size`` is null for ``auto``.
@@ -1781,7 +1835,7 @@ components:
           type: string
           default: ''
         mode:
-          $ref: '#/components/schemas/ModeEnum'
+          $ref: '#/components/schemas/FieldModeEnum'
         value_type:
           $ref: '#/components/schemas/ValueTypeEnum'
         choices:
@@ -1809,6 +1863,14 @@ components:
       required:
       - field_id
       - values
+    FieldModeEnum:
+      enum:
+      - quote
+      - inferred
+      type: string
+      description: |-
+        * `quote` - quote
+        * `inferred` - inferred
     FieldRequest:
       type: object
       properties:
@@ -1822,7 +1884,7 @@ components:
           type: string
           default: ''
         mode:
-          $ref: '#/components/schemas/ModeEnum'
+          $ref: '#/components/schemas/FieldModeEnum'
         value_type:
           $ref: '#/components/schemas/ValueTypeEnum'
         choices:
@@ -1928,14 +1990,6 @@ components:
             $ref: '#/components/schemas/Message'
       required:
       - messages
-    ModeEnum:
-      enum:
-      - quote
-      - inferred
-      type: string
-      description: |-
-        * `quote` - quote
-        * `inferred` - inferred
     OriginEnum:
       enum:
       - llm
@@ -1964,6 +2018,39 @@ components:
       required:
       - format
       - template
+    Part:
+      type: object
+      properties:
+        id:
+          type: string
+        mode:
+          $ref: '#/components/schemas/PartModeEnum'
+        label:
+          type: string
+        state:
+          $ref: '#/components/schemas/StateEnum'
+        checked_at:
+          type: string
+          format: date-time
+          nullable: true
+        problem:
+          type: string
+          nullable: true
+      required:
+      - checked_at
+      - id
+      - label
+      - mode
+      - problem
+      - state
+    PartModeEnum:
+      enum:
+      - stub
+      - real
+      type: string
+      description: |-
+        * `stub` - stub
+        * `real` - real
     PatchedReviewValueRequest:
       type: object
       description: The body of ``PATCH .../records/{record_id}/values/{value_id}``.
@@ -2299,6 +2386,18 @@ components:
           nullable: true
         config:
           $ref: '#/components/schemas/ExecutionConfigRequest'
+    StateEnum:
+      enum:
+      - stub
+      - ok
+      - failing
+      - unknown
+      type: string
+      description: |-
+        * `stub` - stub
+        * `ok` - ok
+        * `failing` - failing
+        * `unknown` - unknown
     Status:
       type: object
       properties:

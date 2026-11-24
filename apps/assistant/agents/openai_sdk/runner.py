@@ -34,6 +34,7 @@ from apps.assistant.agents.openai_sdk.agent import build_agent
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 from apps.assistant.agents.openai_sdk.inputs import build_input
 from apps.core.llm import connect, describe_failure, missing_settings
+from apps.core.status import arecord_call
 from apps.extraction.definition import Draft
 
 log = structlog.get_logger(__name__)
@@ -123,6 +124,7 @@ class OpenAIAgent:
         wrote = False  # some text has gone out
         new_turn = False  # the model started another response since the last text
         ending: str | None = None
+        failure: BaseException | None = None  # the model call failed
         try:
             while True:
                 remaining = deadline - loop.time()
@@ -152,6 +154,7 @@ class OpenAIAgent:
                 "assistant_reply_cut_off", reason="timeout", **describe_failure(error)
             )
             ending = CUT_OFF
+            failure = error
         except MaxTurnsExceeded as error:
             log.warning(
                 "assistant_reply_cut_off", reason="max_turns", **describe_failure(error)
@@ -161,9 +164,12 @@ class OpenAIAgent:
             # The model, the SDK or the Azure sign-in failed.
             log.warning("assistant_model_failed", **describe_failure(error))
             ending = MODEL_FAILED
+            failure = error
         finally:
             result.cancel()
             await events.aclose()
+        if self._model is None:  # the configured model, not a fake
+            await arecord_call("assistant", failure)
         for used in _unannounced(state):
             yield used
         if state.rejected:

@@ -20,7 +20,7 @@ make ui-env              # the .env.local for the UI, with a fresh dev token
 
 ## Is it a stub or the real thing?
 
-Sign in and call `GET /api/v1/status`: it lists the assistant, extraction, storage, sign-in, live updates and the worker as `stub` or `real`, with the state of what is real. The API and the worker also log one `backend status` line when they start. Details in [docs/status.md](docs/status.md).
+Sign in and call `GET /api/v1/status`: it lists the assistant, extraction, storage, sign-in, live updates and the worker as `stub` or `real`, with the state of what is real. The API and the worker also log one `backend status` line when they start. `POST /api/v1/status/test` checks the real parts now (one model call of a few tokens, at most once a minute). Details in [docs/status.md](docs/status.md).
 
 ## Getting started
 

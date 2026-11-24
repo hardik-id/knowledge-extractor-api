@@ -8,6 +8,7 @@ a key, a message or a body.
 """
 
 import asyncio
+import threading
 import time
 from datetime import datetime, timedelta
 from typing import Literal
@@ -33,6 +34,7 @@ State = Literal["stub", "ok", "failing", "unknown"]
 # A real call's outcome is written at most this often per part, unless it changes.
 RECORD_INTERVAL_SECONDS = 30.0
 PING_TIMEOUT_SECONDS = 2.0
+PING_CACHE_SECONDS = 10.0
 WORKER_STALLED_SECONDS = 60
 
 
@@ -191,25 +193,46 @@ async def _ping() -> None:
         await layer.receive(channel)
 
 
+# The last ping: (monotonic time, wall time, problem). Per process, shared by requests.
+_ping_cache: tuple[float, datetime, str | None] | None = None
+_ping_lock = threading.Lock()
+
+
+def _cached_ping() -> tuple[datetime, str | None]:
+    """Ping the channel layer, at most once per ``PING_CACHE_SECONDS``, one in flight.
+
+    Other callers wait for the one ping and reuse its answer, so repeated requests cost
+    nothing and a slow Redis does not collect a ping per request.
+    """
+    global _ping_cache
+    with _ping_lock:
+        cached = _ping_cache
+        if cached and _now() - cached[0] < PING_CACHE_SECONDS:
+            return cached[1], cached[2]
+        problem = None
+        try:
+            async_to_sync(_ping)()
+        except TimeoutError:
+            problem = "timeout"
+        except Exception as exc:
+            log.warning("status_ping_failed", cause=type(exc).__name__)
+            problem = "unreachable"
+        _ping_cache = (_now(), timezone.now(), problem)
+        return _ping_cache[1], problem
+
+
 def _live_updates_part() -> Part:
     backend = settings.CHANNEL_LAYERS["default"]["BACKEND"]
     if "InMemory" in backend:
         return Part(id="live_updates", mode="stub", label="In memory", state="stub")
     label = "Redis" if "Redis" in backend else "Channel layer"
-    problem = None
-    try:
-        async_to_sync(_ping)()
-    except TimeoutError:
-        problem = "timeout"
-    except Exception as exc:
-        log.warning("status_ping_failed", cause=type(exc).__name__)
-        problem = "unreachable"
+    checked_at, problem = _cached_ping()
     return Part(
         id="live_updates",
         mode="real",
         label=label,
         state="failing" if problem else "ok",
-        checked_at=timezone.now(),
+        checked_at=checked_at,
         problem=problem,
     )
 
@@ -235,16 +258,35 @@ def _worker_part() -> Part:
 
 
 def _queue_is_stalled() -> bool:
-    """A job has been ready to run for more than a minute and nobody took it."""
+    """A job has been ready for more than a minute and the worker shows no sign of life.
+
+    One worker runs one task at a time, so a job waiting behind a long task is not a
+    stalled worker. Alive means a task is running that started inside the allowed
+    execution time, or a task started or finished in the last minute.
+    """
+    from django.tasks.base import TaskResultStatus
     from django_tasks_db.models import DBTaskResult, get_date_max
 
-    cutoff = timezone.now() - timedelta(seconds=WORKER_STALLED_SECONDS)
-    return (
+    now = timezone.now()
+    cutoff = now - timedelta(seconds=WORKER_STALLED_SECONDS)
+    waiting = (
         DBTaskResult.objects.ready()
         .filter(enqueued_at__lt=cutoff)
         .filter(Q(run_after=get_date_max()) | Q(run_after__lt=cutoff))
         .exists()
     )
+    if not waiting:
+        return False
+    limit = now - timedelta(seconds=settings.EXECUTION_TIMEOUT_SECONDS)
+    running = DBTaskResult.objects.filter(
+        status=TaskResultStatus.RUNNING, started_at__gt=limit
+    ).exists()
+    if running:
+        return False
+    recent = DBTaskResult.objects.filter(
+        Q(started_at__gt=cutoff) | Q(finished_at__gt=cutoff)
+    ).exists()
+    return not recent
 
 
 def build_status() -> BackendStatus:

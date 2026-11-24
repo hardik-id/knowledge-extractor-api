@@ -7,6 +7,7 @@ from typing import Any
 import httpx2
 import pytest
 from asgiref.sync import async_to_sync
+from django.db import connections
 from django.utils import timezone
 from openai import APIConnectionError, APITimeoutError
 
@@ -23,6 +24,7 @@ KEY = "fake-key-for-tests"
 @pytest.fixture(autouse=True)
 def _fresh_throttle() -> None:
     status._written.clear()
+    status._ping_cache = None
 
 
 @pytest.fixture
@@ -411,17 +413,34 @@ def test_the_start_line_names_modes_and_no_secret(
     assert not re.search(r"secret|fake-key", str(logs))
 
 
-def test_the_start_line_is_not_logged_by_tests_or_management_commands() -> None:
-    from django.core.management import call_command
+def _run_manage(monkeypatch: pytest.MonkeyPatch, command: str) -> list[dict[str, Any]]:
+    import sys
+
     from structlog.testing import capture_logs
 
+    import manage
+
+    ran: list[list[str]] = []
+    monkeypatch.setattr(sys, "argv", ["manage.py", command])
+    monkeypatch.setattr("django.core.management.execute_from_command_line", ran.append)
     with capture_logs() as logs:
-        call_command("check")
-    assert all(entry["event"] != "backend status" for entry in logs)
+        manage.main()
+    assert ran == [["manage.py", command]]
+    return [dict(e) for e in logs if e["event"] == "backend status"]
 
 
-def test_a_real_mode_with_a_missing_setting_is_still_reported_at_start(
-    settings: Any,
+def test_a_management_command_does_not_log_the_start_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _run_manage(monkeypatch, "check") == []
+
+
+def test_the_worker_logs_the_start_line_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert len(_run_manage(monkeypatch, "db_worker")) == 1
+
+
+def test_a_real_mode_with_a_missing_setting_warns_and_shows_not_configured(
+    client: Any, settings: Any
 ) -> None:
     from apps.assistant.checks import check_llm_settings as assistant_check
     from apps.extraction.checks import check_llm_settings as extraction_check
@@ -430,3 +449,180 @@ def test_a_real_mode_with_a_missing_setting_is_still_reported_at_start(
     settings.LLM_MODEL = ""
     assert any(m.id == "assistant.W001" for m in assistant_check())
     assert extraction_check()
+    assert parts(client)["assistant"]["problem"] == "not_configured"
+
+
+# --- a busy worker is not a stalled one -----------------------------------------------
+
+
+def test_a_busy_worker_with_a_long_queue_is_ok(
+    client: Any, database_queue: None
+) -> None:
+    job(20, status="RUNNING", started_at=timezone.now() - timedelta(seconds=10))
+    job(90)
+    assert parts(client)["worker"]["state"] == "ok"
+
+
+def test_a_job_waiting_with_nothing_running_or_finished_is_stalled(
+    client: Any, database_queue: None
+) -> None:
+    job(90)
+    job(
+        900,
+        status="SUCCESSFUL",
+        started_at=timezone.now() - timedelta(seconds=400),
+        finished_at=timezone.now() - timedelta(seconds=300),
+    )
+    assert parts(client)["worker"]["problem"] == "worker_stalled"
+
+
+def test_a_job_finished_a_moment_ago_means_the_worker_is_alive(
+    client: Any, database_queue: None
+) -> None:
+    job(90)
+    job(
+        200,
+        status="SUCCESSFUL",
+        started_at=timezone.now() - timedelta(seconds=40),
+        finished_at=timezone.now() - timedelta(seconds=20),
+    )
+    assert parts(client)["worker"]["state"] == "ok"
+
+
+def test_a_task_running_past_the_execution_limit_does_not_prove_life(
+    client: Any, database_queue: None, settings: Any
+) -> None:
+    settings.EXECUTION_TIMEOUT_SECONDS = 600
+    job(90)
+    job(2000, status="RUNNING", started_at=timezone.now() - timedelta(seconds=700))
+    assert parts(client)["worker"]["problem"] == "worker_stalled"
+
+
+# --- the ping is cached -----------------------------------------------------------------
+
+
+def test_the_ping_is_cached_for_ten_seconds(
+    client: Any, redis_layer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [500.0]
+    pings: list[int] = []
+
+    class Counting(_Layer):
+        async def new_channel(self) -> str:
+            pings.append(1)
+            return "specific.x"
+
+    monkeypatch.setattr(status, "_now", lambda: clock[0])
+    monkeypatch.setattr(status, "get_channel_layer", lambda: Counting())
+    first = parts(client)["live_updates"]
+    parts(client)
+    clock[0] += 9
+    again = parts(client)["live_updates"]
+    assert len(pings) == 1
+    assert again["checked_at"] == first["checked_at"]
+    clock[0] += 2
+    parts(client)
+    assert len(pings) == 2
+
+
+def test_a_failed_ping_is_cached_too(
+    client: Any, redis_layer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[int] = []
+
+    def layer() -> _Layer:
+        calls.append(1)
+        return _Layer(ConnectionError("down"))
+
+    monkeypatch.setattr(status, "get_channel_layer", layer)
+    parts(client)
+    assert parts(client)["live_updates"]["state"] == "failing"
+    assert len(calls) == 1
+
+
+# --- what a failed run says about the model ------------------------------------------------
+
+
+def _extract_failing_with(
+    settings: Any, monkeypatch: pytest.MonkeyPatch, error: BaseException
+) -> None:
+    from apps.extraction.extractors.base import ExtractionError
+    from apps.extraction.extractors.llm import LlmExtractor
+    from apps.extraction.tests.test_llm import definition
+
+    real_models(settings, "openai")
+
+    def down() -> Any:
+        raise error
+
+    monkeypatch.setattr("apps.extraction.extractors.llm.connect", down)
+    with pytest.raises(ExtractionError):
+        LlmExtractor().extract("A document with some text.", definition())
+
+
+def test_an_unusable_answer_counts_as_a_reached_model(
+    settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agents import ModelBehaviorError
+
+    _extract_failing_with(settings, monkeypatch, ModelBehaviorError("bad json"))
+    assert ModelCall.objects.get(part="extraction").problem == ""
+
+
+def test_the_files_own_time_budget_records_nothing(
+    settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _extract_failing_with(settings, monkeypatch, TimeoutError())
+    assert not ModelCall.objects.filter(part="extraction").exists()
+
+
+def test_one_model_call_timing_out_records_timeout(
+    settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apps.extraction.extractors.llm import ModelCallTimeout
+
+    _extract_failing_with(settings, monkeypatch, ModelCallTimeout())
+    assert ModelCall.objects.get(part="extraction").problem == "timeout"
+
+
+# --- the assistant records -----------------------------------------------------------------
+
+
+def _unauthorized() -> Exception:
+    from openai import AuthenticationError
+
+    response = httpx2.Response(401, request=_request())
+    return AuthenticationError("denied", response=response, body=None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_the_assistant_records_a_reply_and_a_refusal_by_the_provider(
+    settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agents.testing import ScriptedModel, assistant_message
+    from asgiref.sync import sync_to_async
+
+    from apps.assistant.agents.openai_sdk import OpenAIAgent
+    from apps.assistant.tests.openai_sdk.helpers import collect
+
+    real_models(settings, "openai")
+
+    class Client:
+        async def close(self) -> None:
+            pass
+
+    model = ScriptedModel([[assistant_message("hello")], _unauthorized()])
+    monkeypatch.setattr(
+        "apps.assistant.agents.openai_sdk.runner.connect", lambda: (model, Client())
+    )
+
+    def problem() -> str:
+        return ModelCall.objects.get(part="assistant").problem
+
+    await collect(OpenAIAgent())
+    assert await sync_to_async(problem)() == ""
+    status._written.clear()
+    await collect(OpenAIAgent())
+    assert await sync_to_async(problem)() == "auth_failed"
+    await sync_to_async(connections.close_all)()  # the worker thread's connection

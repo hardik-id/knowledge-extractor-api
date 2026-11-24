@@ -60,6 +60,24 @@ def _too_long(definition: Definition) -> str:
     return TOO_LONG if definition.chunking.strategy == "auto" else TOO_LONG_FOR_SIZE
 
 
+class ModelCallTimeout(TimeoutError):
+    """One model call took longer than ``EXTRACTION_MODEL_TIMEOUT_SECONDS``."""
+
+
+def _record_failure(error: BaseException) -> None:
+    """Tell the status what a failed run says about the model.
+
+    An answer that could not be used means the model was reached. The file's own time
+    budget running out (a plain ``TimeoutError``) says nothing about the model.
+    """
+    if isinstance(error, ModelBehaviorError | ModelRefusalError):
+        record_call("extraction")
+    elif type(error) is TimeoutError:
+        return
+    else:
+        record_call("extraction", error)
+
+
 class LlmExtractor:
     """Extracts with the model named by ``LLM_PROVIDER`` and ``LLM_MODEL``.
 
@@ -107,11 +125,11 @@ class LlmExtractor:
             ModelBehaviorError,
             ModelRefusalError,
         ) as error:
-            record_call("extraction", error)
+            _record_failure(error)
             raise self._failed(UNUSABLE, error) from None
         except (APIError, AzureError, AgentsException, OSError) as error:
             # The model, the SDK or a sign-in failed.
-            record_call("extraction", error)
+            _record_failure(error)
             raise self._failed(UNREACHABLE, error) from None
         record_call("extraction")
         records: list[RawRecord] = []
@@ -196,17 +214,20 @@ class LlmExtractor:
             ),
             output_type=ModelOutput,
         )
-        result = await asyncio.wait_for(
-            Runner.run(
-                agent,
-                message,
-                max_turns=1,
-                run_config=RunConfig(
-                    tracing_disabled=True, trace_include_sensitive_data=False
+        try:
+            result = await asyncio.wait_for(
+                Runner.run(
+                    agent,
+                    message,
+                    max_turns=1,
+                    run_config=RunConfig(
+                        tracing_disabled=True, trace_include_sensitive_data=False
+                    ),
                 ),
-            ),
-            settings.EXTRACTION_MODEL_TIMEOUT_SECONDS,
-        )
+                settings.EXTRACTION_MODEL_TIMEOUT_SECONDS,
+            )
+        except TimeoutError as error:
+            raise ModelCallTimeout from error
         output = result.final_output
         if not isinstance(output, ModelOutput):
             raise ModelBehaviorError("no answer")

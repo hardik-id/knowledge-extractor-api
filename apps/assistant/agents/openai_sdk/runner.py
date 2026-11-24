@@ -15,6 +15,8 @@ from agents import (
     AgentsException,
     MaxTurnsExceeded,
     Model,
+    ModelBehaviorError,
+    ModelRefusalError,
     RunConfig,
     Runner,
     set_tracing_disabled,
@@ -125,6 +127,7 @@ class OpenAIAgent:
         new_turn = False  # the model started another response since the last text
         ending: str | None = None
         failure: BaseException | None = None  # the model call failed
+        record = True  # whether this reply says anything about the model
         try:
             while True:
                 remaining = deadline - loop.time()
@@ -154,7 +157,7 @@ class OpenAIAgent:
                 "assistant_reply_cut_off", reason="timeout", **describe_failure(error)
             )
             ending = CUT_OFF
-            failure = error
+            record = False  # the reply's own deadline, not necessarily the model's
         except MaxTurnsExceeded as error:
             log.warning(
                 "assistant_reply_cut_off", reason="max_turns", **describe_failure(error)
@@ -164,11 +167,13 @@ class OpenAIAgent:
             # The model, the SDK or the Azure sign-in failed.
             log.warning("assistant_model_failed", **describe_failure(error))
             ending = MODEL_FAILED
-            failure = error
+            # An answer that could not be used still means the model was reached.
+            if not isinstance(error, ModelBehaviorError | ModelRefusalError):
+                failure = error
         finally:
             result.cancel()
             await events.aclose()
-        if self._model is None:  # the configured model, not a fake
+        if record and self._model is None:  # the configured model, not a fake
             await arecord_call("assistant", failure)
         for used in _unannounced(state):
             yield used

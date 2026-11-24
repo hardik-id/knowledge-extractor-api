@@ -317,7 +317,8 @@ def build_status() -> BackendStatus:
 
 TEST_INTERVAL_SECONDS = 60
 TEST_MODEL_TIMEOUT_SECONDS = 20.0
-TEST_OUTPUT_TOKENS = 8
+TEST_OUTPUT_TOKENS = 16  # the OpenAI Responses API takes no fewer
+TEST_SLACK_SECONDS = 3.0  # what the whole test may take beyond the call's limit
 
 
 def _real_model_parts() -> list[str]:
@@ -376,30 +377,48 @@ async def _call_model() -> None:
 
 
 def _test_model() -> BaseException | None:
-    """The one test call for the model in use; the failure, or None when it worked."""
+    """The one test call for the model in use; the failure, or None when it worked.
+
+    The call runs in a thread of its own that the whole test waits for only a little
+    longer than the call's limit: ``asyncio.run`` also waits for the executor threads
+    of a sign-in (a hung token fetch), which the call's own timeout cannot cancel.
+    The thread touches no database connection. A hung one is abandoned (it is a
+    daemon) and the test says ``timeout``.
+    """
     from agents import ModelBehaviorError, ModelRefusalError
 
-    try:
-        asyncio.run(_call_model())
-    except ModelBehaviorError, ModelRefusalError:
-        return None  # an unusable answer still means the model was reached
-    except Exception as error:
-        log.warning("status_test_model_failed", **describe_failure(error))
-        return error
-    return None
+    outcome: list[BaseException | None] = []
+
+    def work() -> None:
+        try:
+            asyncio.run(_call_model())
+            outcome.append(None)
+        except ModelBehaviorError, ModelRefusalError:
+            outcome.append(None)  # an unusable answer still means the model was reached
+        except Exception as error:
+            outcome.append(error)
+
+    thread = threading.Thread(target=work, daemon=True, name="status-test")
+    thread.start()
+    thread.join(TEST_MODEL_TIMEOUT_SECONDS + TEST_SLACK_SECONDS)
+    failure: BaseException | None = TimeoutError() if not outcome else outcome[0]
+    if failure is not None:
+        log.warning("status_test_model_failed", **describe_failure(failure))
+    return failure
 
 
 def run_test() -> str:
     """Check every real part now. ``run`` when it did, ``cached`` when the last test is
-    under a minute old (the stored result stands), ``skipped`` when nothing is real, so
-    nothing is called."""
-    models = _real_model_parts()
+    under a minute old (the stored result stands), ``skipped`` when nothing testable is
+    real (stub parts, a model with a missing setting, an in-memory channel layer), so
+    nothing is claimed or called. Storage is real but untested until its backends exist."""
+    models = [] if missing_settings() else _real_model_parts()
     live = "InMemory" not in settings.CHANNEL_LAYERS["default"]["BACKEND"]
     if not models and not live:
         return "skipped"
     if not _claim_test():
         return "cached"
-    if models and not missing_settings():
+    if models:
         # Assistant and extractor use one provider and model: one call for both.
         failure = _test_model()
         for part in models:

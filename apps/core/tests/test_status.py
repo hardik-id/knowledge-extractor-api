@@ -717,20 +717,55 @@ def test_a_401_is_failing_with_auth_failed_and_no_secret(
     assert KEY not in response.content.decode()
 
 
-def test_a_timeout_is_failing_with_timeout(
+def test_a_slow_model_is_failing_with_timeout(
     client: Any, settings: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import asyncio
+
+    from agents.testing import ScriptedModel
+
+    class Slow(ScriptedModel):
+        async def get_response(self, *args: Any, **kwargs: Any) -> Any:
+            await asyncio.sleep(5)
+
     real_models(settings, "openai")
-
-    async def slow() -> None:
-        raise TimeoutError
-
-    monkeypatch.setattr(status, "_call_model", slow)
+    monkeypatch.setattr(status, "TEST_MODEL_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr("apps.core.llm.connect", lambda: (Slow(), FakeClient()))
     got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
     assert (got["extraction"]["state"], got["extraction"]["problem"]) == (
         "failing",
         "timeout",
     )
+
+
+def test_a_hung_sign_in_cannot_hold_the_request(
+    client: Any, settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    real_models(settings, "openai")
+
+    async def stuck() -> None:
+        time.sleep(1.5)  # blocks the loop: the call's own timeout cannot fire
+
+    monkeypatch.setattr(status, "_call_model", stuck)
+    monkeypatch.setattr(status, "TEST_MODEL_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(status, "TEST_SLACK_SECONDS", 0.2)
+    started = time.monotonic()
+    got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
+    assert time.monotonic() - started < 1.2
+    assert got["extraction"]["problem"] == "timeout"
+
+
+def test_a_missing_setting_with_an_in_memory_layer_is_skipped_without_a_claim(
+    client: Any, settings: Any
+) -> None:
+    from apps.core.models import StatusTestClaim
+
+    real_models(settings, "openai")
+    settings.LLM_MODEL = ""
+    assert client.post(TEST_URL)["X-Status-Test"] == "skipped"
+    assert not StatusTestClaim.objects.exists()
 
 
 def test_an_unusable_answer_still_counts_as_reached(

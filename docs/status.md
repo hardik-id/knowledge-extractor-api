@@ -21,6 +21,12 @@ Parts, always in this order: `assistant`, `extraction`, `storage`, `sign_in`, `l
 
 `mode` is `stub` or `real`. `state` is `stub` (nothing to check), `ok`, `failing` or `unknown` (real, not checked yet). `checked_at` is when the state was learned. `problem` is a short code: `auth_failed`, `not_found`, `rate_limited`, `timeout`, `unreachable`, `bad_request`, `error`, `not_configured`, `worker_stalled`. The body never holds an address, a key, an error message or a response body.
 
+## Testing now
+
+`POST /api/v1/status/test` (signed in) checks every real part now and answers the same body as `GET /api/v1/status`. It makes one model call of a few tokens (`max_tokens` 8, 20 s limit) for the provider and model in use (the assistant and the extractor share one call) and writes the outcome for each real model part, past the write throttle. It pings the channel layer afresh and refreshes the 10 s cache. Storage stays `unknown`: its backends are not built, so nothing is called. A failure is a `failing` state with a short code; the endpoint still answers 200. The model's answer is neither returned nor logged, and an unusable answer counts as reached.
+
+One real test per 60 s for the whole deployment: the claim is one conditional UPDATE on the row of `core_status_test_claim`, so it holds across processes and concurrent requests. The header `X-Status-Test` says what happened: `run`, `cached` (the stored result is returned, no call is made) or `skipped` (every part is a stub, so nothing was called).
+
 ## Recording
 
 Every real model call of the assistant and of the extractor records its outcome in the table `core_model_call`, one row per part (`apps/core/status.py`, `record_call`, `arecord_call` from async code). The code comes from `describe_failure`: the HTTP status and the error's class, never the message. A repeated outcome is written at most once per 30 s per process; a changed outcome is written at once. A failure to record is logged and never fails or delays the call. Only what says something about the model is recorded: an answer that could not be used counts as success (the model was reached), and a run's own time budget running out records nothing. A single model call that times out records `timeout`.

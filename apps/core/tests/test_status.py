@@ -626,3 +626,253 @@ async def test_the_assistant_records_a_reply_and_a_refusal_by_the_provider(
     await collect(OpenAIAgent())
     assert await sync_to_async(problem)() == "auth_failed"
     await sync_to_async(connections.close_all)()  # the worker thread's connection
+
+
+# --- POST /status/test --------------------------------------------------------------------
+
+TEST_URL = "/api/v1/status/test"
+
+
+class FakeClient:
+    closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def fake_model(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """The model the test call talks to: a script of answers or errors."""
+    from agents.testing import ScriptedModel
+
+    def use(*steps: Any) -> Any:
+        model = ScriptedModel(list(steps))
+        client = FakeClient()
+        monkeypatch.setattr("apps.core.llm.connect", lambda: (model, client))
+        model.client = client  # type: ignore[attr-defined]
+        return model
+
+    return use
+
+
+def test_a_test_with_only_stubs_calls_nothing(
+    client: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("an outside call")
+
+    monkeypatch.setattr("apps.core.llm.connect", forbidden)
+    monkeypatch.setattr(status, "get_channel_layer", forbidden)
+    response = client.post(TEST_URL)
+    assert response.status_code == 200
+    assert response["X-Status-Test"] == "skipped"
+    assert response.json() == client.get(URL).json()
+    assert not ModelCall.objects.exists()
+
+
+def test_a_test_needs_sign_in(api_client: Any) -> None:
+    assert api_client.post(TEST_URL).status_code == 401
+
+
+def test_a_working_model_is_ok_for_both_parts_with_one_call(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+
+    real_models(settings, "openai")
+    model = fake_model([assistant_message("OK")])
+    response = client.post(TEST_URL)
+    assert response.status_code == 200
+    assert response["X-Status-Test"] == "run"
+    got = {p["id"]: p for p in response.json()["parts"]}
+    for part in ("assistant", "extraction"):
+        assert (got[part]["state"], got[part]["problem"]) == ("ok", None)
+        assert got[part]["checked_at"] is not None
+    assert len(model.calls) == 1  # one provider and model: one call
+    assert model.client.closed
+
+
+def test_a_few_tokens_are_asked_for(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+
+    real_models(settings, "openai")
+    model = fake_model([assistant_message("OK")])
+    client.post(TEST_URL)
+    assert model.calls[0].model_settings.max_tokens == status.TEST_OUTPUT_TOKENS
+
+
+def test_a_401_is_failing_with_auth_failed_and_no_secret(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    real_models(settings, "openai")
+    fake_model(_unauthorized())
+    response = client.post(TEST_URL)
+    assert response.status_code == 200
+    got = {p["id"]: p for p in response.json()["parts"]}
+    for part in ("assistant", "extraction"):
+        assert (got[part]["state"], got[part]["problem"]) == ("failing", "auth_failed")
+    assert "denied" not in response.content.decode()
+    assert KEY not in response.content.decode()
+
+
+def test_a_timeout_is_failing_with_timeout(
+    client: Any, settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_models(settings, "openai")
+
+    async def slow() -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(status, "_call_model", slow)
+    got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
+    assert (got["extraction"]["state"], got["extraction"]["problem"]) == (
+        "failing",
+        "timeout",
+    )
+
+
+def test_an_unusable_answer_still_counts_as_reached(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents import ModelBehaviorError
+
+    real_models(settings, "openai")
+    fake_model(ModelBehaviorError("garbled"))
+    got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
+    assert got["extraction"]["state"] == "ok"
+
+
+def test_the_models_text_is_never_logged(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+    from structlog.testing import capture_logs
+
+    real_models(settings, "openai")
+    fake_model([assistant_message("MODEL-SAID-THIS")])
+    with capture_logs() as logs:
+        response = client.post(TEST_URL)
+    assert "MODEL-SAID-THIS" not in str(logs) + response.content.decode()
+
+
+def test_a_second_test_inside_a_minute_answers_the_stored_result(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+
+    real_models(settings, "openai")
+    model = fake_model([assistant_message("OK")], _unauthorized())
+    first = client.post(TEST_URL)
+    second = client.post(TEST_URL)
+    assert first["X-Status-Test"] == "run"
+    assert second["X-Status-Test"] == "cached"
+    assert second.json() == first.json()
+    assert len(model.calls) == 1
+
+
+def test_a_test_runs_again_after_a_minute(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+
+    from apps.core.models import StatusTestClaim
+
+    real_models(settings, "openai")
+    model = fake_model([assistant_message("OK")], [assistant_message("OK")])
+    client.post(TEST_URL)
+    StatusTestClaim.objects.update(claimed_at=timezone.now() - timedelta(seconds=61))
+    assert client.post(TEST_URL)["X-Status-Test"] == "run"
+    assert len(model.calls) == 2
+
+
+def test_a_test_writes_past_the_write_throttle(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+
+    from apps.core.models import StatusTestClaim
+
+    real_models(settings, "openai")
+    fake_model([assistant_message("OK")], [assistant_message("OK")])
+    client.post(TEST_URL)
+    first = ModelCall.objects.get(part="extraction").checked_at
+    StatusTestClaim.objects.update(claimed_at=None)
+    client.post(TEST_URL)
+    assert ModelCall.objects.get(part="extraction").checked_at > first
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_requests_claim_the_test_once() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    status._claim_test()  # the row exists: the threads race on the UPDATE
+    from apps.core.models import StatusTestClaim
+
+    StatusTestClaim.objects.update(claimed_at=None)
+
+    def claim() -> bool:
+        try:
+            return status._claim_test()
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(lambda _: claim(), range(8)))
+    assert results.count(True) == 1
+
+
+def test_a_test_pings_the_channel_layer_afresh(
+    client: Any, redis_layer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pings: list[int] = []
+
+    class Counting(_Layer):
+        async def new_channel(self) -> str:
+            pings.append(1)
+            return "specific.x"
+
+    monkeypatch.setattr(status, "get_channel_layer", lambda: Counting())
+    parts(client)  # fills the cache
+    response = client.post(TEST_URL)
+    assert len(pings) == 2
+    assert response["X-Status-Test"] == "run"
+    got = {p["id"]: p for p in response.json()["parts"]}["live_updates"]
+    assert got["state"] == "ok"
+
+
+def test_a_failing_ping_in_a_test_is_a_state_not_a_500(
+    client: Any, redis_layer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(status, "get_channel_layer", lambda: _Layer(OSError("x")))
+    response = client.post(TEST_URL)
+    assert response.status_code == 200
+    got = {p["id"]: p for p in response.json()["parts"]}["live_updates"]
+    assert (got["state"], got["problem"]) == ("failing", "unreachable")
+
+
+def test_real_storage_stays_unknown_and_is_not_called(
+    client: Any, settings: Any, fake_model: Any
+) -> None:
+    from agents.testing import assistant_message
+
+    real_models(settings, "openai")
+    settings.DOCUMENT_STORAGE = "azure"
+    fake_model([assistant_message("OK")])
+    got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
+    assert got["storage"]["state"] == "unknown"
+
+
+def test_a_missing_setting_is_not_called(
+    client: Any, settings: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_models(settings, "openai")
+    settings.LLM_MODEL = ""
+
+    def forbidden() -> Any:
+        raise AssertionError("an outside call")
+
+    monkeypatch.setattr("apps.core.llm.connect", forbidden)
+    got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
+    assert got["extraction"]["problem"] == "not_configured"

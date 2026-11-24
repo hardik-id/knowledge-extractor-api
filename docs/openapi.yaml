@@ -1502,6 +1502,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /status/test:
+    post:
+      operationId: status_test_create
+      description: |-
+        Check every real part now: a model call of a few tokens (one per provider and
+        model in use), a ping of the channel layer. At most one test per minute for the
+        whole deployment. A failing part is a state in the body, not an error.
+      tags:
+      - status
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendStatus'
+          description: The status after the test. Header `X-Status-Test` is `run`
+            when this call tested, `cached` when the last test is under a minute old
+            and its stored result is returned, `skipped` when nothing is real.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /ws-ticket:
     post:
       operationId: ws_ticket_create

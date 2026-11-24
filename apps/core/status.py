@@ -11,7 +11,7 @@ import asyncio
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from asgiref.sync import async_to_sync, sync_to_async
@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from apps.core import telemetry
 from apps.core.llm import describe_failure, missing_settings
-from apps.core.models import ModelCall
+from apps.core.models import ModelCall, StatusTestClaim
 
 log = structlog.get_logger(__name__)
 
@@ -91,16 +91,24 @@ def _now() -> float:
     return time.monotonic()
 
 
-def record_call(part: str, error: BaseException | None = None) -> None:
+def record_call(
+    part: str, error: BaseException | None = None, *, force: bool = False
+) -> None:
     """Remember how the last real call of ``part`` went. Never raises, never fails the call.
 
-    A repeated outcome is written at most once per ``RECORD_INTERVAL_SECONDS``.
+    A repeated outcome is written at most once per ``RECORD_INTERVAL_SECONDS``;
+    ``force`` (a status test) always writes.
     """
     try:
         problem = "" if error is None else problem_code(error)
         now = _now()
         last = _written.get(part)
-        if last and last[0] == problem and now - last[1] < RECORD_INTERVAL_SECONDS:
+        if (
+            not force
+            and last
+            and last[0] == problem
+            and now - last[1] < RECORD_INTERVAL_SECONDS
+        ):
             return
         ModelCall.objects.update_or_create(
             part=part, defaults={"problem": problem, "checked_at": timezone.now()}
@@ -198,7 +206,7 @@ _ping_cache: tuple[float, datetime, str | None] | None = None
 _ping_lock = threading.Lock()
 
 
-def _cached_ping() -> tuple[datetime, str | None]:
+def _cached_ping(fresh: bool = False) -> tuple[datetime, str | None]:
     """Ping the channel layer, at most once per ``PING_CACHE_SECONDS``, one in flight.
 
     Other callers wait for the one ping and reuse its answer, so repeated requests cost
@@ -207,7 +215,7 @@ def _cached_ping() -> tuple[datetime, str | None]:
     global _ping_cache
     with _ping_lock:
         cached = _ping_cache
-        if cached and _now() - cached[0] < PING_CACHE_SECONDS:
+        if cached and not fresh and _now() - cached[0] < PING_CACHE_SECONDS:
             return cached[1], cached[2]
         problem = None
         try:
@@ -301,6 +309,104 @@ def build_status() -> BackendStatus:
             _worker_part(),
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /status/test
+# ---------------------------------------------------------------------------
+
+TEST_INTERVAL_SECONDS = 60
+TEST_MODEL_TIMEOUT_SECONDS = 20.0
+TEST_OUTPUT_TOKENS = 8
+
+
+def _real_model_parts() -> list[str]:
+    parts = []
+    if settings.ASSISTANT_AGENT == "openai":
+        parts.append("assistant")
+    if settings.EXTRACTOR == "llm":
+        parts.append("extraction")
+    return parts
+
+
+def _claim_test() -> bool:
+    """Take the right to run a test, for the whole deployment. One conditional UPDATE."""
+    StatusTestClaim.objects.get_or_create(key="status")
+    now = timezone.now()
+    taken = (
+        StatusTestClaim.objects.filter(key="status")
+        .filter(
+            Q(claimed_at__isnull=True)
+            | Q(claimed_at__lt=now - timedelta(seconds=TEST_INTERVAL_SECONDS))
+        )
+        .update(claimed_at=now)
+    )
+    return taken == 1
+
+
+async def _call_model() -> None:
+    """A model call of a few tokens. The answer is neither kept nor logged."""
+    from agents import Agent, ModelSettings, RunConfig, Runner
+
+    from apps.core.llm import connect, output_limit
+
+    model, client = connect()
+    try:
+        agent: Agent[Any] = Agent(
+            name="Status test",
+            instructions="Answer with the single word OK.",
+            model=model,
+            model_settings=ModelSettings(
+                store=False, **output_limit(TEST_OUTPUT_TOKENS)
+            ),
+        )
+        await asyncio.wait_for(
+            Runner.run(
+                agent,
+                "Ping.",
+                max_turns=1,
+                run_config=RunConfig(
+                    tracing_disabled=True, trace_include_sensitive_data=False
+                ),
+            ),
+            TEST_MODEL_TIMEOUT_SECONDS,
+        )
+    finally:
+        await client.close()
+
+
+def _test_model() -> BaseException | None:
+    """The one test call for the model in use; the failure, or None when it worked."""
+    from agents import ModelBehaviorError, ModelRefusalError
+
+    try:
+        asyncio.run(_call_model())
+    except ModelBehaviorError, ModelRefusalError:
+        return None  # an unusable answer still means the model was reached
+    except Exception as error:
+        log.warning("status_test_model_failed", **describe_failure(error))
+        return error
+    return None
+
+
+def run_test() -> str:
+    """Check every real part now. ``run`` when it did, ``cached`` when the last test is
+    under a minute old (the stored result stands), ``skipped`` when nothing is real, so
+    nothing is called."""
+    models = _real_model_parts()
+    live = "InMemory" not in settings.CHANNEL_LAYERS["default"]["BACKEND"]
+    if not models and not live:
+        return "skipped"
+    if not _claim_test():
+        return "cached"
+    if models and not missing_settings():
+        # Assistant and extractor use one provider and model: one call for both.
+        failure = _test_model()
+        for part in models:
+            record_call(part, failure, force=True)
+    if live:
+        _cached_ping(fresh=True)
+    return "run"
 
 
 def log_backend_status() -> None:

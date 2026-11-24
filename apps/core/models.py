@@ -60,3 +60,22 @@ class ModelCall(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.part}: {self.problem or 'ok'}"
+
+
+class StatusTestClaim(BaseModel):
+    """The single row that limits ``POST /status/test`` to one real test per minute.
+
+    ``claimed_at`` is the start of the last test. A request takes the claim with one
+    conditional UPDATE, so the limit holds across processes and concurrent requests.
+    """
+
+    key = models.CharField(
+        max_length=16, unique=True, default="status", db_default="status"
+    )
+    claimed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = "core_status_test_claim"
+
+    def __str__(self) -> str:
+        return f"{self.key}: {self.claimed_at}"

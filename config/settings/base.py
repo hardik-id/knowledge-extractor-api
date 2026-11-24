@@ -347,7 +347,7 @@ CORS_ALLOW_HEADERS = [
     "tracestate",
     "baggage",
 ]
-CORS_EXPOSE_HEADERS = ["ETag", "X-Request-ID", "Server-Timing"]
+CORS_EXPOSE_HEADERS = ["ETag", "X-Request-ID", "Server-Timing", "X-Status-Test"]
 
 # Security headers on every response (HSTS is set in production.py).
 SECURE_CONTENT_TYPE_NOSNIFF = True

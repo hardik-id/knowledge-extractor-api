@@ -876,3 +876,11 @@ def test_a_missing_setting_is_not_called(
     monkeypatch.setattr("apps.core.llm.connect", forbidden)
     got = {p["id"]: p for p in client.post(TEST_URL).json()["parts"]}
     assert got["extraction"]["problem"] == "not_configured"
+
+
+def test_a_cross_origin_test_exposes_its_header(client: Any, settings: Any) -> None:
+    response = client.post(TEST_URL, HTTP_ORIGIN="http://localhost:3000")
+    assert response["Access-Control-Allow-Origin"] == "http://localhost:3000"
+    exposed = response["Access-Control-Expose-Headers"].lower()
+    assert "x-status-test" in exposed
+    assert "etag" in exposed  # what was exposed before stays

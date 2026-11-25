@@ -300,9 +300,11 @@ class GenerateChunkingSerializer(serializers.Serializer):  # type: ignore[type-a
     source_url = serializers.CharField(
         required=False, allow_null=True, allow_blank=True, max_length=CUSTOM_URL_MAX
     )
-    size = serializers.IntegerField(required=False)
+    size = serializers.IntegerField(required=False, allow_null=True)
 
-    def validate_size(self, value: int) -> int:
+    def validate_size(self, value: int | None) -> int | None:
+        if value is None:
+            return None
         smallest, largest = chunk_size_range()
         if not smallest <= value <= largest:
             raise serializers.ValidationError(

@@ -13,6 +13,7 @@ dependencies = [
     "django-tasks-db>=0.13.0",
     "djangorestframework>=3.18.3",
     "drf-spectacular[sidecar]>=0.30.0",
+    "httpx2>=2.16.2",
     "openai-agents>=0.25.0",
     "opentelemetry-exporter-otlp-proto-http>=1.45.2",
     "opentelemetry-instrumentation-asgi>=0.66b2",

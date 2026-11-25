@@ -379,3 +379,128 @@ def test_an_agent_that_writes_no_file_is_a_failure(
     )
     with pytest.raises(SplitterFailed):
         asyncio.run(author.author_splitter(request))
+
+
+def _scripted_commands(monkeypatch: pytest.MonkeyPatch, commands: list[str]) -> Any:
+    from agents.testing import (
+        ModelStep,
+        ScriptedModel,
+        assistant_message,
+        function_call,
+    )
+
+    from apps.extraction.tests.test_llm import FakeClient
+
+    steps = [
+        ModelStep(output=[function_call("exec_command", {"cmd": cmd}, call_id=f"c{n}")])
+        for n, cmd in enumerate(commands)
+    ]
+    model = ScriptedModel([*steps, ModelStep(output=[assistant_message("Done.")])])
+    monkeypatch.setattr("apps.core.llm.connect", lambda: (model, FakeClient()))
+    return model
+
+
+def _agent_request() -> AuthorRequest:
+    return AuthorRequest(
+        instruction="x",
+        reference=None,
+        size=1000,
+        documents=[author.AuthorDocument(file_id="f", name="a.md", text="hi")],
+    )
+
+
+def test_the_agents_shell_has_a_time_limit_an_output_cap_and_no_stdin_tool(
+    on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(author, "EXEC_TIMEOUT_SECONDS", 1)
+    model = _scripted_commands(
+        monkeypatch,
+        ["yes", "sleep 30", "echo hello", "ls"],
+    )
+    with pytest.raises(SplitterFailed):  # it wrote no splitter.py
+        asyncio.run(author.author_splitter(_agent_request()))
+    names = [t.name for t in model.calls[0].tools]
+    assert "exec_command" in names and "write_stdin" not in names
+    endless = str(model.calls[1].input)
+    assert "[output cut]" in endless
+    assert "stopped after 1 seconds" in endless
+    assert len(endless) < 3 * author.EXEC_MAX_OUTPUT_BYTES
+    assert "stopped after 1 seconds" in str(model.calls[2].input)
+    assert "hello" in str(model.calls[3].input)
+
+
+def test_nothing_the_agent_started_survives_its_command(
+    on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apps.extraction.tests.test_custom_sandbox import _processes_running
+
+    _scripted_commands(monkeypatch, ["(sleep 123456 &) ; echo started"])
+    with pytest.raises(SplitterFailed):
+        asyncio.run(author.author_splitter(_agent_request()))
+    assert _processes_running("123456") == []
+
+
+def test_a_cancelled_agent_run_kills_its_command(
+    on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apps.extraction.tests.test_custom_sandbox import _processes_running
+
+    _scripted_commands(monkeypatch, ["sleep 654321"])
+
+    async def scenario() -> None:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(1.5):
+                await author.author_splitter(_agent_request())
+
+    asyncio.run(scenario())
+    assert _processes_running("654321") == []
+
+
+def test_no_documents_is_a_422_with_a_message(client: Any, agent: FakeAgent) -> None:
+    empty = RunFactory(owner=client.handler._force_user)
+    answer = client.post(url(empty), BODY, format="json")
+    assert answer.status_code == 422
+    assert answer.json()["code"] == "validation_error"
+    assert answer.json()["message"] == (
+        "Add a document first: the splitting code is tested on the project's documents."
+    )
+    assert agent.requests == []
+
+
+def test_a_lone_surrogate_is_a_failure_not_a_500(
+    client: Any, run: Any, agent: FakeAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apps.documents.selectors import DocumentText
+
+    monkeypatch.setattr(
+        "apps.extraction.selectors.input_text",
+        lambda f: DocumentText("a\ud800b", "text/plain", "v"),
+    )
+    answer = client.post(url(run), BODY, format="json")
+    assert answer.status_code == 422
+    assert answer.json()["code"] == "custom_chunking_failed"
+
+
+def test_an_unforeseen_sandbox_error_is_a_failure_not_a_500(
+    client: Any, run: Any, on: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken(request: AuthorRequest) -> AgentAnswer:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(author, "agent_runner", lambda: broken)
+    answer = client.post(url(run), BODY, format="json")
+    assert answer.json()["code"] == "custom_chunking_failed"
+
+
+def test_a_null_size_is_the_default(client: Any, run: Any, agent: FakeAgent) -> None:
+    answer = client.post(url(run), {**BODY, "size": None}, format="json")
+    assert answer.status_code == 200
+    assert agent.requests[0].size == 4000
+
+
+def test_the_summary_is_one_clean_line() -> None:
+    assert author.clean_summary("Splits\x00 at\n\n headings.\x07\x1b[0m") == (
+        "Splits at headings.[0m"
+    )
+    assert len(author.clean_summary("x" * 5000)) == 1000
+    assert author.clean_summary("\x00\x01") == ""

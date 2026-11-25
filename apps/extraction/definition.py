@@ -135,7 +135,7 @@ class CustomChunking(BaseModel):
     source_url: Annotated[
         Text | None, StringConstraints(strip_whitespace=True, max_length=CUSTOM_URL_MAX)
     ] = None
-    code: Annotated[Text, StringConstraints(max_length=CUSTOM_CODE_MAX)]
+    code: Annotated[Text, StringConstraints(max_length=CUSTOM_CODE_MAX)] = ""
     summary: Annotated[
         Text, StringConstraints(strip_whitespace=True, max_length=CUSTOM_SUMMARY_MAX)
     ] = ""

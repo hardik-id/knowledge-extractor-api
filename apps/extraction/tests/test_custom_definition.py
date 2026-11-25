@@ -148,3 +148,13 @@ def test_a_definition_version_carries_the_custom_block(run: Any) -> None:
     chunking = Definition.from_version(version).chunking
     assert chunking.custom is not None
     assert chunking.custom.instruction == CUSTOM["instruction"]
+
+
+def test_a_custom_object_without_code_gives_the_contract_message(
+    client: Any, run: Any
+) -> None:
+    body = {"instruction": "x", "source_url": None, "summary": ""}
+    refused = put(client, run, {"strategy": "custom", "custom": body})
+    assert refused.status_code == 422
+    assert "Generate and apply the splitting code first." in str(refused.json())
+    assert "Field required" not in str(refused.json())

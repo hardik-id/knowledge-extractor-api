@@ -33,6 +33,9 @@ _BLOCKS = frozenset(
 )
 
 
+_SITE_LOCAL = ipaddress.ip_network("fec0::/10")
+
+
 class ReferenceRefused(Exception):
     """The link may not be fetched or its page cannot be used; ``str`` is the reason."""
 
@@ -104,6 +107,8 @@ def _is_public(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
             return False
         if address.sixtofour is not None and not _is_public(address.sixtofour):
             return False
+    if isinstance(address, ipaddress.IPv6Address) and address in _SITE_LOCAL:
+        return False
     return bool(
         address.is_global
         and not (

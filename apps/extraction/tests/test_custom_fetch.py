@@ -92,6 +92,7 @@ def test_a_link_that_is_not_plain_https_is_refused(
         "::ffff:10.0.0.1",
         "64:ff9b::7f00:1",
         "2002:7f00:1::",
+        "fec0::1",
         "not an address",
     ],
 )

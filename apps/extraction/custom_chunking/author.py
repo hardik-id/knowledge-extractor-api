@@ -16,8 +16,11 @@ run as the server's own user (see ``sandbox``).
 """
 
 import asyncio
+import sys
+import unicodedata
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any, ClassVar
 
 import pydantic
 import structlog
@@ -31,12 +34,14 @@ from agents import (
 from agents.run import RunConfig
 from agents.sandbox import Manifest, SandboxAgent, SandboxRunConfig
 from agents.sandbox.capabilities import Shell
+from agents.sandbox.capabilities.tools import ExecCommandTool
 from agents.sandbox.entries import File
 from agents.sandbox.sandboxes.unix_local import UnixLocalSandboxClient
 from django.conf import settings
 
 from apps.core import llm
 from apps.extraction.custom_chunking.errors import SplitterFailed
+from apps.extraction.custom_chunking.process import run_confined
 from apps.extraction.custom_chunking.sandbox import run_splitter
 from apps.extraction.definition import CUSTOM_CODE_MAX, CUSTOM_SUMMARY_MAX
 
@@ -74,8 +79,10 @@ runs your `split` on every document at the requested size and at a smaller one a
 the part counts and sizes, or the first rule that is broken, and prints OK when all is
 well. Fix the code and run the check again until it prints OK. Do not edit `check.py`.
 
-When it prints OK, finish with a plain-language summary of the rule in one or two
-sentences, for someone who does not read code, and nothing else.
+When it prints OK, finish with a plain-language description of the splitting rule in
+one or two sentences, for someone who does not read code. Describe only the rule: where
+parts begin and end and how a long part is cut. Do not mention files, commands, the
+checker, the workspace or that anything passed, and do not use code formatting.
 """
 
 CHECK = """\
@@ -171,8 +178,19 @@ async def author_splitter(request: AuthorRequest) -> Authored:
             )
         )
     return Authored(
-        code=code, summary=answer.summary[:CUSTOM_SUMMARY_MAX], documents=documents
+        code=code, summary=clean_summary(answer.summary), documents=documents
     )
+
+
+def clean_summary(summary: str) -> str:
+    """The summary as one plain line: control characters (NUL included) are dropped and
+    runs of whitespace become one space; at most ``CUSTOM_SUMMARY_MAX`` characters."""
+    kept = (
+        " " if ch.isspace() else ch
+        for ch in summary
+        if ch.isspace() or unicodedata.category(ch)[0] != "C"
+    )
+    return " ".join("".join(kept).split())[:CUSTOM_SUMMARY_MAX]
 
 
 def workspace(request: AuthorRequest) -> Manifest:
@@ -190,6 +208,63 @@ def workspace(request: AuthorRequest) -> Manifest:
     if request.reference:
         entries["reference.md"] = File(content=request.reference.encode("utf-8"))
     return Manifest(entries=entries)  # type: ignore[arg-type]
+
+
+EXEC_TIMEOUT_SECONDS = 15
+EXEC_MAX_OUTPUT_BYTES = 64_000
+
+
+class ConfinedExecArgs(pydantic.BaseModel):
+    """The shell tool's arguments, reduced to what is honoured."""
+
+    cmd: str = pydantic.Field(description="Shell command to execute.", min_length=1)
+    workdir: str | None = pydantic.Field(
+        default=None, description="Optional working directory inside the workspace."
+    )
+
+
+class ConfinedExecTool(ExecCommandTool):
+    """``exec_command`` that runs through ``run_confined``: a time limit, a cap on the
+    output, no terminal, no background process, no network where ``unshare`` works, and
+    the process group killed when the command ends or the run is cancelled."""
+
+    args_model: ClassVar[type[ConfinedExecArgs]] = ConfinedExecArgs  # type: ignore[assignment]
+    tool_description: ClassVar[str] = (
+        f"Runs a shell command in the workspace and returns its output. Commands stop "
+        f"after {EXEC_TIMEOUT_SECONDS} seconds, long output is cut, nothing keeps "
+        "running afterwards and there is no network."
+    )
+
+    async def _run(self, args: Any, wrapped_command: str) -> str:
+        root = Path(self.session.state.manifest.root)
+        bin_dir = str(Path(sys.executable).parent)
+        outcome = await run_confined(
+            ["/bin/sh", "-c", wrapped_command],
+            cwd=root,
+            timeout=EXEC_TIMEOUT_SECONDS,
+            max_output=EXEC_MAX_OUTPUT_BYTES,
+            env={
+                "PATH": f"{bin_dir}:/usr/local/bin:/usr/bin:/bin",
+                "HOME": str(root),
+                "LANG": "C.UTF-8",
+            },
+        )
+        output = outcome.output.decode("utf-8", errors="replace")
+        if outcome.truncated:
+            output += "\n[output cut]"
+        if outcome.timed_out:
+            return f"Command stopped after {EXEC_TIMEOUT_SECONDS} seconds.\n{output}"
+        return f"Exit code: {outcome.exit_code}\nOutput:\n{output}"
+
+
+def _confine_shell(tools: object) -> None:
+    """``Shell(configure_tools=...)``: swap in the limited tool, drop ``write_stdin``."""
+    tools.exec_command = ConfinedExecTool(  # type: ignore[attr-defined]
+        session=tools.exec_command.session,  # type: ignore[attr-defined]
+        user=tools.exec_command.user,  # type: ignore[attr-defined]
+        workspace_scope=tools.workspace_scope,  # type: ignore[attr-defined]
+    )
+    tools.write_stdin = None  # type: ignore[attr-defined]
 
 
 def _prompt(request: AuthorRequest) -> str:
@@ -215,7 +290,7 @@ async def run_agent(request: AuthorRequest) -> AgentAnswer:
                     **llm.output_limit(settings.EXTRACTION_MAX_OUTPUT_TOKENS),
                 ),
                 instructions=INSTRUCTIONS,
-                capabilities=[Shell()],
+                capabilities=[Shell(configure_tools=_confine_shell)],
             )
             result = await Runner.run(
                 agent,

@@ -146,3 +146,20 @@ def test_the_assistant_preview_works_with_custom(
         model.enqueue(empty())
     selectors.preview_records(user, run.pk, code.DOCUMENT, draft())
     assert len(model.calls) == 6
+
+
+def test_an_empty_text_makes_no_parts_and_starts_no_sandbox(
+    model: ScriptedModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[object] = []
+
+    async def no_process(*args: Any, **kwargs: Any) -> Any:
+        started.append(args)
+        raise AssertionError("a process was started")
+
+    monkeypatch.setattr(
+        "apps.extraction.custom_chunking.process.asyncio.create_subprocess_exec",
+        no_process,
+    )
+    assert LlmExtractor().extract("", definition(), []) == []
+    assert started == []

@@ -321,6 +321,14 @@ ANTHROPIC_BASE_URL = env.str(
 CUSTOM_CHUNKING = env.str("CUSTOM_CHUNKING", default="off")  # off | local
 if CUSTOM_CHUNKING not in ("off", "local"):
     raise environ.ImproperlyConfigured("CUSTOM_CHUNKING must be off or local.")
+if CUSTOM_CHUNKING == "local" and AUTH_MODE != "dev":
+    # Any signed-in person can save code as a configuration's chunking, and it runs
+    # as the server's user: acceptable only for one developer on their own machine.
+    raise environ.ImproperlyConfigured(
+        "CUSTOM_CHUNKING=local is a prototype without isolation (code a person saves "
+        "and a model writes runs as the server's own user) and needs AUTH_MODE=dev: "
+        "a single developer machine only."
+    )
 CUSTOM_CHUNKING_GENERATE_TIMEOUT_SECONDS = env.int(
     "CUSTOM_CHUNKING_GENERATE_TIMEOUT_SECONDS", default=120
 )

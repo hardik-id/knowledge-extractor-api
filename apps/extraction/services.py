@@ -3,6 +3,7 @@
 A service takes the acting user as its first argument.
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -180,19 +181,32 @@ def generate_custom_chunking(
             raise ApiError(
                 "validation_error", details={"source_url": [str(refusal)]}
             ) from None
-    documents = selectors.custom_chunking_documents(user, run_id)
+    documents = [
+        d for d in selectors.custom_chunking_documents(user, run_id) if d.text.strip()
+    ]
+    if not documents:
+        message = (
+            "Add a document first: the splitting code is tested on the project's "
+            "documents."
+        )
+        raise ApiError("validation_error", message, {"documents": [message]})
     request = AuthorRequest(
         instruction=instruction, reference=reference, size=size, documents=documents
     )
     try:
         authored = run_with_deadline(request)
-    except SplitterFailed, SplitterTimedOut:
+    except SplitterFailed, SplitterTimedOut, UnicodeError:
         raise ApiError("custom_chunking_failed") from None
     except TimeoutError:
         raise ApiError("custom_chunking_timeout") from None
+    except ApiError, asyncio.CancelledError:
+        raise
     except (APIError, AzureError, AgentsException, OSError) as error:
         logger.warning("custom chunking: model failed: %s", type(error).__name__)
         raise ApiError("model_unreachable") from None
+    except Exception as error:  # the SDK's sandbox errors, and anything unforeseen
+        logger.warning("custom chunking: failed: %s", type(error).__name__)
+        raise ApiError("custom_chunking_failed") from None
     texts = {document.file_id: document.text for document in documents}
     return GeneratedChunking(
         code=authored.code,

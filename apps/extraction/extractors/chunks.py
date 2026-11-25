@@ -81,7 +81,7 @@ def split_by(text: str, strategy: Strategy, size: int) -> list[tuple[int, int]]:
         spans = _library(text, TextSplitter(size, trim=False))
     else:
         raise ValueError(f"unknown chunking strategy: {strategy!r}")
-    _verify(text, spans, size)
+    verify_ranges(text, spans, size)
     return spans
 
 
@@ -116,7 +116,12 @@ def _fixed(text: str, size: int) -> list[tuple[int, int]]:
     return spans
 
 
-def _verify(text: str, spans: list[tuple[int, int]], size: int) -> None:
+def verify_ranges(text: str, spans: list[tuple[int, int]], size: int) -> None:
+    """Raise ``RuntimeError`` unless ``spans`` are a valid split of ``text`` at ``size``.
+
+    In order from 0, no gap, no overlap, none empty, none longer than ``size``, ending
+    at ``len(text)``. Also the check of splitting code a model wrote.
+    """
     position = 0
     for start, end in spans:
         if start != position or end <= start or end - start > size:

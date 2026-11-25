@@ -3,7 +3,7 @@
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *
-from .base import AUTH_MODE, LLM_PROVIDER, env
+from .base import AUTH_MODE, CUSTOM_CHUNKING, LLM_PROVIDER, env
 
 # env.str without a default raises ImproperlyConfigured naming the variable.
 SECRET_KEY = env.str("DJANGO_SECRET_KEY")
@@ -19,6 +19,13 @@ if LLM_PROVIDER == "anthropic":
     raise ImproperlyConfigured(
         "LLM_PROVIDER=anthropic is for local testing and is not allowed in "
         "production; set LLM_PROVIDER=azure."
+    )
+
+if CUSTOM_CHUNKING != "off":
+    raise ImproperlyConfigured(
+        "CUSTOM_CHUNKING=local is a prototype without isolation (the code a model "
+        "writes runs as the server's own user) and is not allowed in production; "
+        "set CUSTOM_CHUNKING=off."
     )
 
 # HTTPS. TLS ends at the proxy, which must send X-Forwarded-Proto.

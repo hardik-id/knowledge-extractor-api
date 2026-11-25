@@ -4,7 +4,12 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.extraction import selectors
-from apps.extraction.definition import stored_chunking
+from apps.extraction.definition import (
+    CUSTOM_INSTRUCTION_MAX,
+    CUSTOM_URL_MAX,
+    chunk_size_range,
+    stored_chunking,
+)
 from apps.extraction.extractors.base import Definition
 from apps.extraction.models import (
     DefinitionVersion,
@@ -286,3 +291,42 @@ class TemplateSerializer(serializers.Serializer):  # type: ignore[type-arg]
 class TemplateListSerializer(serializers.Serializer):  # type: ignore[type-arg]
     items = TemplateSerializer(many=True)
     next = serializers.CharField(allow_null=True)
+
+
+class GenerateChunkingSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The body of ``POST .../chunking/generate``."""
+
+    instruction = serializers.CharField(max_length=CUSTOM_INSTRUCTION_MAX)
+    source_url = serializers.CharField(
+        required=False, allow_null=True, allow_blank=True, max_length=CUSTOM_URL_MAX
+    )
+    size = serializers.IntegerField(required=False)
+
+    def validate_size(self, value: int) -> int:
+        smallest, largest = chunk_size_range()
+        if not smallest <= value <= largest:
+            raise serializers.ValidationError(
+                f"The chunk size must be between {smallest} and {largest} characters."
+            )
+        return value
+
+
+class GeneratedPartSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    start = serializers.IntegerField()
+    end = serializers.IntegerField()
+    starts_with = serializers.CharField(allow_blank=True)
+
+
+class GeneratedDocumentSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    file_id = serializers.CharField()
+    name = serializers.CharField()
+    characters = serializers.IntegerField()
+    parts = GeneratedPartSerializer(many=True)
+
+
+class GeneratedChunkingSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The code, what it does and the parts it makes on the run's documents."""
+
+    code = serializers.CharField()
+    summary = serializers.CharField(allow_blank=True)
+    documents = GeneratedDocumentSerializer(many=True)

@@ -1218,6 +1218,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /runs/{run_id}/stages/extract/chunking/generate:
+    post:
+      operationId: runs_stages_extract_chunking_generate_create
+      description: |-
+        Have an agent write splitting code for the ``custom`` chunking and check it on the
+        run's documents. Slow (up to a minute or two); nothing is saved.
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateChunkingRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedChunking'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /runs/{run_id}/stages/extract/definition:
     get:
       operationId: runs_stages_extract_definition_retrieve
@@ -1624,7 +1677,10 @@ components:
       - parts
     Chunking:
       type: object
-      description: How a long document is cut into parts. ``size`` is null for ``auto``.
+      description: |-
+        How a long document is cut into parts. ``size`` is null for ``auto``.
+
+        ``custom`` is an object only for the ``custom`` strategy, otherwise null.
       properties:
         strategy:
           allOf:
@@ -1633,9 +1689,16 @@ components:
         size:
           type: integer
           nullable: true
+        custom:
+          allOf:
+          - $ref: '#/components/schemas/CustomChunking'
+          nullable: true
     ChunkingRequest:
       type: object
-      description: How a long document is cut into parts. ``size`` is null for ``auto``.
+      description: |-
+        How a long document is cut into parts. ``size`` is null for ``auto``.
+
+        ``custom`` is an object only for the ``custom`` strategy, otherwise null.
       properties:
         strategy:
           allOf:
@@ -1643,6 +1706,10 @@ components:
           default: auto
         size:
           type: integer
+          nullable: true
+        custom:
+          allOf:
+          - $ref: '#/components/schemas/CustomChunkingRequest'
           nullable: true
     CreateProjectRequest:
       type: object
@@ -1667,6 +1734,51 @@ components:
             $ref: '#/components/schemas/RunItemRequest'
       required:
       - items
+    CustomChunking:
+      type: object
+      description: The splitting code a sandbox agent wrote for the ``custom`` strategy.
+      properties:
+        instruction:
+          type: string
+          maxLength: 2000
+        source_url:
+          type: string
+          nullable: true
+          maxLength: 2000
+        code:
+          type: string
+          maxLength: 20000
+        summary:
+          type: string
+          default: ''
+          maxLength: 1000
+      required:
+      - code
+      - instruction
+    CustomChunkingRequest:
+      type: object
+      description: The splitting code a sandbox agent wrote for the ``custom`` strategy.
+      properties:
+        instruction:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        source_url:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 2000
+        code:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        summary:
+          type: string
+          default: ''
+          maxLength: 1000
+      required:
+      - code
+      - instruction
     Definition:
       type: object
       properties:
@@ -1981,6 +2093,69 @@ components:
         * `json` - json
         * `markdown` - markdown
         * `csv` - csv
+    GenerateChunkingRequest:
+      type: object
+      description: The body of ``POST .../chunking/generate``.
+      properties:
+        instruction:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        source_url:
+          type: string
+          nullable: true
+          maxLength: 2000
+        size:
+          type: integer
+      required:
+      - instruction
+    GeneratedChunking:
+      type: object
+      description: The code, what it does and the parts it makes on the run's documents.
+      properties:
+        code:
+          type: string
+        summary:
+          type: string
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedDocument'
+      required:
+      - code
+      - documents
+      - summary
+    GeneratedDocument:
+      type: object
+      properties:
+        file_id:
+          type: string
+        name:
+          type: string
+        characters:
+          type: integer
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedPart'
+      required:
+      - characters
+      - file_id
+      - name
+      - parts
+    GeneratedPart:
+      type: object
+      properties:
+        start:
+          type: integer
+        end:
+          type: integer
+        starts_with:
+          type: string
+      required:
+      - end
+      - start
+      - starts_with
     Me:
       type: object
       properties:
@@ -2463,12 +2638,14 @@ components:
       - heading
       - paragraph
       - fixed
+      - custom
       type: string
       description: |-
         * `auto` - auto
         * `heading` - heading
         * `paragraph` - paragraph
         * `fixed` - fixed
+        * `custom` - custom
     Template:
       type: object
       properties:

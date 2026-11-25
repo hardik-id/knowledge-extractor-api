@@ -48,6 +48,19 @@ ERRORS: dict[str, ErrorCode] = {
     "definition_version_not_found": ErrorCode(
         404, "This version of the definition was not found."
     ),
+    "custom_chunking_off": ErrorCode(
+        409, "Custom chunking is turned off on this server."
+    ),
+    "model_not_configured": ErrorCode(409, "No language model is configured."),
+    "model_unreachable": ErrorCode(502, "The language model could not be reached."),
+    "custom_chunking_failed": ErrorCode(
+        422,
+        "The assistant could not write splitting code that works on these "
+        "documents. Try describing it differently.",
+    ),
+    "custom_chunking_timeout": ErrorCode(
+        504, "Writing the splitting code took too long. Try again."
+    ),
     "unknown_template": ErrorCode(422, "This template does not exist."),
     "template_not_found": ErrorCode(404, "Template not found."),
     "assistant_busy": ErrorCode(409, "The assistant is still answering."),

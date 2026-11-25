@@ -39,6 +39,11 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `invalid_definition` | 422 | The extraction definition is not valid. |
 | `definition_version_not_found` | 404 | This version of the definition was not found. |
 | `template_not_found` | 404 | Template not found. |
+| `custom_chunking_off` | 409 | Custom chunking is turned off on this server. |
+| `model_not_configured` | 409 | No language model is configured. |
+| `model_unreachable` | 502 | The language model could not be reached. |
+| `custom_chunking_failed` | 422 | The assistant could not write splitting code that works on these documents. Try describing it differently. |
+| `custom_chunking_timeout` | 504 | Writing the splitting code took too long. Try again. |
 | `unknown_template` | 422 | This template does not exist. |
 | `assistant_busy` | 409 | The assistant is still answering. |
 | `empty_message` | 422 | Write a message first. |

@@ -127,7 +127,7 @@ def test_the_tool_schema_matches_the_definition_rules() -> None:
 async def test_a_proposal_keeps_the_chunking_of_the_definition_it_was_made_from() -> (
     None
 ):
-    chunking = {"strategy": "fixed", "size": 2500}
+    chunking = {"strategy": "fixed", "size": 2500, "custom": None}
     model = ScriptedModel([[propose(proposal_args())], [assistant_message("Done.")]])
     events = await collect(
         OpenAIAgent(model), definition={**bare(), "chunking": chunking}
@@ -138,7 +138,7 @@ async def test_a_proposal_keeps_the_chunking_of_the_definition_it_was_made_from(
 
 @pytest.mark.asyncio
 async def test_a_chunking_the_model_writes_is_refused_or_overridden() -> None:
-    given = {"strategy": "fixed", "size": 2500}
+    given = {"strategy": "fixed", "size": 2500, "custom": None}
     wanted = {
         **proposal_args(),
         "definition": {**adr(), "chunking": {"strategy": "heading", "size": 1000}},

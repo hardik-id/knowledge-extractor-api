@@ -472,4 +472,5 @@ def test_an_old_stored_proposal_without_chunking_is_still_served(
     assert message["proposal"]["definition"]["chunking"] == {
         "strategy": "auto",
         "size": None,
+        "custom": None,
     }

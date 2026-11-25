@@ -13,6 +13,8 @@ from apps.extraction.api.serializers import (
     DefinitionVersionListSerializer,
     ExecutionSerializer,
     ExtractionSerializer,
+    GenerateChunkingSerializer,
+    GeneratedChunkingSerializer,
     ReplaceFieldValuesSerializer,
     ReviewValueSerializer,
     RevisionQuerySerializer,
@@ -79,6 +81,25 @@ def restore_definition_version(request: Request, run_id: str, version: int) -> R
     """Save a copy of an earlier version as the newest one."""
     restored = services.restore_definition(cast(User, request.user), run_id, version)
     return Response(DefinitionSerializer(restored).data)
+
+
+@extend_schema(
+    request=GenerateChunkingSerializer, responses=GeneratedChunkingSerializer
+)
+@api_view(["POST"])
+def generate_chunking(request: Request, run_id: str) -> Response:
+    """Have an agent write splitting code for the ``custom`` chunking and check it on the
+    run's documents. Slow (up to a minute or two); nothing is saved."""
+    body = GenerateChunkingSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    generated = services.generate_custom_chunking(
+        cast(User, request.user),
+        run_id,
+        instruction=body.validated_data["instruction"],
+        source_url=body.validated_data.get("source_url"),
+        size=body.validated_data.get("size"),
+    )
+    return Response(generated.model_dump())
 
 
 @extend_schema(request=StartExecutionSerializer, responses={202: ExecutionSerializer})

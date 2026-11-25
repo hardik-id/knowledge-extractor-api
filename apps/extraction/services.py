@@ -3,6 +3,7 @@
 A service takes the acting user as its first argument.
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -12,13 +13,34 @@ from pathlib import PurePosixPath
 from typing import Any
 from uuid import UUID
 
+from agents import AgentsException
+from azure.core.exceptions import AzureError
 from django.db import IntegrityError, transaction
+from openai import APIError
 
 from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
-from apps.extraction import selectors, tasks, telemetry, template_registry
+from apps.core.llm import missing_settings
+from apps.extraction import (
+    custom_chunking,
+    selectors,
+    tasks,
+    telemetry,
+    template_registry,
+)
 from apps.extraction.api.serializers import serialize_extraction
-from apps.extraction.definition import Field, stored_chunking
+from apps.extraction.custom_chunking.author import AuthorRequest, run_with_deadline
+from apps.extraction.custom_chunking.errors import SplitterFailed, SplitterTimedOut
+from apps.extraction.custom_chunking.fetch import ReferenceRefused, fetch_reference
+from apps.extraction.definition import (
+    CHUNK_DEFAULT_SIZE,
+    Field,
+    GeneratedChunking,
+    GeneratedDocument,
+    GeneratedPart,
+    chunk_size_range,
+    stored_chunking,
+)
 from apps.extraction.extractors import extractor_kind, get_extractor
 from apps.extraction.extractors.base import Definition, ExtractionError
 from apps.extraction.extractors.records import StoredRecord, stored_records
@@ -121,6 +143,99 @@ def restore_definition(user: User, run_id: Any, version: int) -> DefinitionVersi
         except IntegrityError:
             continue
     raise ApiError("conflict")
+
+
+def generate_custom_chunking(
+    user: User,
+    run_id: Any,
+    *,
+    instruction: str,
+    source_url: str | None,
+    size: int | None = None,
+) -> GeneratedChunking:
+    """Have an agent write the splitting code for ``instruction`` and check it on the
+    run's documents. Nothing is saved: the person applies the result in the draft.
+
+    409 ``custom_chunking_off`` and ``model_not_configured``; 422 ``validation_error``
+    for a refused link, ``custom_chunking_failed`` when no code that works came out;
+    504 ``custom_chunking_timeout``; 502 ``model_unreachable``. Someone else's run is 404.
+    """
+    runs.get_run(user, run_id)
+    instruction = instruction.strip()
+    source_url = (source_url or "").strip() or None
+    size = size or min(CHUNK_DEFAULT_SIZE, chunk_size_range()[1])
+    if not instruction:
+        raise ApiError(
+            "validation_error",
+            details={"instruction": ["Write what the parts should be."]},
+        )
+    if not custom_chunking.enabled():
+        raise ApiError("custom_chunking_off")
+    if missing_settings():
+        raise ApiError("model_not_configured")
+    reference = None
+    if source_url:
+        try:
+            reference = fetch_reference(source_url)
+        except ReferenceRefused as refusal:
+            raise ApiError(
+                "validation_error", details={"source_url": [str(refusal)]}
+            ) from None
+    documents = [
+        d for d in selectors.custom_chunking_documents(user, run_id) if d.text.strip()
+    ]
+    if not documents:
+        message = (
+            "Add a document first: the splitting code is tested on the project's "
+            "documents."
+        )
+        raise ApiError("validation_error", message, {"documents": [message]})
+    request = AuthorRequest(
+        instruction=instruction, reference=reference, size=size, documents=documents
+    )
+    try:
+        authored = run_with_deadline(request)
+    except SplitterFailed, SplitterTimedOut, UnicodeError:
+        raise ApiError("custom_chunking_failed") from None
+    except TimeoutError:
+        raise ApiError("custom_chunking_timeout") from None
+    except ApiError, asyncio.CancelledError:
+        raise
+    except (APIError, AzureError, AgentsException, OSError) as error:
+        logger.warning("custom chunking: model failed: %s", type(error).__name__)
+        raise ApiError("model_unreachable") from None
+    except Exception as error:  # the SDK's sandbox errors, and anything unforeseen
+        logger.warning("custom chunking: failed: %s", type(error).__name__)
+        raise ApiError("custom_chunking_failed") from None
+    texts = {document.file_id: document.text for document in documents}
+    return GeneratedChunking(
+        code=authored.code,
+        summary=authored.summary,
+        documents=[
+            GeneratedDocument(
+                file_id=d.file_id,
+                name=d.name,
+                characters=d.characters,
+                parts=[
+                    GeneratedPart(
+                        start=start,
+                        end=end,
+                        starts_with=_starts_with(texts[d.file_id][start:end]),
+                    )
+                    for start, end in d.ranges
+                ],
+            )
+            for d in authored.documents
+        ],
+    )
+
+
+def _starts_with(part: str) -> str:
+    """The first non-empty line of a part, cut to 80 characters."""
+    for line in part.splitlines():
+        if line.strip():
+            return line.strip()[:80]
+    return ""
 
 
 def _conflict(version: int) -> ApiError:

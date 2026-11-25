@@ -81,7 +81,7 @@ def test_the_default_is_the_adr_as_it_always_was() -> None:
         (Path(__file__).parent / "old_default.json").read_text("utf-8")
     )
     now = template_registry.default_template().definition.model_dump()
-    assert now.pop("chunking") == {"strategy": "auto", "size": None}
+    assert now.pop("chunking") == {"strategy": "auto", "size": None, "custom": None}
     assert now == old
     assert now["output"]["template"].endswith("{{decision}}\n")
 

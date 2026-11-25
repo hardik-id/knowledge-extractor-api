@@ -29,7 +29,10 @@ from openai import APIError
 
 from apps.core.llm import connect, describe_failure, missing_settings, output_limit
 from apps.core.status import record_call
-from apps.extraction import telemetry
+from apps.extraction import custom_chunking, telemetry
+from apps.extraction.custom_chunking.errors import SplitterFailed, SplitterTimedOut
+from apps.extraction.custom_chunking.sandbox import run_splitter
+from apps.extraction.definition import CustomChunking
 from apps.extraction.extractors.base import Definition, ExtractionError, RawRecord
 from apps.extraction.extractors.chunks import split_by
 from apps.extraction.extractors.llm_output import (
@@ -53,6 +56,9 @@ TOO_LONG_FOR_SIZE = (
     "A larger chunk size, or the Automatic strategy, may allow a longer document."
 )
 UNREADABLE = "This document contains characters that cannot be read."
+CUSTOM_OFF = "Custom chunking is turned off on this server."
+CUSTOM_FAILED = "The custom splitting code failed on this document."
+CUSTOM_TOO_SLOW = "The custom splitting code took too long on this document."
 TOO_LARGE = "This definition is too large to extract with."
 
 
@@ -163,10 +169,32 @@ class LlmExtractor:
         if len(text) > self._limit() * size:
             raise ExtractionError(_too_long(definition))
         try:
+            if chunking.strategy == "custom":
+                return self._custom_parts(text, chunking.custom, size)
             return split_by(text, chunking.strategy, size)
         except UnicodeEncodeError:
             # A lone surrogate (a JSON body can carry one) cannot go to the splitter.
             raise ExtractionError(UNREADABLE) from None
+
+    @staticmethod
+    def _custom_parts(
+        text: str, custom: CustomChunking | None, size: int
+    ) -> list[tuple[int, int]]:
+        """The parts the saved splitting code makes (docs/extraction.md, custom chunking).
+
+        ``extract`` runs in the worker and in a thread of the assistant's preview, with
+        no running loop, so the sandbox's async code runs under its own ``asyncio.run``.
+        """
+        if not custom_chunking.enabled():
+            raise ExtractionError(CUSTOM_OFF)
+        if custom is None:
+            raise ExtractionError(CUSTOM_FAILED)
+        try:
+            return asyncio.run(run_splitter(custom.code, text, size))
+        except SplitterTimedOut:
+            raise ExtractionError(CUSTOM_TOO_SLOW) from None
+        except SplitterFailed:
+            raise ExtractionError(CUSTOM_FAILED) from None
 
     @staticmethod
     def _failed(message: str, error: BaseException) -> ExtractionError:

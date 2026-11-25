@@ -10,6 +10,7 @@ from django.db import IntegrityError, transaction
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.documents.selectors import DocumentText
+from apps.extraction.custom_chunking.author import MAX_DOCUMENTS, AuthorDocument
 from apps.extraction.definition import Draft
 from apps.extraction.extractors import get_preview_extractor
 from apps.extraction.extractors.base import Definition, RawRecord, RawValue
@@ -136,6 +137,17 @@ def preview_records(
 def input_text(run_file: RunFile) -> DocumentText:
     """The text and ETag of the document a run file points at, read as the run's owner."""
     return documents.read_document(run_file.run.owner, run_file.source_ref)
+
+
+def custom_chunking_documents(user: User, run_id: Any) -> list[AuthorDocument]:
+    """The run's documents the author of custom splitting code works from: by name,
+    at most ``MAX_DOCUMENTS``, with their full text. Someone else's run is a 404."""
+    run = runs.get_run(user, run_id)
+    files = run.files.order_by("name", "pk")[:MAX_DOCUMENTS]
+    return [
+        AuthorDocument(file_id=str(f.pk), name=f.name, text=input_text(f).text)
+        for f in files
+    ]
 
 
 def example_records(run_id: Any) -> list[RawRecord]:

@@ -314,6 +314,29 @@ ANTHROPIC_BASE_URL = env.str(
     "ANTHROPIC_BASE_URL", default="https://api.anthropic.com/v1/"
 )
 
+# Custom chunking (docs/extraction.md): a sandbox agent writes the splitting code of a
+# configuration and the code runs in a local sandbox. PROTOTYPE: on Linux the local
+# sandbox adds no isolation, so the code runs as the server's own user. Off by default;
+# production refuses "local".
+CUSTOM_CHUNKING = env.str("CUSTOM_CHUNKING", default="off")  # off | local
+if CUSTOM_CHUNKING not in ("off", "local"):
+    raise environ.ImproperlyConfigured("CUSTOM_CHUNKING must be off or local.")
+if CUSTOM_CHUNKING == "local" and AUTH_MODE != "dev":
+    # Any signed-in person can save code as a configuration's chunking, and it runs
+    # as the server's user: acceptable only for one developer on their own machine.
+    raise environ.ImproperlyConfigured(
+        "CUSTOM_CHUNKING=local is a prototype without isolation (code a person saves "
+        "and a model writes runs as the server's own user) and needs AUTH_MODE=dev: "
+        "a single developer machine only."
+    )
+CUSTOM_CHUNKING_GENERATE_TIMEOUT_SECONDS = env.int(
+    "CUSTOM_CHUNKING_GENERATE_TIMEOUT_SECONDS", default=120
+)
+CUSTOM_CHUNKING_RUN_TIMEOUT_SECONDS = env.int(
+    "CUSTOM_CHUNKING_RUN_TIMEOUT_SECONDS", default=10
+)
+CUSTOM_CHUNKING_MAX_TURNS = env.int("CUSTOM_CHUNKING_MAX_TURNS", default=12)
+
 # Telemetry (OpenTelemetry, exported over OTLP/HTTP).
 OTEL_SDK_DISABLED = env.bool("OTEL_SDK_DISABLED", default=True)
 OTEL_SERVICE_NAME = env.str("OTEL_SERVICE_NAME", default="knowledge-extractor-api")

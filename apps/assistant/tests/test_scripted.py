@@ -300,7 +300,7 @@ def test_no_match_says_what_it_can_do_with_two_examples_and_proposes_nothing() -
 
 
 def test_every_proposal_keeps_the_chunking_of_the_draft_it_was_made_from() -> None:
-    chunking = {"strategy": "paragraph", "size": 2000}
+    chunking = {"strategy": "paragraph", "size": 2000, "custom": None}
     for message, start in [
         ("set this up for ADRs", {**bare(), "chunking": chunking}),
         ("find every policy requirement", {**bare(), "chunking": chunking}),

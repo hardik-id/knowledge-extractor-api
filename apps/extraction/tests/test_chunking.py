@@ -15,7 +15,7 @@ from apps.runs.tests.factories import RunFactory
 
 pytestmark = pytest.mark.django_db
 
-AUTO = {"strategy": "auto", "size": None}
+AUTO = {"strategy": "auto", "size": None, "custom": None}
 
 
 def url(run: Any, tail: str = "") -> str:
@@ -51,7 +51,7 @@ def test_a_new_definition_answers_auto(client: Any, run: Any) -> None:
 def test_save_and_read_back(client: Any, run: Any, strategy: str) -> None:
     saved = put(client, run, chunking={"strategy": strategy, "size": 2500})
     assert saved.status_code == 200, saved.json()
-    expected = {"strategy": strategy, "size": 2500}
+    expected = {"strategy": strategy, "size": 2500, "custom": None}
     assert saved.json()["chunking"] == expected
     assert client.get(url(run)).json()["chunking"] == expected
     assert client.get(url(run, "/versions/2")).json()["chunking"] == expected
@@ -68,23 +68,36 @@ def test_auto_drops_whatever_size_was_sent(client: Any, run: Any) -> None:
 def test_a_missing_size_is_4000(client: Any, run: Any, strategy: str) -> None:
     for chunking in ({"strategy": strategy}, {"strategy": strategy, "size": None}):
         saved = put(client, run, chunking=chunking)
-        assert saved.json()["chunking"] == {"strategy": strategy, "size": 4000}
+        assert saved.json()["chunking"] == {
+            "strategy": strategy,
+            "size": 4000,
+            "custom": None,
+        }
 
 
 def test_a_save_without_the_key_keeps_the_latest_chunking(
     client: Any, run: Any
 ) -> None:
     saved = put(client, run, chunking={"strategy": "paragraph", "size": 3000})
-    assert saved.json()["chunking"] == {"strategy": "paragraph", "size": 3000}
+    assert saved.json()["chunking"] == {
+        "strategy": "paragraph",
+        "size": 3000,
+        "custom": None,
+    }
     older_client = put(
         client, run, chunking=None
     )  # a client that does not know the key
     assert older_client.status_code == 200
     assert older_client.json()["version"] == 3
-    assert older_client.json()["chunking"] == {"strategy": "paragraph", "size": 3000}
+    assert older_client.json()["chunking"] == {
+        "strategy": "paragraph",
+        "size": 3000,
+        "custom": None,
+    }
     assert client.get(url(run)).json()["chunking"] == {
         "strategy": "paragraph",
         "size": 3000,
+        "custom": None,
     }
 
 
@@ -197,8 +210,8 @@ def test_the_history_reads_the_chunking_of_each_version(client: Any, run: Any) -
     ]
     assert chunkings == [
         AUTO,
-        {"strategy": "paragraph", "size": 1500},
-        {"strategy": "fixed", "size": 7000},
+        {"strategy": "paragraph", "size": 1500, "custom": None},
+        {"strategy": "fixed", "size": 7000, "custom": None},
     ]
 
 
@@ -208,7 +221,7 @@ def test_restore_keeps_the_restored_versions_chunking(client: Any, run: Any) -> 
     restored = client.post(url(run, "/versions/2/restore"))
     assert restored.status_code == 200
     assert restored.json()["version"] == 4
-    heading = {"strategy": "heading", "size": 2000}
+    heading = {"strategy": "heading", "size": 2000, "custom": None}
     assert restored.json()["chunking"] == heading
     assert client.get(url(run)).json()["chunking"] == heading
     assert client.post(url(run, "/versions/1/restore")).json()["chunking"] == AUTO
@@ -218,7 +231,7 @@ def test_a_version_from_before_the_column_reads_as_auto(client: Any, run: Any) -
     # What the migration gives an old row is the column's default; an empty
     # value must read as auto too.
     version = DefinitionVersionFactory(run=run, version=1)
-    assert version.chunking == AUTO
+    assert version.chunking == {"strategy": "auto", "size": None}
     assert client.get(url(run)).json()["chunking"] == AUTO
     DefinitionVersion.objects.filter(pk=version.pk).update(chunking={})
     assert client.get(url(run)).json()["chunking"] == AUTO
@@ -269,7 +282,11 @@ def test_a_template_with_chunking_starts_a_project_with_it(
     )
     assert created.status_code == 201, created.content
     path = f"/api/v1/runs/{created.json()['run_id']}/stages/extract/definition"
-    assert client.get(path).json()["chunking"] == {"strategy": "heading", "size": 4000}
+    assert client.get(path).json()["chunking"] == {
+        "strategy": "heading",
+        "size": 4000,
+        "custom": None,
+    }
 
 
 def test_preview_hands_the_drafts_chunking_to_the_extractor(
@@ -294,7 +311,11 @@ def test_preview_hands_the_drafts_chunking_to_the_extractor(
         }
     )
     selectors.preview_records(user, run.pk, "text", draft)
-    assert seen[0].chunking.model_dump() == {"strategy": "fixed", "size": 1500}
+    assert seen[0].chunking.model_dump() == {
+        "strategy": "fixed",
+        "size": 1500,
+        "custom": None,
+    }
 
 
 @pytest.mark.parametrize(
@@ -329,6 +350,7 @@ def test_the_range_with_the_setting_at_500(
     assert put(client, run, chunking={"strategy": "fixed"}).json()["chunking"] == {
         "strategy": "fixed",
         "size": 500,
+        "custom": None,
     }
     refused = put(client, run, chunking={"strategy": "fixed", "size": 501})
     assert "between 500 and 500" in str(refused.json())
@@ -348,6 +370,6 @@ def test_the_range_with_the_setting_at_5(client: Any, run: Any, settings: Any) -
     )
     assert stored_chunking({"strategy": "fixed", "size": 3000}).size == 5
     version = client.get(url(run, "/versions/2")).json()
-    assert version["chunking"] == {"strategy": "heading", "size": 5}
+    assert version["chunking"] == {"strategy": "heading", "size": 5, "custom": None}
     found = DefinitionVersion.objects.get(run=run, version=2)
     assert Definition.from_version(found).chunking.size == 5

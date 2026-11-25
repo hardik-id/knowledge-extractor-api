@@ -20,6 +20,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     StrictInt,
+    StringConstraints,
     field_validator,
     model_validator,
 )
@@ -31,10 +32,15 @@ Format = Literal["json", "markdown", "csv"]
 MODES: tuple[str, ...] = get_args(Mode)
 VALUE_TYPES: tuple[str, ...] = get_args(ValueType)
 FORMATS: tuple[str, ...] = get_args(Format)
-ChunkStrategy = Literal["auto", "heading", "paragraph", "fixed"]
+ChunkStrategy = Literal["auto", "heading", "paragraph", "fixed", "custom"]
 CHUNK_STRATEGIES: tuple[str, ...] = get_args(ChunkStrategy)
 CHUNK_MIN_SIZE = 1000
 CHUNK_DEFAULT_SIZE = 4000
+CUSTOM_INSTRUCTION_MAX = 2000
+CUSTOM_URL_MAX = 2000
+CUSTOM_CODE_MAX = 20000
+CUSTOM_SUMMARY_MAX = 1000
+CUSTOM_CODE_MISSING = "Generate and apply the splitting code first."
 
 
 def _without_nul(value: str) -> str:
@@ -112,6 +118,34 @@ def chunk_size_range() -> tuple[int, int]:
     return min(CHUNK_MIN_SIZE, largest), largest
 
 
+class CustomChunking(BaseModel):
+    """Splitting code written by a sandbox agent for the ``custom`` strategy (prototype).
+
+    ``instruction`` is the person's words, ``source_url`` an optional page the agent
+    read, ``code`` the Python source (``def split(text, size)``, see
+    ``apps.extraction.custom_chunking``) and ``summary`` what the code does.
+    """
+
+    instruction: Annotated[
+        Text,
+        StringConstraints(
+            strip_whitespace=True, min_length=1, max_length=CUSTOM_INSTRUCTION_MAX
+        ),
+    ]
+    source_url: Annotated[
+        Text | None, StringConstraints(strip_whitespace=True, max_length=CUSTOM_URL_MAX)
+    ] = None
+    code: Annotated[Text, StringConstraints(max_length=CUSTOM_CODE_MAX)] = ""
+    summary: Annotated[
+        Text, StringConstraints(strip_whitespace=True, max_length=CUSTOM_SUMMARY_MAX)
+    ] = ""
+
+    @field_validator("source_url")
+    @classmethod
+    def _blank_url_is_none(cls, value: str | None) -> str | None:
+        return value or None
+
+
 class Chunking(BaseModel):
     """How a long document is cut into parts: a strategy and a part size in characters.
 
@@ -119,17 +153,35 @@ class Chunking(BaseModel):
     ``size`` is None. The other strategies take a whole-number size from
     ``min(1000, EXTRACTION_CHUNK_CHARS)`` up to ``settings.EXTRACTION_CHUNK_CHARS``; a
     missing size is 4000 (or the largest allowed size when that is smaller).
+
+    ``custom`` is the splitting code of the ``custom`` strategy (sized like ``fixed``):
+    an object only for that strategy and without it the strategy is refused; for every
+    other strategy it is None, whatever was sent.
     """
 
     strategy: ChunkStrategy = "auto"
     size: StrictInt | None = None
+    custom: CustomChunking | None = None
 
     @model_validator(mode="before")
     @classmethod
-    def _auto_has_no_size(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("strategy", "auto") == "auto":
-            return {**data, "size": None}
+    def _drop_what_the_strategy_has_no_use_for(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        strategy = data.get("strategy", "auto")
+        if strategy == "auto":
+            data = {**data, "size": None}
+        if strategy != "custom":
+            data = {**data, "custom": None}
         return data
+
+    @model_validator(mode="after")
+    def _custom_needs_code(self) -> Self:
+        if self.strategy == "custom" and (
+            self.custom is None or not self.custom.code.strip()
+        ):
+            raise ValueError(CUSTOM_CODE_MISSING)
+        return self
 
     @model_validator(mode="after")
     def _size_in_range(self) -> Self:
@@ -164,7 +216,11 @@ def stored_chunking(value: Any) -> Chunking:
         smallest, largest = chunk_size_range()
         size = min(largest, max(smallest, size))
     try:
-        return Chunking(strategy=strategy, size=size)  # type: ignore[arg-type]
+        return Chunking(
+            strategy=strategy,  # type: ignore[arg-type]
+            size=size,
+            custom=data.get("custom"),
+        )
     except pydantic.ValidationError:
         return Chunking()
 
@@ -178,3 +234,26 @@ class Draft(BaseModel):
     record_types: list[RecordType]
     output: Output
     chunking: Chunking = pydantic.Field(default_factory=Chunking)
+
+
+class GeneratedPart(BaseModel):
+    """A part the generated code makes: its range and the line it begins with."""
+
+    start: int
+    end: int
+    starts_with: str
+
+
+class GeneratedDocument(BaseModel):
+    file_id: str
+    name: str
+    characters: int
+    parts: list[GeneratedPart]
+
+
+class GeneratedChunking(BaseModel):
+    """The answer of the generate call: the code, what it does and what it makes."""
+
+    code: str
+    summary: str
+    documents: list[GeneratedDocument]

@@ -13,6 +13,10 @@ from rest_framework import serializers
 from apps.core.errors import ApiError
 from apps.extraction.definition import (
     CHUNK_STRATEGIES,
+    CUSTOM_CODE_MAX,
+    CUSTOM_INSTRUCTION_MAX,
+    CUSTOM_SUMMARY_MAX,
+    CUSTOM_URL_MAX,
     FORMATS,
     MODES,
     VALUE_TYPES,
@@ -27,6 +31,7 @@ __all__ = [
     "NOTE_MAX_LENGTH",
     "VALUE_TYPES",
     "ChunkingSerializer",
+    "CustomChunkingSerializer",
     "DraftAnswerSerializer",
     "DraftSerializer",
     "parse_draft",
@@ -58,11 +63,28 @@ class OutputSerializer(serializers.Serializer):  # type: ignore[type-arg]
     template = serializers.CharField(allow_blank=True)
 
 
+class CustomChunkingSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """The splitting code a sandbox agent wrote for the ``custom`` strategy."""
+
+    instruction = serializers.CharField(max_length=CUSTOM_INSTRUCTION_MAX)
+    source_url = serializers.CharField(
+        required=False, allow_null=True, max_length=CUSTOM_URL_MAX, default=None
+    )
+    code = serializers.CharField(max_length=CUSTOM_CODE_MAX)
+    summary = serializers.CharField(
+        required=False, allow_blank=True, max_length=CUSTOM_SUMMARY_MAX, default=""
+    )
+
+
 class ChunkingSerializer(serializers.Serializer):  # type: ignore[type-arg]
-    """How a long document is cut into parts. ``size`` is null for ``auto``."""
+    """How a long document is cut into parts. ``size`` is null for ``auto``.
+
+    ``custom`` is an object only for the ``custom`` strategy, otherwise null.
+    """
 
     strategy = serializers.ChoiceField(CHUNK_STRATEGIES, required=False, default="auto")
     size = serializers.IntegerField(required=False, allow_null=True, default=None)
+    custom = CustomChunkingSerializer(required=False, allow_null=True, default=None)
 
 
 class DraftSerializer(serializers.Serializer):  # type: ignore[type-arg]

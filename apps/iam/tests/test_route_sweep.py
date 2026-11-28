@@ -1,10 +1,13 @@
 """The route sweep: every route under /api/v1 says what it needs, and gets it.
 
 It walks the URL configuration. A route or method with no ``@requires`` fails
-with the route's name. Then each route is called, on a real workspace, by a
-stranger, a tenant admin and a platform admin who are not members, a viewer, an
-editor and the owner, and the answers are checked against the declaration and
-the permission table (``apps/iam/roles.py``). docs/iam.md has the route table.
+with the route's name. Then each route is called, on a real tenant and workspace,
+by every kind of person (``PEOPLE``), and the answers are checked against the
+declaration and the permission table (``apps/iam/roles.py``): a person whose roles
+hold the permission is answered, one who sees the tenant or the workspace without
+it gets 403, and for anyone else it does not exist (404). A route whose rule is
+not one permission says what each person gets in ``EXPECTED``. docs/iam.md has
+the route table.
 """
 
 import json
@@ -25,7 +28,13 @@ from apps.extraction.tests.factories import (
     FieldValueFactory,
 )
 from apps.iam.models import TenantMembership, WorkspaceMembership
-from apps.iam.roles import PERMISSIONS, Permission, WorkspaceRole
+from apps.iam.roles import (
+    PERMISSIONS,
+    Permission,
+    PlatformAdminRole,
+    TenantRole,
+    WorkspaceRole,
+)
 from apps.iam.routes import (
     APPLICATION_PERMISSIONS,
     OPEN,
@@ -33,7 +42,7 @@ from apps.iam.routes import (
     methods_of,
     needs_of,
 )
-from apps.iam.tests.factories import PlatformAdminFactory
+from apps.iam.tests.factories import PlatformAdminFactory, TenantMembershipFactory
 from apps.identity.tests.factories import UserFactory
 from apps.realtime import services as realtime
 from apps.realtime.tests.communicator import WebsocketCommunicator
@@ -87,12 +96,30 @@ QUERIES: dict[tuple[str, str], str] = {
     ): "?revision=1",
 }
 
-# What "may not see it" answers: the workspace or run does not exist for them.
-HIDDEN = {"run_not_found", "workspace_not_found"}
+# What "may not see it" answers: the tenant, workspace or run does not exist for them.
+HIDDEN = {"run_not_found", "workspace_not_found", "tenant_not_found"}
 
 # Signed-in routes that need a tenant role with ``workspaces.create``: a person in
 # no tenant gets 403 on them (and nothing else is refused to that person).
 NEEDS_A_TENANT = {("workspaces", "POST"), ("projects", "POST"), ("runs", "POST")}
+
+# The people of the world, with the roles each holds towards its tenant and its
+# workspace. The order is the order of the calls.
+ROLES: dict[str, tuple[PlatformAdminRole | TenantRole | WorkspaceRole, ...]] = {
+    "outsider": (),  # a member of another tenant only
+    "no_tenant": (),  # in no tenant at all
+    "stranger": (TenantRole.MEMBER,),  # in the tenant, no role in the workspace
+    "tenant_admin": (TenantRole.ADMIN,),  # not a member of the workspace
+    "platform_admin": (PlatformAdminRole.PLATFORM_ADMIN, TenantRole.MEMBER),
+    "viewer": (TenantRole.MEMBER, WorkspaceRole.VIEWER),
+    "editor": (TenantRole.MEMBER, WorkspaceRole.EDITOR),
+    "owner": (TenantRole.MEMBER, WorkspaceRole.OWNER),
+}
+PEOPLE = tuple(ROLES)
+
+# Routes whose rule is not "one permission on the tenant or the workspace": what
+# every person of PEOPLE gets, spelled out as "allowed", "403" or "404".
+EXPECTED: dict[tuple[str, str], dict[str, str]] = {}
 
 
 def _walk(patterns: list[Any], prefix: str = "") -> list[tuple[str, Any]]:
@@ -142,7 +169,12 @@ def test_the_routes_not_called_are_real_routes() -> None:
 
 
 def test_the_bodies_belong_to_real_routes() -> None:
-    assert set(BODIES) | set(QUERIES) <= set(route_methods())
+    assert set(BODIES) | set(QUERIES) | set(EXPECTED) <= set(route_methods())
+    for route_method, answers in EXPECTED.items():
+        assert set(answers) == set(PEOPLE), (
+            f"{route_method}: say what every person gets"
+        )
+        assert set(answers.values()) <= {"allowed", "403", "404"}, route_method
 
 
 # --- calling every route ------------------------------------------------------
@@ -152,13 +184,7 @@ def test_the_bodies_belong_to_real_routes() -> None:
 class World:
     ids: dict[str, str]
     anonymous: APIClient
-    stranger: APIClient
-    tenant_admin: APIClient
-    platform_admin: APIClient
-    no_tenant: APIClient
-    viewer: APIClient
-    editor: APIClient
-    owner: APIClient
+    people: dict[str, APIClient]
 
 
 def _as(user: Any) -> APIClient:
@@ -173,10 +199,10 @@ def _member(workspace: Any, role: WorkspaceRole) -> Any:
     return user
 
 
-@pytest.fixture
-def world(db: None) -> World:
-    """A workspace with one file, an extraction, a record and a value, and people
-    with every relation to it."""
+def make_world() -> World:
+    """A tenant with a workspace that has one file, an extraction, a record and a
+    value; a person to act on (``user_id``: in the tenant, an editor of the
+    workspace); and people with every relation to them (``ROLES``)."""
     workspace = WorkspaceFactory()
     run = workspace.run
     owner = workspace.owner
@@ -190,7 +216,10 @@ def world(db: None) -> World:
     TenantMembership.objects.filter(user=tenant_admin, tenant=workspace.tenant).update(
         role="admin"
     )
+    acted_on = _member(workspace, WorkspaceRole.EDITOR)
     ids = {
+        "tenant_id": str(workspace.tenant_id),
+        "user_id": str(acted_on.pk),
         "workspace_id": str(workspace.pk),
         "project_id": str(workspace.pk),
         "run_id": str(run.pk),
@@ -202,16 +231,21 @@ def world(db: None) -> World:
         "stage": "extract",
         "document_id": document.id,
     }
+    people = {
+        "outsider": TenantMembershipFactory().user,
+        "no_tenant": UserFactory(in_default_tenant=False),
+        "stranger": UserFactory(),
+        "tenant_admin": tenant_admin,
+        "platform_admin": PlatformAdminFactory().user,
+        "viewer": _member(workspace, WorkspaceRole.VIEWER),
+        "editor": _member(workspace, WorkspaceRole.EDITOR),
+        "owner": owner,
+    }
+    assert tuple(people) == PEOPLE
     return World(
         ids=ids,
         anonymous=APIClient(),
-        stranger=_as(UserFactory()),
-        no_tenant=_as(UserFactory(in_default_tenant=False)),
-        tenant_admin=_as(tenant_admin),
-        platform_admin=_as(PlatformAdminFactory().user),
-        viewer=_as(_member(workspace, WorkspaceRole.VIEWER)),
-        editor=_as(_member(workspace, WorkspaceRole.EDITOR)),
-        owner=_as(owner),
+        people={name: _as(user) for name, user in people.items()},
     )
 
 
@@ -263,63 +297,113 @@ def _allowed(response: Any) -> bool:
     )
 
 
-def _holds(role: WorkspaceRole, need: str) -> bool:
-    return need in PERMISSIONS[role]
+def _expected(route: str, method: str, need: str) -> dict[str, str]:
+    """What each person gets on a route: "allowed", "403" or "404"."""
+    if (route, method) in EXPECTED:
+        return EXPECTED[(route, method)]
+    if need == SIGNED_IN:
+        # The answer does not depend on a role, except where a tenant role is needed.
+        needs_a_tenant = (route, method) in NEEDS_A_TENANT
+        return {
+            person: "403" if needs_a_tenant and person == "no_tenant" else "allowed"
+            for person in PEOPLE
+        }
+    if need in APPLICATION_PERMISSIONS:
+        return {p: "allowed" if p == "platform_admin" else "403" for p in PEOPLE}
+    scope = Permission(need).value.split(".")[0]
+    assert scope in ("workspace", "tenant"), f"{need}: add its rule to the sweep"
+    # A workspace is seen through a role in it (admins included: without one it
+    # does not exist for them); a tenant through a role in it or as a platform admin.
+    sees = (WorkspaceRole,) if scope == "workspace" else (TenantRole, PlatformAdminRole)
+    answers = {}
+    for person, roles in ROLES.items():
+        if any(need in PERMISSIONS[role] for role in roles):
+            answers[person] = "allowed"
+        elif any(isinstance(role, sees) for role in roles):
+            answers[person] = "403"
+        else:
+            answers[person] = "404"
+    return answers
 
 
+@pytest.mark.django_db
 @pytest.mark.parametrize(("route", "method"), route_methods())
 def test_each_route_gives_each_person_what_their_role_allows(
-    world: World, route: str, method: str
+    route: str, method: str
 ) -> None:
     if route in NOT_CALLED:
         pytest.skip(NOT_CALLED[route])
     view = dict(api_routes())[route]
     need = needs_of(view).get(method)
     assert need is not None, f"{route} {method} declares nothing"
-
-    def refused(client: APIClient) -> str | None:
-        return _refused(_call(client, route, method, world.ids))
-
-    def allowed(client: APIClient) -> bool:
-        return _allowed(_call(client, route, method, world.ids))
-
     who = f"{method} {route} ({need})"
+    world = make_world()
+
+    def call(w: World, person: str) -> Any:
+        return _call(w.people[person], route, method, w.ids)
+
     if need == OPEN:
-        assert allowed(world.anonymous), who
+        assert _allowed(_call(world.anonymous, route, method, world.ids)), who
         return
-    assert refused(world.anonymous) == "401", who
-    if need == SIGNED_IN:
-        # The answer does not depend on a workspace role.
-        for client in (world.stranger, world.viewer, world.owner):
-            assert allowed(client), who
-        if (route, method) in NEEDS_A_TENANT:
-            assert refused(world.no_tenant) == "403", f"{who} with no tenant"
-        else:
-            assert allowed(world.no_tenant), f"{who} with no tenant"
-        return
-    if need in APPLICATION_PERMISSIONS:
-        for client in (world.stranger, world.tenant_admin, world.viewer):
-            assert refused(client) == "403", who
-        assert allowed(world.platform_admin), who
-        return
-    assert Permission(need).value.startswith("workspace."), who
-    # Not a member: the workspace does not exist for them, admins included.
-    for client in (world.stranger, world.tenant_admin, world.platform_admin):
-        assert refused(client) == "404", who
-    for role, client in (
-        (WorkspaceRole.VIEWER, world.viewer),
-        (WorkspaceRole.EDITOR, world.editor),
-        (WorkspaceRole.OWNER, world.owner),
-    ):
-        if _holds(role, need):
-            assert allowed(client), f"{who} as {role}"
-        else:
-            assert refused(client) == "403", f"{who} as {role}"
+    assert _refused(_call(world.anonymous, route, method, world.ids)) == "401", who
+    expected = _expected(route, method, need)
+    # The refused first, so that a permitted call that changes things comes after.
+    for person in PEOPLE:
+        if expected[person] != "allowed":
+            assert _refused(call(world, person)) == expected[person], (
+                f"{who} as {person}"
+            )
+    for person in PEOPLE:
+        if expected[person] == "allowed":
+            # A DELETE takes away what the next person would act on: a world each.
+            w = make_world() if method == "DELETE" else world
+            assert _allowed(call(w, person)), f"{who} as {person}"
 
 
-def test_the_viewer_and_the_editor_are_refused_where_the_epic_says(
-    world: World,
-) -> None:
+def test_the_generic_rule_matches_the_epic() -> None:
+    """The rule of ``_expected``, spelled out on the cases that matter most."""
+    content = _expected("x", "GET", Permission.WORKSPACE_VIEW)
+    assert content == {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "404",
+        "tenant_admin": "404",  # an admin reads content only with a workspace role
+        "platform_admin": "404",
+        "viewer": "allowed",
+        "editor": "allowed",
+        "owner": "allowed",
+    }
+    sharing = _expected("x", "PUT", Permission.WORKSPACE_MEMBERS_MANAGE)
+    assert sharing == {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "404",
+        "tenant_admin": "allowed",  # manages access without being a member
+        "platform_admin": "allowed",
+        "viewer": "403",
+        "editor": "403",
+        "owner": "allowed",
+    }
+    members = _expected("x", "PUT", Permission.TENANT_MEMBERS_MANAGE)
+    assert members == {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "403",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "403",
+        "editor": "403",
+        "owner": "403",
+    }
+    listing = _expected("x", "GET", Permission.TENANT_MEMBERS_LIST)
+    assert {p for p, answer in listing.items() if answer == "404"} == {
+        "outsider",
+        "no_tenant",
+    }
+    assert set(listing.values()) == {"allowed", "404"}
+
+
+def test_the_viewer_and_the_editor_are_refused_where_the_epic_says() -> None:
     """The mapping of task 3, spelled out: a reader of the sweep sees the rule."""
     needs = {
         (route, method): need

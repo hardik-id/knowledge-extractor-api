@@ -11,4 +11,5 @@ urlpatterns = [
     path("", include("apps.extraction.api.urls")),
     path("", include("apps.assistant.api.urls")),
     path("", include("apps.workspaces.api.urls")),
+    path("", include("apps.iam.api.urls")),
 ]

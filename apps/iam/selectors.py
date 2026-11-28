@@ -6,8 +6,16 @@ from uuid import UUID
 from django.conf import settings
 from django.db.models.functions import Lower
 
+from apps.core.errors import ApiError
+
 from .models import PlatformAdmin, Tenant, TenantMembership, WorkspaceMembership
-from .roles import Permission, TenantRole, WorkspaceRole, permissions_of
+from .roles import (
+    Permission,
+    PlatformAdminRole,
+    TenantRole,
+    WorkspaceRole,
+    permissions_of,
+)
 
 
 def _active(user: Any) -> bool:
@@ -36,6 +44,48 @@ def tenant_role(user: Any, tenant_id: UUID | str) -> TenantRole | None:
         .first()
     )
     return TenantRole(role) if role else None
+
+
+def tenant_permissions(user: Any, tenant_id: UUID | str) -> frozenset[Permission]:
+    """What the person may do in the tenant: by their role in it, and as a platform admin.
+
+    Empty means the tenant is not theirs to see. A platform admin sees every tenant.
+    """
+    held: set[Permission] = set()
+    role = tenant_role(user, tenant_id)
+    if role is not None:
+        held |= permissions_of(role)
+    if is_platform_admin(user):
+        held |= permissions_of(PlatformAdminRole.PLATFORM_ADMIN)
+    return frozenset(held)
+
+
+def get_tenant(user: Any, tenant_id: UUID | str, permission: Permission) -> Tenant:
+    """The tenant, if ``user`` sees it and has ``permission`` in it.
+
+    A tenant not seen and an unknown id are both 404 ``tenant_not_found``; a tenant
+    seen without ``permission`` is 403 ``forbidden``. Every request that names a
+    tenant fetches it here, with the permission of what it does.
+    """
+    held = tenant_permissions(user, tenant_id)
+    try:
+        tenant = Tenant.objects.filter(pk=UUID(str(tenant_id))).first()
+    except ValueError:
+        tenant = None
+    if tenant is None or not held:
+        raise ApiError("tenant_not_found")
+    if permission not in held:
+        raise ApiError("forbidden")
+    return tenant
+
+
+def tenant_of_workspace(workspace_id: UUID | str) -> Tenant | None:
+    """The tenant a workspace belongs to, or None for an unknown id."""
+    try:
+        workspace_id = UUID(str(workspace_id))
+    except ValueError:
+        return None
+    return Tenant.objects.filter(workspaces__pk=workspace_id).first()
 
 
 def tenants_of(user: Any) -> list[tuple[Tenant, TenantRole]]:

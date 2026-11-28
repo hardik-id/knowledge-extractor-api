@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from django.db import connection
+from django.db import connection, transaction
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
@@ -471,3 +471,62 @@ def test_an_owner_leaving_and_the_other_stepping_down_together_leave_one() -> No
         WorkspaceMembership.objects.filter(workspace=workspace, role="owner").count()
         == 1
     )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_role_given_while_the_person_leaves_the_tenant_waits_for_it() -> None:
+    workspace = WorkspaceFactory()
+    person = UserFactory()
+    outcome: list[str] = []
+
+    def put() -> None:
+        try:
+            workspace_members.set_workspace_role(
+                workspace.owner, workspace.pk, person.pk, "viewer"
+            )
+            outcome.append("")
+        except ApiError as error:
+            outcome.append(error.code)
+        finally:
+            connection.close()
+
+    with transaction.atomic():
+        row = TenantMembership.objects.select_for_update().get(
+            tenant=workspace.tenant, user=person
+        )
+        thread = threading.Thread(target=put)
+        thread.start()
+        thread.join(0.7)  # blocked on the row the removal holds
+        assert thread.is_alive()
+        row.delete()
+    thread.join()
+
+    assert outcome == ["not_a_tenant_member"]
+    assert role_of(workspace, person) is None
+
+
+@pytest.mark.parametrize("role", ["editor", "viewer"])
+def test_a_person_may_remove_themselves_whatever_their_role(role: str) -> None:
+    workspace = WorkspaceFactory()
+    person, other = join(workspace, role), join(workspace, "viewer")
+
+    assert as_user(person).delete(url(workspace, other)).status_code == 403
+    assert as_user(person).delete(url(workspace, person)).status_code == 204
+    assert role_of(workspace, person) is None
+    assert AuditEntry.objects.filter(action="workspace.member.remove").count() == 1
+
+
+def test_an_id_with_underscores_or_unicode_digits_is_not_a_person() -> None:
+    workspace = WorkspaceFactory()
+    person = UserFactory()
+    for bad in (
+        f"{person.pk}_",
+        f" {person.pk}",
+        "".join(chr(0x660 + int(c)) for c in str(person.pk)),
+    ):
+        with pytest.raises(ApiError) as error:
+            workspace_members.set_workspace_role(
+                workspace.owner, workspace.pk, bad, "viewer"
+            )
+        assert error.value.code == "not_a_tenant_member"
+    assert role_of(workspace, person) is None

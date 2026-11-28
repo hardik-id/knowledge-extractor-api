@@ -119,11 +119,11 @@ When `apps.identity` creates a user it calls `services.join_default_tenant` in t
 
 ## Changing a workspace's members (`apps/iam/workspace_members.py`)
 
-`set_workspace_role(actor, workspace_id, user_id, role)` adds a person or changes their role; `remove_workspace_member(actor, workspace_id, user_id)` takes them out; `list_members(user, workspace_id)` reads. Both changes need `workspace.members.manage`: an owner, an admin of the workspace's tenant or a platform admin (the last two need no role in the workspace, and still get 404 on its content). They run in one transaction with their audit entry.
+`set_workspace_role(actor, workspace_id, user_id, role)` adds a person or changes their role; `remove_workspace_member(actor, workspace_id, user_id)` takes them out; `list_members(user, workspace_id)` reads. Both changes need `workspace.members.manage` (removing oneself needs only a role in the workspace): an owner, an admin of the workspace's tenant or a platform admin (the last two need no role in the workspace, and still get 404 on its content). They run in one transaction with their audit entry.
 
 - A workspace the actor may not see is 404 `workspace_not_found`; one they see without the permission is 403 `forbidden`.
 - Only a member of the workspace's tenant can be given a role. Anyone else, an id nobody has and an id that is not a number are all 422 `not_a_tenant_member`, so ids cannot be probed. Removing someone who is not a member of the workspace is 404 `user_not_found`.
 - 409 `last_owner`: the last owner cannot step down or be removed, by anyone. The workspace row is locked first, so two requests at the same moment leave one owner. Owners who are not active do not count.
-- A person may remove themselves (an owner, with another owner staying), and an admin may add themselves; both are recorded like any change. Setting the role a person already has changes nothing and records nothing.
+- A person may remove themselves (an owner, with another owner staying), and an admin may add themselves (a platform admin without a tenant membership joins the tenant first, as the target must be a member of it); both are recorded like any change. Setting the role a person already has changes nothing and records nothing.
 - Audit actions: `workspace.role.set` (also the creation of a workspace), `workspace.member.remove`, with the workspace and its tenant.
 - `workspace_permissions` and the `permissions` of a workspace on the wire include `workspace.members.manage` for an admin of its tenant or a platform admin who has a role in it.

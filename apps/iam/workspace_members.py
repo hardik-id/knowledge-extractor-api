@@ -91,12 +91,13 @@ def set_workspace_role(
 def remove_workspace_member(actor: Any, workspace_id: Any, user_id: Any) -> None:
     """Take the person out of the workspace; a person may take themselves out.
 
-    Needs ``workspace.members.manage``. Not a member: 404 ``user_not_found``. The last
-    owner cannot go (409 ``last_owner``).
+    Needs ``workspace.members.manage``, except to remove oneself: any role in the
+    workspace is enough for that. Not a member: 404 ``user_not_found``. The last owner
+    cannot go (409 ``last_owner``).
     """
     with transaction.atomic():
-        workspace = _locked(actor, workspace_id)
         pk = _pk(user_id)
+        workspace = _locked(actor, workspace_id, leaving=pk)
         membership = (
             WorkspaceMembership.objects.filter(workspace_id=workspace.pk, user_id=pk)
             .select_related("user")
@@ -149,12 +150,13 @@ def _access(user: Any, workspace: Any) -> frozenset[Permission]:
     return frozenset(held)
 
 
-def _locked(actor: Any, workspace_id: Any) -> Any:
+def _locked(actor: Any, workspace_id: Any, leaving: int | None = None) -> Any:
     """The workspace row, locked, after checking the actor may manage its members.
 
     A workspace the actor may not see is 404 ``workspace_not_found``; one they see
     but may not change is 403 ``forbidden``. The permission is read after the lock,
-    so a change of the actor's own role by another request is seen.
+    so a change of the actor's own role by another request is seen. ``leaving`` is the
+    id of the person being removed: the actor taking themselves out needs only a role.
     """
     try:
         pk = UUID(str(workspace_id))
@@ -166,24 +168,36 @@ def _locked(actor: Any, workspace_id: Any) -> Any:
     held = _access(actor, workspace)
     if not held:
         raise ApiError("workspace_not_found")
-    if Permission.WORKSPACE_MEMBERS_MANAGE not in held:
+    if Permission.WORKSPACE_MEMBERS_MANAGE not in held and not (
+        leaving is not None
+        and leaving == actor.pk
+        and workspace_role(actor, workspace.pk) is not None
+    ):
         raise ApiError("forbidden")
     return workspace
 
 
 def _pk(user_id: Any) -> int | None:
+    text = str(user_id)
+    if not (text.isascii() and text.isdigit()):
+        return None
     try:
-        return int(str(user_id))
+        return int(text)
     except ValueError:
         return None
 
 
 def _tenant_member(tenant: Tenant, user_id: Any) -> Any:
-    """The person, when they are in the tenant. Nobody and a stranger answer the same."""
+    """The person, when they are in the tenant. Nobody and a stranger answer the same.
+
+    The tenant membership row is locked, so a removal from the tenant at the same
+    moment either runs first (this finds nothing) or waits and then removes the role
+    this adds."""
     pk = _pk(user_id)
     if pk is not None:
         membership = (
-            TenantMembership.objects.filter(tenant=tenant, user_id=pk)
+            TenantMembership.objects.select_for_update()
+            .filter(tenant=tenant, user_id=pk)
             .select_related("user")
             .first()
         )

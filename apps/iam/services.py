@@ -29,7 +29,12 @@ _PLATFORM_ADMIN_LOCK = 483_486
 
 
 def set_tenant_role(
-    actor: Any | None, tenant_id: UUID | str, user_id: int, role: TenantRole | str
+    actor: Any | None,
+    tenant_id: UUID | str,
+    user_id: int,
+    role: TenantRole | str,
+    *,
+    must_exist: bool = False,
 ) -> TenantMembership:
     """Make the person ``role`` in the tenant.
 
@@ -45,7 +50,7 @@ def set_tenant_role(
         membership = TenantMembership.objects.filter(
             tenant=tenant, user_id=user_id
         ).first()
-        if membership is None and not _may_add_by_id(actor):
+        if membership is None and (must_exist or not _may_add_by_id(actor)):
             raise ApiError("user_not_found")
         return _apply_role(actor, tenant, _user(user_id), membership, role)
 
@@ -54,11 +59,7 @@ def change_member_role(
     actor: Any | None, tenant_id: UUID | str, user_id: int, role: TenantRole | str
 ) -> TenantMembership:
     """Change the role of a member. Not a member (or no such person): ``user_not_found``."""
-    with transaction.atomic():
-        tenant = _locked_tenant(actor, tenant_id)
-        if not TenantMembership.objects.filter(tenant=tenant, user_id=user_id).exists():
-            raise ApiError("user_not_found")
-    return set_tenant_role(actor, tenant_id, user_id, role)
+    return set_tenant_role(actor, tenant_id, user_id, role, must_exist=True)
 
 
 def add_tenant_member(

@@ -500,3 +500,28 @@ def test_a_deactivated_person_is_not_found(
     assert gone.pk not in [
         i["id"] for i in as_(boss).get("/api/v1/users").json()["items"]
     ]
+
+
+def test_a_platform_admin_can_look_up_one_exact_name(boss: Any) -> None:
+    person = UserFactory(name="Ada", preferred_username="Ada@x.org")
+    UserFactory(preferred_username="other@x.org")
+    found = as_(boss).get("/api/v1/users", {"preferred_username": "ada@X.org"})
+    assert [i["id"] for i in found.json()["items"]] == [person.pk]
+    nobody = as_(boss).get("/api/v1/users", {"preferred_username": "ada"})
+    assert nobody.json()["items"] == []
+
+
+def test_a_person_removed_during_workspace_creation_does_not_become_owner(
+    tenant: Tenant,
+) -> None:
+    """The creation passed its tenant check, then the removal committed: owner is refused."""
+    import uuid
+
+    from apps.iam import workspace_access
+
+    member = person_in(tenant, "admin")
+    TenantMembership.objects.filter(tenant=tenant, user=member).delete()
+    with pytest.raises(ApiError) as caught:
+        workspace_access.make_owner(member, uuid.uuid4(), tenant)
+    assert caught.value.code == "tenant_not_found"
+    assert not WorkspaceMembership.objects.filter(user=member).exists()

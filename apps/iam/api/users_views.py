@@ -29,7 +29,8 @@ UserList = inline_serializer(
 @extend_schema(parameters=[UserListQuerySerializer], responses=UserList)
 @api_view(["GET"])
 def users(request: Request) -> Response:
-    """Find people. A platform admin lists everyone who has signed in (``?search=``).
+    """Find people. A platform admin lists everyone who has signed in (``?search=``), or one exact sign-in name
+    (``?preferred_username=``, which then wins over ``?search=``).
 
     A tenant admin may only ask for one exact sign-in name (``?preferred_username=``):
     the answer is that person or nothing, never a part of a name or a list.
@@ -38,14 +39,16 @@ def users(request: Request) -> Response:
     user = cast(User, request.user)
     query = UserListQuerySerializer(data=request.query_params)
     query.is_valid(raise_exception=True)
-    if selectors.is_platform_admin(user):
+    name = query.validated_data.get("preferred_username")
+    if selectors.is_platform_admin(user) and name is None:
         paginator: BasePagination = DefaultPagination()
         page = paginator.paginate_queryset(
             selectors.list_users(query.validated_data.get("search", "")), request
         )
         return paginator.get_paginated_response(UserSerializer(page, many=True).data)
-    name = query.validated_data.get("preferred_username")
-    if name is None or not selectors.is_admin_of_a_tenant(user):
+    if name is None or not (
+        selectors.is_platform_admin(user) or selectors.is_admin_of_a_tenant(user)
+    ):
         raise ApiError("forbidden")
     found = selectors.find_user_by_username(name)
     items = [] if found is None else [UserSerializer(found).data]

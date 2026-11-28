@@ -1817,7 +1817,8 @@ paths:
     get:
       operationId: users_retrieve
       description: |-
-        Find people. A platform admin lists everyone who has signed in (``?search=``).
+        Find people. A platform admin lists everyone who has signed in (``?search=``), or one exact sign-in name
+        (``?preferred_username=``, which then wins over ``?search=``).
 
         A tenant admin may only ask for one exact sign-in name (``?preferred_username=``):
         the answer is that person or nothing, never a part of a name or a list.

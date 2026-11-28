@@ -18,7 +18,8 @@ def get_run(user: User, run_id: Any, permission: Permission) -> Run:
     """The run, if ``user`` sees it and has ``permission`` on it.
 
     A run is seen through a role in its workspace; a run with no workspace only by
-    the person who made it, who may do everything on it. A run not seen and an
+    the person who made it, who may do everything on it while they hold a tenant
+    role with ``workspaces.create`` (403 ``forbidden`` otherwise). A run not seen and an
     unknown id are both 404 ``run_not_found``; a run seen without ``permission`` is
     403 ``forbidden``.
     """
@@ -27,7 +28,9 @@ def get_run(user: User, run_id: Any, permission: Permission) -> Run:
         Run.objects.filter(pk=run.pk).values_list("workspace__id", flat=True).first()
     )
     if workspace_id is None:
-        allowed = permission in permissions_of(WorkspaceRole.OWNER)
+        allowed = permission in permissions_of(
+            WorkspaceRole.OWNER
+        ) and iam.may_create_workspaces(user)
     else:
         allowed = permission in iam.workspace_permissions(user, workspace_id)
     if not allowed:

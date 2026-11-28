@@ -56,7 +56,7 @@ What each route needs, declared with `@requires` on its view (`apps/iam/routes.p
 | `/workspaces` | GET, POST | signed in (POST: `workspaces.create` in the tenant, checked by the service) |
 | `/workspaces/{workspace_id}` | GET | `workspace.view` |
 | `/workspaces/{workspace_id}` | PATCH, DELETE | `workspace.manage` |
-| `/runs` | POST | signed in (a run of one's own, with no workspace) |
+| `/runs` | POST | signed in (a run of one's own, with no workspace; needs `workspaces.create` in some tenant, checked by the view) |
 | `/runs/{run_id}` | GET | `workspace.view` |
 | `/runs/{run_id}` | DELETE | `workspace.manage` (a workspace's run is 409 `run_belongs_to_workspace`) |
 | `/runs/{run_id}/documents` | PUT | `workspace.edit` |

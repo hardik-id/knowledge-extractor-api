@@ -33,7 +33,7 @@ workspace = workspaces.get_workspace(user, workspace_id, Permission.WORKSPACE_MA
 - 404 (`run_not_found`, `workspace_not_found`): the person has no role in the workspace. An unknown id, a malformed id and somebody else's workspace give the identical answer, so nobody can probe for ids.
 - 403 `forbidden`: the person has a role in it that does not give the permission.
 
-The permission comes from the person's role in the workspace (`apps.iam.selectors.workspace_permissions`). A run with no workspace (`POST /runs`) is seen only by the person who made it, and they may do everything on it.
+The permission comes from the person's role in the workspace (`apps.iam.selectors.workspace_permissions`). A run with no workspace (`POST /runs`) is seen only by the person who made it, and they may do everything on it while they hold a tenant role with `workspaces.create` (`apps.iam.selectors.may_create_workspaces`); without one they get 403 `forbidden`, and `POST /runs` itself refuses them the same way.
 
 Admins get no content from their admin role: a tenant admin or a platform admin who has no role in a workspace gets 404 on it, like anybody else (`docs/iam.md`, rule 1).
 

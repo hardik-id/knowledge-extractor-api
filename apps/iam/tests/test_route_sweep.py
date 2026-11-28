@@ -90,6 +90,10 @@ QUERIES: dict[tuple[str, str], str] = {
 # What "may not see it" answers: the workspace or run does not exist for them.
 HIDDEN = {"run_not_found", "workspace_not_found"}
 
+# Signed-in routes that need a tenant role with ``workspaces.create``: a person in
+# no tenant gets 403 on them (and nothing else is refused to that person).
+NEEDS_A_TENANT = {("workspaces", "POST"), ("projects", "POST"), ("runs", "POST")}
+
 
 def _walk(patterns: list[Any], prefix: str = "") -> list[tuple[str, Any]]:
     found: list[tuple[str, Any]] = []
@@ -151,6 +155,7 @@ class World:
     stranger: APIClient
     tenant_admin: APIClient
     platform_admin: APIClient
+    no_tenant: APIClient
     viewer: APIClient
     editor: APIClient
     owner: APIClient
@@ -201,6 +206,7 @@ def world(db: None) -> World:
         ids=ids,
         anonymous=APIClient(),
         stranger=_as(UserFactory()),
+        no_tenant=_as(UserFactory(in_default_tenant=False)),
         tenant_admin=_as(tenant_admin),
         platform_admin=_as(PlatformAdminFactory().user),
         viewer=_as(_member(workspace, WorkspaceRole.VIEWER)),
@@ -243,6 +249,20 @@ def _refused(response: Any) -> str | None:
     return None
 
 
+def _allowed(response: Any) -> bool:
+    """A permitted call is answered: not refused, not a crash, not a stray 404.
+
+    A 404 other than "hidden" (a wrong id in the sweep) or a 5xx fails, so a route
+    that breaks after its permission check does not pass as allowed. A 400, 409 or
+    422 is an answer of the route itself (a body it rejects, a run of a workspace).
+    """
+    return (
+        _refused(response) is None
+        and response.status_code not in (404,)
+        and (response.status_code < 500)
+    )
+
+
 def _holds(role: WorkspaceRole, need: str) -> bool:
     return need in PERMISSIONS[role]
 
@@ -260,18 +280,27 @@ def test_each_route_gives_each_person_what_their_role_allows(
     def refused(client: APIClient) -> str | None:
         return _refused(_call(client, route, method, world.ids))
 
+    def allowed(client: APIClient) -> bool:
+        return _allowed(_call(client, route, method, world.ids))
+
     who = f"{method} {route} ({need})"
     if need == OPEN:
-        assert refused(world.anonymous) is None, who
+        assert allowed(world.anonymous), who
         return
     assert refused(world.anonymous) == "401", who
     if need == SIGNED_IN:
-        assert refused(world.stranger) is None, who
+        # The answer does not depend on a workspace role.
+        for client in (world.stranger, world.viewer, world.owner):
+            assert allowed(client), who
+        if (route, method) in NEEDS_A_TENANT:
+            assert refused(world.no_tenant) == "403", f"{who} with no tenant"
+        else:
+            assert allowed(world.no_tenant), f"{who} with no tenant"
         return
     if need in APPLICATION_PERMISSIONS:
         for client in (world.stranger, world.tenant_admin, world.viewer):
             assert refused(client) == "403", who
-        assert refused(world.platform_admin) is None, who
+        assert allowed(world.platform_admin), who
         return
     assert Permission(need).value.startswith("workspace."), who
     # Not a member: the workspace does not exist for them, admins included.
@@ -282,8 +311,10 @@ def test_each_route_gives_each_person_what_their_role_allows(
         (WorkspaceRole.EDITOR, world.editor),
         (WorkspaceRole.OWNER, world.owner),
     ):
-        expected = None if _holds(role, need) else "403"
-        assert refused(client) == expected, f"{who} as {role}"
+        if _holds(role, need):
+            assert allowed(client), f"{who} as {role}"
+        else:
+            assert refused(client) == "403", f"{who} as {role}"
 
 
 def test_the_viewer_and_the_editor_are_refused_where_the_epic_says(

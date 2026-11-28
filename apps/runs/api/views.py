@@ -6,6 +6,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ApiError
+from apps.iam import selectors as iam
 from apps.iam.roles import Permission
 from apps.iam.routes import SIGNED_IN, requires
 from apps.identity.models import User
@@ -18,12 +19,16 @@ from apps.workspaces import selectors as workspaces
 @extend_schema(request=CreateRunSerializer, responses={201: RunSerializer})
 @api_view(["POST"])
 def run_create(request: Request) -> Response:
-    """Turn the picked documents into a run."""
+    """Turn the picked documents into a run.
+
+    Needs a tenant role with ``workspaces.create``, as a new workspace does.
+    """
+    user = cast(User, request.user)
+    if not iam.may_create_workspaces(user):
+        raise ApiError("forbidden")
     serializer = CreateRunSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    run = services.create_run(
-        cast(User, request.user), serializer.validated_data["items"]
-    )
+    run = services.create_run(user, serializer.validated_data["items"])
     return Response(RunSerializer(run).data, status=201)
 
 

@@ -11,6 +11,8 @@ Every endpoint under `/api/v1` needs a valid Entra ID access token, unless its c
 
 Two first requests at the same moment end with one user: the unique constraint on `oid` and `tid` refuses the second insert, and that request reads the user the first one made.
 
+The same transaction makes the person a member of the default tenant (`IAM_DEFAULT_TENANT_ROLE`) and records it; a later sign-in never adds a membership back, so a person removed from it stays removed. `GET /api/v1/me` answers `id`, `name`, `preferred_username`, `platform_admin` (true for a listed `oid` or a `PlatformAdmin` row) and `tenants` (`[{ "id", "name", "role" }]`, by name).
+
 A user made this way has no usable password. Local admin accounts (no `oid`, no `tid`) keep the admin's own session login at `/admin/`; the API does not accept session cookies.
 
 ## Answers
@@ -54,6 +56,8 @@ After a token is accepted the person's id is bound to the log context as `user_i
 | `ENTRA_CLIENT_ID` | The app registration's client id. Tokens must have it as `aud` |
 | `ENTRA_REQUIRED_SCOPE` | The scope `scp` must contain. Default `access_as_user` |
 | `AUTH_MODE` | `entra` or `dev`. `dev` is refused in production |
+| `IAM_DEFAULT_TENANT_ROLE` | The role a new person gets in the default tenant: `member` (default), `admin` or empty for none. See [iam.md](iam.md) |
+| `IAM_PLATFORM_ADMIN_OIDS` | Comma separated `oid`s that are platform admins without a row. `.env.example` lists the dev issuer's default person |
 | `DEV_AUTH_KEY_PATH` | Where the dev issuer keeps its private key. Default `.dev-keys/issuer.pem` in the project. Dev mode only |
 
 None of them is a secret. Without `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` the validator refuses to start work and a signed-in request answers 500. The signing keys are fetched from the tenant's OpenID configuration and cached (see `tokens.py`).

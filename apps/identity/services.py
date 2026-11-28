@@ -1,7 +1,8 @@
 """Finding and creating the person behind a valid token.
 
 A person is ``oid`` together with ``tid``. The first valid token from a person
-creates their user record; later tokens reuse it. ``name`` and
+creates their user record and makes them a member of the default tenant
+(``IAM_DEFAULT_TENANT_ROLE``); later tokens reuse it. ``name`` and
 ``preferred_username`` are display values and follow the token, but a record
 is written only when one of them changed.
 """
@@ -10,6 +11,7 @@ import uuid
 
 from django.db import IntegrityError, transaction
 
+from apps.iam import services as iam_services
 from apps.identity.models import User
 from apps.identity.tokens import TokenClaims
 
@@ -52,6 +54,8 @@ def _create(
     )
     user.set_unusable_password()  # signs in with a token, never a password
     user.save()
+    # In the same transaction: a person never exists without their first role.
+    iam_services.join_default_tenant(user)
     return user
 
 

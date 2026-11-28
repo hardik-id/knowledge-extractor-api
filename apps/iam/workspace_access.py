@@ -45,7 +45,7 @@ def tenant_for_new_workspace(user: Any, tenant_id: UUID | str | None) -> Tenant:
 
 
 @transaction.atomic
-def make_owner(user: Any, workspace_id: UUID) -> WorkspaceMembership:
+def make_owner(user: Any, workspace_id: UUID, tenant: Tenant) -> WorkspaceMembership:
     """The creator of a new workspace is its owner. Recorded in the audit."""
     membership = WorkspaceMembership.objects.create(
         workspace_id=workspace_id, user=user, role=WorkspaceRole.OWNER
@@ -55,6 +55,7 @@ def make_owner(user: Any, workspace_id: UUID) -> WorkspaceMembership:
         action="workspace.role.set",
         target_user=user,
         workspace_id=workspace_id,
+        tenant=tenant,
         new_role=WorkspaceRole.OWNER,
     )
     return membership

@@ -70,6 +70,9 @@ def test_another_person_gets_404_everywhere_until_given_a_role() -> None:
     assert client.get(f"{URL}/{workspace.pk}").status_code == 200
     assert client.get(f"/api/v1/runs/{run_id}").status_code == 200
     assert [w["id"] for w in client.get(URL).json()["items"]] == [str(workspace.pk)]
+    for method, path in run_routes(run_id):
+        got = getattr(client, method)(path, {}, format="json")
+        assert got.json().get("code") != "run_not_found", (method, path)
 
     row.delete()
     assert answers() == {404}
@@ -103,6 +106,7 @@ def test_the_creator_becomes_owner_and_it_is_audited(user: Any) -> None:
     row = WorkspaceMembership.objects.get(workspace_id=body["id"])
     assert (row.user, row.role) == (user, "owner")
     entry = AuditEntry.objects.get(workspace_id=body["id"])
+    assert str(entry.tenant_id) == body["tenant_id"]
     assert (entry.action, entry.actor, entry.target_user, entry.new_role) == (
         "workspace.role.set",
         user,
@@ -180,3 +184,17 @@ def test_selectors_say_the_role_and_permissions() -> None:
     assert selectors.workspace_role(stranger, workspace.pk) is None
     assert selectors.workspace_permissions(stranger, workspace.pk) == []
     assert selectors.workspace_role(owner, "nope") is None
+
+
+def test_deleting_a_workspace_is_audited(user: Any) -> None:
+    from apps.iam.models import AuditEntry
+
+    client = as_user(user)
+    body = client.post(URL, {"name": "Gone"}, format="json").json()
+    assert client.delete(f"{URL}/{body['id']}").status_code == 204
+    entry = AuditEntry.objects.get(action="workspace.deleted")
+    assert (entry.actor, str(entry.workspace_id), str(entry.tenant_id)) == (
+        user,
+        body["id"],
+        body["tenant_id"],
+    )

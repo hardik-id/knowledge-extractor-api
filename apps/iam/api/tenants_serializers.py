@@ -53,7 +53,7 @@ class TenantWorkspaceSerializer(serializers.ModelSerializer[Workspace]):
 
     def get_owners(self, obj: Workspace) -> list[dict[str, Any]]:
         return [
-            {"id": m.user_id, "name": m.user.name or m.user.preferred_username}
+            {"id": m.user_id, "name": m.user.name or f"Person {m.user_id}"}
             for m in getattr(obj, "owner_rows", [])
         ]
 

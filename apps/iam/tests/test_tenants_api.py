@@ -61,7 +61,8 @@ def test_a_platform_admin_lists_every_tenant_with_counts(admin: Any) -> None:
     assert set(rows) == {"Default", "Acme"}
     assert rows["Acme"]["member_count"] == 2
     assert rows["Acme"]["workspace_count"] == 1
-    assert rows["Default"]["role"] == "member" or rows["Default"]["role"] is None
+    assert rows["Default"]["role"] == "member"  # a first sign-in makes them one
+    assert rows["Acme"]["role"] is None
     assert response.json()["next"] is None
 
 
@@ -160,6 +161,81 @@ def test_delete_an_empty_tenant(admin: Any) -> None:
     assert not Tenant.objects.filter(pk=tenant.pk).exists()
     entry = AuditEntry.objects.get(action="tenant.delete")
     assert entry.actor == admin  # the entry stays
+
+
+def test_deleting_a_tenant_records_each_member_and_keeps_its_identity(
+    admin: Any,
+) -> None:
+    tenant = TenantFactory(name="Bank")
+    boss = tenant_admin(tenant)
+    person = member(tenant)
+
+    assert as_(admin).delete(f"/api/v1/tenants/{tenant.pk}").status_code == 204
+
+    removed = AuditEntry.objects.filter(action="tenant.member.remove")
+    assert {(e.target_user_id, e.old_role) for e in removed} == {
+        (boss.pk, "admin"),
+        (person.pk, "member"),
+    }
+    gone = AuditEntry.objects.get(action="tenant.delete")
+    assert gone.tenant_ref == tenant.pk
+    assert gone.detail == "name=Bank"
+    items = as_(admin).get("/api/v1/audit").json()["items"]
+    mine = [i for i in items if i["tenant_id"] == str(tenant.pk)]
+    assert len(mine) == 3
+
+
+def test_a_rename_records_both_names(admin: Any) -> None:
+    tenant = TenantFactory(name="Acme")
+
+    as_(admin).patch(f"/api/v1/tenants/{tenant.pk}", {"name": "Globex"}, format="json")
+
+    assert (
+        AuditEntry.objects.get(action="tenant.rename").detail == "from=Acme; to=Globex"
+    )
+
+
+def test_a_workspace_made_during_the_delete_answers_409(
+    admin: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from django.db.models.deletion import ProtectedError
+
+    tenant = TenantFactory()
+
+    def refuse(self: Any, *a: Any, **k: Any) -> Any:
+        raise ProtectedError("in use", set())
+
+    monkeypatch.setattr(Tenant, "delete", refuse)
+
+    response = as_(admin).delete(f"/api/v1/tenants/{tenant.pk}")
+
+    assert response.status_code == 409
+    assert code(response) == "tenant_not_empty"
+    assert not AuditEntry.objects.filter(action="tenant.delete").exists()
+
+
+def test_a_forged_cursor_is_404_not_500(admin: Any) -> None:
+    import base64
+
+    tenant = TenantFactory()
+    WorkspaceFactory(tenant=tenant)
+    for position in ("x", "2026-13-99"):
+        cursor = base64.b64encode(f"p={position}".encode()).decode()
+        response = as_(admin).get(
+            f"/api/v1/tenants/{tenant.pk}/workspaces?cursor={cursor}"
+        )
+        assert response.status_code == 404
+
+
+def test_a_person_without_a_name_shows_no_sign_in_name(admin: Any) -> None:
+    person = UserFactory(name="", preferred_username="jane.doe@bank.example")
+    tenant = TenantFactory()
+    services.set_tenant_role(admin, tenant.pk, person.pk, "member")
+
+    body = as_(admin).get(f"/api/v1/audit?tenant_id={tenant.pk}").content.decode()
+
+    assert "jane.doe" not in body
+    assert f"Person {person.pk}" in body
 
 
 def test_a_tenant_with_workspaces_is_not_deleted(admin: Any) -> None:
@@ -350,6 +426,7 @@ def test_a_platform_admin_sees_every_entry_newest_first(admin: Any) -> None:
         "workspace_id",
         "old_role",
         "new_role",
+        "detail",
         "created_at",
     }
     assert newest["actor"] == {"id": admin.pk, "name": admin.name}

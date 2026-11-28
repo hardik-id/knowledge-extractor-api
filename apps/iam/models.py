@@ -126,8 +126,12 @@ class AuditEntry(BaseModel):
     actor_tid = models.UUIDField(null=True)
     target_oid = models.UUIDField(null=True)
     target_tid = models.UUIDField(null=True)
+    # The tenant's id, kept when the tenant row is gone (the link above is then cleared).
+    tenant_ref = models.UUIDField(null=True)
     old_role = models.CharField(max_length=32, blank=True, default="", db_default="")
     new_role = models.CharField(max_length=32, blank=True, default="", db_default="")
+    # Free text for what a role cannot say, e.g. a tenant's name before and after.
+    detail = models.CharField(max_length=300, blank=True, default="", db_default="")
 
     objects = AuditEntryQuerySet.as_manager()
 

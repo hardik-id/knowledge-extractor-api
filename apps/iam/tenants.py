@@ -12,10 +12,12 @@ from uuid import UUID
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q, QuerySet
-from django.db.models.functions import Lower
+from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
+from django.db.models.deletion import ProtectedError
+from django.db.models.functions import Coalesce, Lower
 
 from apps.core.errors import ApiError
+from apps.workspaces.models import Workspace
 
 from . import audit, services
 from .models import AuditEntry, Tenant, TenantMembership
@@ -32,9 +34,23 @@ def list_tenants(user: Any) -> list[tuple[Tenant, TenantRole | None, bool]]:
     ``workspace_count`` annotated; anyone else gets the tenants they belong to.
     """
     if is_platform_admin(user):
+        members = (
+            TenantMembership.objects.filter(tenant=OuterRef("pk"))
+            .order_by()
+            .values("tenant")
+            .annotate(n=Count("pk"))
+            .values("n")
+        )
+        workspaces = (
+            Workspace.objects.filter(tenant=OuterRef("pk"))
+            .order_by()
+            .values("tenant")
+            .annotate(n=Count("pk"))
+            .values("n")
+        )
         tenants = Tenant.objects.annotate(
-            member_count=Count("memberships", distinct=True),
-            workspace_count=Count("workspaces", distinct=True),
+            member_count=Coalesce(Subquery(members), 0),
+            workspace_count=Coalesce(Subquery(workspaces), 0),
         ).order_by(Lower("name"))
         roles = dict(
             TenantMembership.objects.filter(user=user).values_list("tenant_id", "role")
@@ -56,7 +72,9 @@ def create_tenant(actor: Any, name: str) -> Tenant:
                 tenant = Tenant.objects.create(name=name)
         except IntegrityError:  # a request at the same moment took the name
             raise ApiError("tenant_name_taken") from None
-        audit.record(actor=actor, action="tenant.create", tenant=tenant)
+        audit.record(
+            actor=actor, action="tenant.create", tenant=tenant, detail=f"name={name}"
+        )
         return tenant
 
 
@@ -67,13 +85,19 @@ def rename_tenant(actor: Any, tenant_id: UUID | str, name: str) -> Tenant:
         if tenant.name == name:
             return tenant
         _require_free_name(name, besides=tenant)
+        old_name = tenant.name
         tenant.name = name
         try:
             with transaction.atomic():
                 tenant.save(update_fields=["name", "updated_at"])
         except IntegrityError:
             raise ApiError("tenant_name_taken") from None
-        audit.record(actor=actor, action="tenant.rename", tenant=tenant)
+        audit.record(
+            actor=actor,
+            action="tenant.rename",
+            tenant=tenant,
+            detail=f"from={old_name}; to={name}",
+        )
         return tenant
 
 
@@ -86,9 +110,30 @@ def delete_tenant(actor: Any, tenant_id: UUID | str) -> None:
             raise ApiError("default_tenant")
         if tenant.workspaces.exists():
             raise ApiError("tenant_not_empty")
-        # Recorded first: the entry keeps its place, the tenant link is cleared by the delete.
-        audit.record(actor=actor, action="tenant.delete", tenant=tenant)
-        tenant.delete()
+        # Recorded first. The delete clears the tenant link of every entry, so each
+        # entry also keeps the tenant id (tenant_ref) and the delete keeps the name.
+        for m in tenant.memberships.select_related("user"):
+            audit.record(
+                actor=actor,
+                action="tenant.member.remove",
+                target_user=m.user,
+                tenant=tenant,
+                old_role=m.role,
+            )
+        audit.record(
+            actor=actor,
+            action="tenant.delete",
+            tenant=tenant,
+            detail=f"name={tenant.name}",
+        )
+        try:
+            with transaction.atomic():
+                tenant.delete()
+        except (
+            ProtectedError,
+            IntegrityError,
+        ):  # a workspace was made at the same moment
+            raise ApiError("tenant_not_empty") from None
 
 
 def _require_manage(actor: Any) -> None:
@@ -170,7 +215,7 @@ def list_audit(user: Any, tenant_id: UUID | str | None) -> QuerySet[AuditEntry]:
     entries = AuditEntry.objects.select_related("actor", "target_user")
     if tenant_id is not None:
         tenant = get_tenant(user, tenant_id, Permission.TENANT_MEMBERS_MANAGE)
-        return entries.filter(tenant=tenant)
+        return entries.filter(Q(tenant=tenant) | Q(tenant_ref=tenant.pk))
     if is_platform_admin(user):
         return entries.all()
     administered = TenantMembership.objects.filter(
@@ -178,4 +223,6 @@ def list_audit(user: Any, tenant_id: UUID | str | None) -> QuerySet[AuditEntry]:
     ).values("tenant_id")
     if not administered:
         raise ApiError("forbidden")
-    return entries.filter(tenant_id__in=administered)
+    return entries.filter(
+        Q(tenant_id__in=administered) | Q(tenant_ref__in=administered)
+    )

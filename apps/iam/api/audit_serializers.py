@@ -1,5 +1,6 @@
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.iam.models import AuditEntry
@@ -17,7 +18,7 @@ class AuditEntrySerializer(serializers.ModelSerializer[AuditEntry]):
 
     actor = serializers.SerializerMethodField()
     target = serializers.SerializerMethodField()
-    tenant_id = serializers.UUIDField(read_only=True, allow_null=True)
+    tenant_id = serializers.SerializerMethodField()
     workspace_id = serializers.UUIDField(read_only=True, allow_null=True)
 
     class Meta:
@@ -31,13 +32,18 @@ class AuditEntrySerializer(serializers.ModelSerializer[AuditEntry]):
             "workspace_id",
             "old_role",
             "new_role",
+            "detail",
             "created_at",
         ]
 
     def _person(self, user: Any) -> dict[str, Any] | None:
         if user is None:
             return None
-        return {"id": user.pk, "name": user.name or user.preferred_username}
+        return {"id": user.pk, "name": user.name or f"Person {user.pk}"}
+
+    @extend_schema_field(serializers.UUIDField(allow_null=True))
+    def get_tenant_id(self, obj: AuditEntry) -> Any:
+        return obj.tenant_id or obj.tenant_ref
 
     def get_actor(self, obj: AuditEntry) -> dict[str, Any] | None:
         return self._person(obj.actor)

@@ -1,6 +1,6 @@
 # IAM: tenants, workspaces and roles
 
-Who may do what. The code is `apps/iam`; the table is `apps/iam/roles.py` and one test pins it. Epic: #483. Roles are granted by `services.py`; nothing is enforced on the routes yet (later PBIs). Visibility and 404 versus 403 are in `docs/permissions.md`; sign-in is in `docs/auth.md`.
+Who may do what. The code is `apps/iam`; the table is `apps/iam/roles.py` and one test pins it. Epic: #483. Roles are granted by `services.py` and enforced on every route (the table below). How a route says what it needs and how it is checked: `docs/permissions.md`; sign-in is in `docs/auth.md`.
 
 ## The levels
 
@@ -39,6 +39,43 @@ A tenant is a team or a customer inside the application. It is not the Entra dir
 6. Removing access works at once, also for an open live-update socket.
 7. Every change of a role is recorded (`AuditEntry`: who, whose, what, when). Entries are only inserted and survive the deletion of a person or a tenant: each keeps the `oid` and `tid` of the actor and of the person it is about. `apps.iam.audit.record` is the one writer; a service calls it inside the transaction that makes the change, and it also logs `iam.changed` with ids and roles, never names.
 8. The migration `0002_default_tenant` creates the tenant "Default" (`is_default`; at most one) and makes every existing person a `member` of it. It reverses by deleting that tenant.
+
+## The routes
+
+What each route needs, declared with `@requires` on its view (`apps/iam/routes.py`); the sweep `apps/iam/tests/test_route_sweep.py` fails when a route declares nothing or answers otherwise. Paths are under `/api/v1`. The deprecated `/projects` paths (until #493) need the same as `/workspaces`.
+
+| Route | Method | Needs |
+| --- | --- | --- |
+| `/health`, `/ready` | GET | open |
+| `/me` | GET | signed in |
+| `/status` | GET | signed in |
+| `/status/test` | POST | `status.test` |
+| `/documents`, `/documents/{document_id}` | GET | signed in |
+| `/definition-templates` | GET | signed in |
+| `/ws-ticket` | POST | signed in |
+| `/workspaces` | GET, POST | signed in (POST: `workspaces.create` in the tenant, checked by the service) |
+| `/workspaces/{workspace_id}` | GET | `workspace.view` |
+| `/workspaces/{workspace_id}` | PATCH, DELETE | `workspace.manage` |
+| `/runs` | POST | signed in (a run of one's own, with no workspace) |
+| `/runs/{run_id}` | GET | `workspace.view` |
+| `/runs/{run_id}` | DELETE | `workspace.manage` (a workspace's run is 409 `run_belongs_to_workspace`) |
+| `/runs/{run_id}/documents` | PUT | `workspace.edit` |
+| `/runs/{run_id}/stages/extract/definition` | GET | `workspace.view` |
+| `/runs/{run_id}/stages/extract/definition` | PUT | `workspace.edit` |
+| `/runs/{run_id}/stages/extract/definition/versions`, `.../versions/{version}` | GET | `workspace.view` |
+| `/runs/{run_id}/stages/extract/definition/versions/{version}/restore` | POST | `workspace.edit` |
+| `/runs/{run_id}/stages/extract/chunking/generate` | POST | `workspace.run` |
+| `/runs/{run_id}/stages/{stage}/executions` | POST | `workspace.run` |
+| `/runs/{run_id}/files/{file_id}/extraction` | GET | `workspace.view` |
+| `/runs/{run_id}/files/{file_id}/extraction/records` | POST | `workspace.edit` |
+| `.../records/{record_id}` | PATCH, DELETE | `workspace.edit` |
+| `.../records/{record_id}/fields/{field_id}` | PUT | `workspace.edit` |
+| `.../records/{record_id}/values/{value_id}` | PATCH | `workspace.edit` |
+| `/runs/{run_id}/extraction/assistant/messages` | GET | `workspace.view` |
+| `/runs/{run_id}/extraction/assistant/messages` | POST, DELETE | `workspace.edit` |
+| socket `ws/runs/{run_id}/` | connect | `workspace.view` (otherwise closed with 4404) |
+
+A workspace permission is checked against the person's role in the workspace of the route's run or workspace: no role is 404, a role without the permission 403 `forbidden`. A tenant admin or a platform admin with no role in the workspace gets 404 too (rule 1).
 
 ## Other apps
 

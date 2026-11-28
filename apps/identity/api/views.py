@@ -5,11 +5,13 @@ from rest_framework.decorators import api_view
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.iam.routes import SIGNED_IN, requires
 from apps.identity import selectors
 from apps.identity.api.serializers import MeSerializer
 from apps.identity.models import User
 
 
+@requires(GET=SIGNED_IN)
 @extend_schema(responses=MeSerializer)
 @api_view(["GET"])
 def me(request: Request) -> Response:

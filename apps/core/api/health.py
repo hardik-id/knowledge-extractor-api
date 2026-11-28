@@ -1,38 +1,32 @@
-"""Liveness and readiness. Both are open: no sign-in, declared on the views."""
+"""Liveness and readiness. Both are open: no sign-in, declared on the views (``OPEN``)."""
 
 from django.db import connection
 from django.db.utils import Error as DatabaseError
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
-from rest_framework.decorators import (
-    api_view,
-    authentication_classes,
-    permission_classes,
-)
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ApiError
+from apps.iam.routes import OPEN, requires
 
 
 class StatusSerializer(serializers.Serializer):  # type: ignore[type-arg]
     status = serializers.CharField()
 
 
+@requires(GET=OPEN)
 @extend_schema(responses=StatusSerializer)
 @api_view(["GET"])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def health(request: Request) -> Response:
     """The process is up. Never touches the database."""
     return Response({"status": "ok"})
 
 
+@requires(GET=OPEN)
 @extend_schema(responses=StatusSerializer)
 @api_view(["GET"])
-@authentication_classes([])
-@permission_classes([AllowAny])
 def ready(request: Request) -> Response:
     """The service can reach its database."""
     try:

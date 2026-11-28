@@ -144,7 +144,7 @@ def test_the_assistant_preview_works_with_custom(
     run = RunFactory(owner=user)
     for _ in range(6):
         model.enqueue(empty())
-    selectors.preview_records(user, run.pk, code.DOCUMENT, draft())
+    selectors.preview_records(run, code.DOCUMENT, draft())
     assert len(model.calls) == 6
 
 

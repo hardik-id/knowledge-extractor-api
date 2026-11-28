@@ -8,6 +8,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.pagination import DefaultPagination
+from apps.iam.roles import Permission
+from apps.iam.routes import SIGNED_IN, requires
 from apps.identity.models import User
 from apps.workspaces import selectors, services
 from apps.workspaces.api.serializers import (
@@ -62,10 +64,22 @@ def _workspace_detail(request: Request, workspace_id: str) -> Response:
         )
         return Response(WorkspaceSerializer(workspace).data)
     return Response(
-        WorkspaceSerializer(selectors.get_workspace(user, workspace_id)).data
+        WorkspaceSerializer(
+            selectors.get_workspace(user, workspace_id, Permission.WORKSPACE_VIEW)
+        ).data
     )
 
 
+# The creating tenant is checked by the service (workspaces.create).
+LIST = {"GET": SIGNED_IN, "POST": SIGNED_IN}
+DETAIL = {
+    "GET": Permission.WORKSPACE_VIEW,
+    "PATCH": Permission.WORKSPACE_MANAGE,
+    "DELETE": Permission.WORKSPACE_MANAGE,
+}
+
+
+@requires(**LIST)
 @extend_schema(
     methods=["GET"],
     operation_id="workspaces_list",
@@ -83,6 +97,7 @@ def workspaces(request: Request) -> Response:
     return _workspaces(request)
 
 
+@requires(**DETAIL)
 @extend_schema(methods=["GET"], responses=WorkspaceSerializer)
 @extend_schema(
     methods=["PATCH"], request=UpdateWorkspaceSerializer, responses=WorkspaceSerializer
@@ -97,6 +112,7 @@ def workspace_detail(request: Request, workspace_id: str) -> Response:
 # The old paths, until the UI has moved. #493 removes them.
 
 
+@requires(**LIST)
 @extend_schema(
     methods=["GET"],
     operation_id="projects_list",
@@ -117,6 +133,7 @@ def projects(request: Request) -> Response:
     return _workspaces(request)
 
 
+@requires(**DETAIL)
 @extend_schema(
     methods=["GET"],
     operation_id="projects_retrieve",

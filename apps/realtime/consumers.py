@@ -8,6 +8,7 @@ from channels.generic.websocket import (
 )
 
 from apps.core.errors import ApiError
+from apps.iam.roles import Permission
 from apps.realtime import services, telemetry
 from apps.runs import selectors as runs
 
@@ -18,8 +19,9 @@ NOT_FOUND = 4404
 class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     """``ws/runs/<run_id>/``: the changes to one run, as they happen.
 
-    The ticket signed the person in (``TicketAuthMiddleware``). A run they may
-    not see, or that does not exist, is closed with 4404. The server only sends:
+    The ticket signed the person in (``TicketAuthMiddleware``). It needs
+    ``workspace.view``: a run they may not see, or that does not exist, is closed
+    with 4404. The server only sends:
     each event is one JSON text frame; whatever the client sends is ignored.
     """
 
@@ -28,7 +30,9 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     async def connect(self) -> None:
         run_id = self.scope["url_route"]["kwargs"]["run_id"]
         try:
-            run = await database_sync_to_async(runs.get_run)(self.scope["user"], run_id)
+            run = await database_sync_to_async(runs.get_run)(
+                self.scope["user"], run_id, Permission.WORKSPACE_VIEW
+            )
         except ApiError:
             # Accept first, so the close code reaches the browser.
             await self.accept()

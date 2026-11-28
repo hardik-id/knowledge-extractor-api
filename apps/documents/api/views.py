@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from apps.documents import selectors
 from apps.documents.api.serializers import DocumentListSerializer, DocumentSerializer
+from apps.iam.routes import SIGNED_IN, requires
 from apps.identity.models import User
 
 MARKDOWN = "text/markdown; charset=utf-8"
@@ -19,6 +20,7 @@ MARKDOWN = "text/markdown; charset=utf-8"
 LIST_LIMIT = 100
 
 
+@requires(GET=SIGNED_IN)
 @extend_schema(
     operation_id="documents_list",
     parameters=[
@@ -53,6 +55,7 @@ def _etag_matches(header: str, etag: str) -> bool:
     return any(part.strip().removeprefix("W/") == wanted for part in header.split(","))
 
 
+@requires(GET=SIGNED_IN)
 @extend_schema(
     operation_id="documents_read",
     responses={

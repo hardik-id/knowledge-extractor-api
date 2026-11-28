@@ -16,7 +16,7 @@ class SharedNoteQuerySet(OwnedQuerySet):
 
 
 class SharedNote(OwnedModel):
-    """Visible to everyone when ``shared``, changeable only by its owner."""
+    """Visible to everyone when ``shared``, otherwise to its owner only."""
 
     text = models.CharField(max_length=100)
     shared = models.BooleanField(default=False)

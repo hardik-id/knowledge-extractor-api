@@ -78,7 +78,7 @@ class Command(BaseCommand):
                 run = runs.get_any_run(options["run"])
             except ApiError as error:
                 raise CommandError(error.message) from None
-            saved = extraction.get_definition(run.owner, run.pk)
+            saved = extraction.definition_of(run)
             definition = Draft.model_validate(
                 {
                     "prompt": saved.prompt,

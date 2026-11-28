@@ -23,6 +23,7 @@ from apps.core.errors import ApiError
 from apps.core.jobs import enqueue_after_commit
 from apps.extraction.definition import Draft
 from apps.extraction.validation import parse_draft
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors as runs
@@ -34,12 +35,13 @@ APOLOGY = "Sorry, something went wrong and I could not finish this reply."
 def send_message(user: User, run_id: Any, *, text: str, definition: Any) -> Message:
     """Store what the person wrote and an empty reply, and start the reply job.
 
-    404 for a run that is not theirs, 422 ``empty_message`` for blank text,
+    404 for a run they do not see, 403 without ``workspace.edit``, 422
+    ``empty_message`` for blank text,
     422 ``invalid_definition`` for a bad draft, 409 ``assistant_busy`` while a
     reply is still being written. Returns the person's message.
     """
-    run = runs.get_run(user, run_id)
-    close_stale_replies(user, run.pk)
+    run = runs.get_run(user, run_id, Permission.WORKSPACE_EDIT)
+    _close_stale_replies(run)
     text = text.strip()
     if not text:
         raise ApiError("empty_message")
@@ -70,11 +72,11 @@ def send_message(user: User, run_id: Any, *, text: str, definition: Any) -> Mess
 def clear_messages(user: User, run_id: Any) -> None:
     """Remove every message of the run and announce ``assistant.cleared`` after the commit.
 
-    404 for a run that is not theirs, 409 ``assistant_busy`` while a reply is
-    still being written (a stale one is closed first).
+    404 for a run they do not see, 403 without ``workspace.edit``, 409
+    ``assistant_busy`` while a reply is still being written (a stale one is closed first).
     """
-    run = runs.get_run(user, run_id)
-    close_stale_replies(user, run.pk)
+    run = runs.get_run(user, run_id, Permission.WORKSPACE_EDIT)
+    _close_stale_replies(run)
     with transaction.atomic():
         if Message.objects.filter(run_id=run.pk, status=Status.STREAMING).exists():
             raise _busy()
@@ -90,8 +92,12 @@ def close_stale_replies(user: User, run_id: Any) -> None:
     """Close the run's replies still streaming after ``ASSISTANT_REPLY_TIMEOUT_SECONDS``.
 
     Their worker died: they end as an agent failure does, and no longer count as busy.
+    Reading the conversation does this, so it needs ``workspace.view`` only.
     """
-    run = runs.get_run(user, run_id)
+    _close_stale_replies(runs.get_run(user, run_id, Permission.WORKSPACE_VIEW))
+
+
+def _close_stale_replies(run: Any) -> None:
     cutoff = timezone.now() - timedelta(
         seconds=settings.ASSISTANT_REPLY_TIMEOUT_SECONDS
     )
@@ -115,7 +121,7 @@ class Request:
     text: str
     definition: Draft
     history: list[Turn]
-    run_view: selectors.OwnerRunView
+    run_view: selectors.StoredRunView
 
 
 def start_reply(message_id: Any) -> Request | None:

@@ -24,11 +24,12 @@ class OwnedQuerySet(models.QuerySet["OwnedModel"]):
 
 
 class OwnedModel(BaseModel):
-    """Base of things that belong to one person.
+    """Base of things a person made.
 
     ``Model.objects.visible_to(user)`` is the only way a selector starts a query.
     A model that is visible to more than its owner overrides ``visible_to`` on its
-    own queryset and ``can_be_changed_by`` here. See docs/permissions.md.
+    own queryset. What a person may do with a row is their role's permission, not
+    ``owner`` (docs/permissions.md, docs/iam.md).
     """
 
     owner = models.ForeignKey(
@@ -39,9 +40,6 @@ class OwnedModel(BaseModel):
 
     class Meta:
         abstract = True
-
-    def can_be_changed_by(self, user: Any) -> bool:
-        return bool(self.owner_id == user.pk)
 
 
 class ModelCall(BaseModel):

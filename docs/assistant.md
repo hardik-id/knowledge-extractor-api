@@ -45,7 +45,7 @@ The assistant proposes and the person applies: nothing here saves a definition. 
 `write_reply(message_id)` in `apps/assistant/tasks.py`. It loads the reply and the message it answers, then runs `get_agent().reply(text, definition, history, run_view)`:
 
 - `history` is the run's earlier messages, oldest first.
-- `run_view` is what the agent can look at: the run's documents, what was extracted from them and a dry run of the extractor (below), all as the run's owner.
+- `run_view` is what the agent can look at: the run's documents, what was extracted from them and a dry run of the extractor (below), read for the run, not through a person's workspace role.
 
 Each event of the agent is stored first and announced after, on the run's socket through `apublish_run_event` (`docs/realtime.md`), so a client that missed events reads the same from `GET`:
 
@@ -105,7 +105,7 @@ A `RecordView` is `(record_type_id, origin, review, values)`; a `ValueView` is `
 
 Limits:
 
-- It is limited to the run and its owner. `OwnerRunView` (`apps/assistant/selectors.py`) reads through `apps.documents.selectors` and `apps.extraction.selectors`, as the run's owner. A document id that is not one of the run's documents is `document_not_found` for `read` and `preview`, even when the owner could open that document elsewhere.
+- It is limited to the run. `StoredRunView` (`apps/assistant/selectors.py`) holds the run and reads through `apps.extraction.selectors` (`input_text`, `extractions_of`, `preview_records`), so whichever editor asked, the reply sees the same run, and it works when the person who made the workspace has no role in it any more (`docs/permissions.md`). A document id that is not one of the run's documents is `document_not_found` for `read` and `preview`, even when it is in the catalog.
 - It reads the database each time it is asked, so what an agent sees is as old as the call.
 - A preview runs the extractor once per call. With a model-backed extractor that costs a model call, so a tool should bound how often it asks.
 - `tests/fakes.py` has `FakeRunView` for tests of agents and tools.
@@ -131,7 +131,7 @@ Its reply text is cut into deltas of three words each.
 - **Text.** The model's streamed text becomes `TextDelta`s as it arrives. When the model speaks again after a tool call, the new text starts after a blank line.
 - **The proposal** is a call of the tool `propose_definition(definition, reasons)`. Its arguments are checked against a strict JSON schema (derived from the models of `apps/extraction/definition.py` by `tools/_definition_schema.py`, so every property is required and none is extra; modes, value types and formats are enums) and then by `parse_draft`. An invalid proposal goes back to the model as the tool's answer, starting `Error:` and saying what is wrong (where it does not fit the schema, without echoing the values), so it can correct it in the next turn. The first valid proposal is kept and later calls are refused, so at most one reaches the person, after all the text. A record type or field with an empty `id` gets one from `parse_draft`; the instructions tell the model to keep the ids of what stays.
 - **`preview_extraction(definition, document_id)`** validates the definition as `propose_definition` does, runs `RunView.preview` and summarises it: records per record type; per field the records where it was found, not found, or found but not anchored; up to three example values. Nothing is saved and it is not a proposal.
-- **`read_document(document_id)`** reads a sample of one of the run's documents, through `RunView.read` (as the run's owner, only the run's own files).
+- **`read_document(document_id)`** reads a sample of one of the run's documents, through `RunView.read` (only the run's own files).
 - **`find_in_documents(text)`** searches the run's documents for a literal phrase (2 to 100 characters, case does not matter, no patterns). Per matching document it gives the number of matches and up to 3 snippets of about 120 characters (12 in total, the first 50 documents searched), as untrusted data. No match is a plain answer, not an error.
 - **`outline_document(document_id)`** shows how one document is built without reading it: the front matter keys, the headings with their levels, the labelled lines (`**Label:** value`) by label with a count and one example, and the length. Lists are capped (60 headings, 20 labels, 30 keys) and say when they are cut. The parsing is the pure function `outline(text)` in `tools/_structure.py`.
 - **`summarize_records()`** summarizes what the run extracted, through `RunView.extractions`: over the run and per document, per record type the records (by review, and added by hand) and per field the values found, not found and found but not anchored, how they were judged, what was added or changed by hand, and up to two rejected values as examples, clipped and wrapped as untrusted data. Found plus not found is the records of the type. With nothing extracted it says so, as a plain answer.

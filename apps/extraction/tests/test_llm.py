@@ -687,8 +687,7 @@ def test_a_preview_is_bounded_to_its_own_part_limit(
     settings.EXTRACTION_PREVIEW_MAX_CHUNKS = 2
     with pytest.raises(ExtractionError, match="too long"):
         preview_records(
-            user,
-            run.pk,
+            run,
             long_text(3),
             parse_draft(
                 {

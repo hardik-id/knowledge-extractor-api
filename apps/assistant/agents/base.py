@@ -85,8 +85,8 @@ class FileRecords:
 class RunView(Protocol):
     """What an agent can look at: one read-only view of a run.
 
-    It is the only way a tool reaches data, and it is limited to this run and
-    its owner. Everything it returns is plain data (no model instance) and
+    It is the only way a tool reaches data, and it is limited to this run.
+    Everything it returns is plain data (no model instance) and
     nothing it offers writes anything.
     """
 

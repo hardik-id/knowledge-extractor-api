@@ -24,11 +24,14 @@ from apps.extraction.models import (
 )
 from apps.extraction.spans import Span
 from apps.extraction.template_registry import default_template
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
 if TYPE_CHECKING:  # only for the annotation: apps do not import each other's models
-    from apps.runs.models import RunFile
+    from apps.runs.models import Run, RunFile
+
+VIEW = Permission.WORKSPACE_VIEW
 
 
 def latest_version(run_id: Any) -> DefinitionVersion | None:
@@ -36,11 +39,16 @@ def latest_version(run_id: Any) -> DefinitionVersion | None:
 
 
 def get_definition(user: User, run_id: Any) -> DefinitionVersion:
-    """The latest definition of ``user``'s run; the first read makes version 1.
+    """The latest definition of a run ``user`` may view; the first read makes version 1.
 
-    Someone else's run and an unknown id are both 404 ``run_not_found``.
+    A run they do not see and an unknown id are both 404 ``run_not_found``.
     """
-    run = runs.get_run(user, run_id)
+    return definition_of(runs.get_run(user, run_id, VIEW))
+
+
+def definition_of(run: Run) -> DefinitionVersion:
+    """The latest definition of ``run``, which the caller already holds; the first
+    read makes version 1."""
     current = latest_version(run.pk)
     if current is not None:
         return current
@@ -71,7 +79,8 @@ def get_definition_version(run_id: Any, version: int) -> DefinitionVersion:
 
 
 def list_definition_versions(user: User, run_id: Any) -> list[DefinitionVersion]:
-    """The saved versions of ``user``'s run, newest first; the first read makes version 1."""
+    """The saved versions of a run ``user`` may view, newest first; the first read
+    makes version 1."""
     run_id = get_definition(user, run_id).run_id
     return list(DefinitionVersion.objects.filter(run_id=run_id).order_by("-version"))
 
@@ -79,37 +88,45 @@ def list_definition_versions(user: User, run_id: Any) -> list[DefinitionVersion]
 def get_definition_version_of(
     user: User, run_id: Any, version: int
 ) -> DefinitionVersion:
-    """One saved version of ``user``'s run.
+    """One saved version of a run ``user`` may view.
 
-    Someone else's run is 404 ``run_not_found``; an unknown version is 404
+    A run they do not see is 404 ``run_not_found``; an unknown version is 404
     ``definition_version_not_found``.
     """
-    run_id = get_definition(user, run_id).run_id  # also makes version 1 on a first read
+    return saved_version(runs.get_run(user, run_id, VIEW), version)
+
+
+def saved_version(run: Run, version: int) -> DefinitionVersion:
+    """One saved version of ``run``, which the caller already holds. 404
+    ``definition_version_not_found`` for an unknown version."""
+    definition_of(run)  # makes version 1 on a first read
     try:
-        return DefinitionVersion.objects.get(run_id=run_id, version=version)
+        return DefinitionVersion.objects.get(run_id=run.pk, version=version)
     except DefinitionVersion.DoesNotExist:
         raise ApiError("definition_version_not_found") from None
 
 
 def get_extraction(user: User, run_id: Any, file_id: Any) -> Extraction:
-    """The extraction of one of ``user``'s run files, with its records and values.
+    """The extraction of a file of a run ``user`` may view, with its records and values.
 
     404 ``run_not_found`` or ``file_not_found`` as for the run and file, and 404
     ``extraction_not_found`` before the file's first extraction.
     """
-    run_file = runs.get_run_file(user, run_id, file_id)
+    return extraction_of(runs.get_run_file(user, run_id, file_id, VIEW))
+
+
+def extraction_of(run_file: RunFile) -> Extraction:
+    """The extraction of a file the caller already holds. 404 ``extraction_not_found``
+    before its first extraction."""
     try:
         return Extraction.objects.prefetch_related("records__values").get(file=run_file)
     except Extraction.DoesNotExist:
         raise ApiError("extraction_not_found") from None
 
 
-def list_extractions(user: User, run_id: Any) -> list[Extraction]:
-    """The extractions of ``user``'s run, with their records and values, by file name.
-
-    Only files that have been extracted have one. Someone else's run is a 404.
-    """
-    run = runs.get_run(user, run_id)
+def extractions_of(run: Run) -> list[Extraction]:
+    """The extractions of ``run``, which the caller already holds, with their records
+    and values, by file name. Only files that have been extracted have one."""
     return list(
         Extraction.objects.filter(file__run_id=run.pk)
         .select_related("file")
@@ -118,31 +135,32 @@ def list_extractions(user: User, run_id: Any) -> list[Extraction]:
     )
 
 
-def preview_records(
-    user: User, run_id: Any, text: str, draft: Draft
-) -> list[StoredRecord]:
+def preview_records(run: Run, text: str, draft: Draft) -> list[StoredRecord]:
     """The records an extraction of ``text`` with ``draft`` would store, storing nothing.
 
     The configured extractor runs with the run's example records, its output is
     checked as in a real execution (``stored_records``) and merged into an empty
     extraction, so the order is the stored one. The draft is a definition without
-    a version. Someone else's run is a 404.
+    a version. The caller already holds ``run``.
     """
-    run = runs.get_run(user, run_id)
     definition = Definition(0, draft.prompt, draft.record_types, draft.chunking)
     raw = get_preview_extractor().extract(text, definition, example_records(run.pk))
     return merge_extracted_records([], stored_records(text, raw))
 
 
 def input_text(run_file: RunFile) -> DocumentText:
-    """The text and ETag of the document a run file points at, read as the run's owner."""
+    """The text and ETag of the document a run file points at.
+
+    For the run, not for the person asking: the file is already in the run, and the
+    catalog is asked with the document rights of the person who made the run (no
+    workspace role is involved, so this works for every member and for jobs).
+    """
     return documents.read_document(run_file.run.owner, run_file.source_ref)
 
 
-def custom_chunking_documents(user: User, run_id: Any) -> list[AuthorDocument]:
+def custom_chunking_documents(run: Run) -> list[AuthorDocument]:
     """The run's documents the author of custom splitting code works from: by name,
-    at most ``MAX_DOCUMENTS``, with their full text. Someone else's run is a 404."""
-    run = runs.get_run(user, run_id)
+    at most ``MAX_DOCUMENTS``, with their full text. The caller already holds ``run``."""
     files = run.files.order_by("name", "pk")[:MAX_DOCUMENTS]
     return [
         AuthorDocument(file_id=str(f.pk), name=f.name, text=input_text(f).text)

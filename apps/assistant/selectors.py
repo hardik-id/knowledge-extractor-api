@@ -15,30 +15,32 @@ from apps.assistant.agents.base import (
 )
 from apps.assistant.models import Message
 from apps.core.errors import ApiError
-from apps.documents import selectors as documents
 from apps.extraction import selectors as extraction
 from apps.extraction.definition import Draft
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.runs import selectors as runs
 
 
 def list_messages(user: User, run_id: Any) -> list[Message]:
-    """The conversation of ``user``'s run, oldest first. Someone else's run is a 404."""
-    run = runs.get_run(user, run_id)
+    """The conversation of a run ``user`` may view, oldest first. A run they do not
+    see is a 404."""
+    run = runs.get_run(user, run_id, Permission.WORKSPACE_VIEW)
     return list(Message.objects.filter(run_id=run.pk))
 
 
-class OwnerRunView:
-    """One read-only view of a run, as an agent may look at it: as the run's owner.
+class StoredRunView:
+    """One read-only view of a run, as an agent may look at it: for the run itself.
 
-    Only the run's own files can be read or previewed; any other document id is
-    ``document_not_found``, even one the owner could open elsewhere. What it
-    returns is plain data (``agents.base``): no model instance reaches an agent.
+    It holds the run, so it reads through no person's workspace role: whoever of
+    the run's editors asked, the reply sees the same run. Only the run's own files
+    can be read or previewed; any other document id is ``document_not_found``. Their
+    text comes as for an extraction (``extraction.input_text``). What it returns is
+    plain data (``agents.base``): no model instance reaches an agent.
     """
 
     def __init__(self, run: Any) -> None:
         self._run = run
-        self._owner: User = run.owner
 
     async def documents(self) -> list[DocumentRef]:
         return await sync_to_async(self._documents)()
@@ -59,9 +61,10 @@ class OwnerRunView:
         ]
 
     def _read(self, document_id: str) -> str:
-        if not self._run.files.filter(source_ref=document_id).exists():
+        found = self._run.files.filter(source_ref=document_id).first()
+        if found is None:
             raise ApiError("document_not_found")
-        return documents.read_document(self._owner, document_id).text
+        return extraction.input_text(found).text
 
     def _extractions(self) -> list[FileRecords]:
         return [
@@ -74,12 +77,12 @@ class OwnerRunView:
                     for record in found.records.all()
                 ],
             )
-            for found in extraction.list_extractions(self._owner, self._run.pk)
+            for found in extraction.extractions_of(self._run)
         ]
 
     def _preview(self, definition: Draft, document_id: str) -> list[RecordView]:
         text = self._read(document_id)
-        found = extraction.preview_records(self._owner, self._run.pk, text, definition)
+        found = extraction.preview_records(self._run, text, definition)
         return [_record_view(record, record.values) for record in found]
 
 
@@ -102,11 +105,11 @@ def _record_view(record: Any, values: Any) -> RecordView:
     )
 
 
-def run_run_view(message: Message) -> OwnerRunView:
-    """The run view of the run ``message`` belongs to, read as the run's owner."""
+def run_run_view(message: Message) -> StoredRunView:
+    """The run view of the run ``message`` belongs to."""
     return run_view_of(message.run)
 
 
-def run_view_of(run: Any) -> OwnerRunView:
-    """The run view of ``run``, read as its owner."""
-    return OwnerRunView(run)
+def run_view_of(run: Any) -> StoredRunView:
+    """The run view of ``run``, which the caller already holds."""
+    return StoredRunView(run)

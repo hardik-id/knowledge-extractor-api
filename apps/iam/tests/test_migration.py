@@ -36,4 +36,4 @@ def test_every_existing_person_becomes_a_member_of_default_and_it_reverses() -> 
     assert not apps.get_model("iam", "Tenant").objects.exists()
     assert not apps.get_model("iam", "TenantMembership").objects.exists()
 
-    _migrate(AFTER)  # leave the database as the other tests expect it
+    _migrate(AFTER)

@@ -54,3 +54,17 @@ def test_an_audit_entry_is_never_updated() -> None:
     with pytest.raises(ValueError):
         entry.save()
     assert AuditEntry.objects.get(pk=entry.pk).new_role == ""
+
+
+def test_audit_entries_cannot_be_updated_or_deleted_in_bulk_or_alone() -> None:
+    entry = AuditEntryFactory()
+    with pytest.raises(ValueError):
+        AuditEntry.objects.filter(pk=entry.pk).update(new_role="admin")
+    with pytest.raises(ValueError):
+        AuditEntry.objects.filter(pk=entry.pk).delete()
+    with pytest.raises(ValueError):
+        entry.delete()
+    entry.new_role = "admin"
+    with pytest.raises(ValueError), transaction.atomic():
+        AuditEntry.objects.bulk_update([entry], ["new_role"])
+    assert AuditEntry.objects.get(pk=entry.pk).new_role == ""

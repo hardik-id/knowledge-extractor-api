@@ -64,6 +64,16 @@ class PlatformAdmin(BaseModel):
         return f"platform admin {self.user_id}"
 
 
+class AuditEntryQuerySet(models.QuerySet):  # type: ignore[type-arg]
+    """Entries are only inserted: no update, no delete."""
+
+    def update(self, **kwargs: Any) -> int:
+        raise ValueError("An audit entry is never changed.")
+
+    def delete(self) -> tuple[int, dict[str, int]]:
+        raise ValueError("An audit entry is never deleted.")
+
+
 class AuditEntry(BaseModel):
     """A change of a role. Only ever inserted; people and tenants may go, entries stay."""
 
@@ -87,6 +97,8 @@ class AuditEntry(BaseModel):
     old_role = models.CharField(max_length=32, blank=True, default="", db_default="")
     new_role = models.CharField(max_length=32, blank=True, default="", db_default="")
 
+    objects = AuditEntryQuerySet.as_manager()
+
     class Meta:
         verbose_name_plural = "audit entries"
 
@@ -94,6 +106,9 @@ class AuditEntry(BaseModel):
         if not self._state.adding:
             raise ValueError("An audit entry is never changed.")
         super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, int]]:
+        raise ValueError("An audit entry is never deleted.")
 
     def __str__(self) -> str:
         return f"{self.action} at {self.created_at}"

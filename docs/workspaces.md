@@ -13,6 +13,13 @@ A workspace lives in one tenant and is seen through membership: a person sees it
 | `GET /api/v1/workspaces/{id}` | one workspace |
 | `PATCH /api/v1/workspaces/{id}` | `name` and/or `description` |
 | `DELETE /api/v1/workspaces/{id}` | deletes the workspace, its run and everything on it, and closes the run's sockets (4404) |
+| `GET /api/v1/workspaces/{id}/members` | `{ items }`: who has a role, owners first, then by name |
+| `PUT /api/v1/workspaces/{id}/members/{user_id}` | `{ role }` (`owner`, `editor` or `viewer`): adds the person or changes their role; answers the member |
+| `DELETE /api/v1/workspaces/{id}/members/{user_id}` | takes the person out; 204 |
+
+## Members
+
+A member on the wire is `{ "user": { "id", "name", "preferred_username" }, "role", "added_at" }`. Anyone with a role in the workspace reads the list, and so does an admin of its tenant or a platform admin who is not a member. Changing it needs `workspace.members.manage`: an owner, an admin of the tenant or a platform admin; the admins still get 404 on the workspace's content until they add themselves. Only a person in the workspace's tenant can be given a role (422 `not_a_tenant_member`, also for an unknown id), and a workspace keeps one owner (409 `last_owner`). A removed member gets 404 on the workspace at the next request. The rules and the audit entries are in `docs/iam.md`. There is no `/projects` alias for these routes.
 
 `tenant_id` is the tenant the workspace goes to. Without it the person's only tenant is used; a person in several tenants must say which (422 `validation_error`), a person in none cannot create one (403 `forbidden`). A tenant the person is not in is 404 `tenant_not_found`. Creating needs `workspaces.create` in that tenant.
 

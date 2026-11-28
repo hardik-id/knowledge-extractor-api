@@ -62,7 +62,13 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("workspaces/<str:workspace_id>", "PATCH"): {"name": "Renamed"},
     ("projects", "POST"): {"name": "Swept"},
     ("projects/<str:project_id>", "PATCH"): {"name": "Renamed"},
+    ("workspaces/<str:workspace_id>/members/<str:user_id>", "PUT"): {"role": "viewer"},
     ("runs", "POST"): {"items": []},
+    ("tenants/<str:tenant_id>/members", "POST"): {
+        "preferred_username": "outsider@example.com",  # OUTSIDER, below
+        "role": "member",
+    },
+    ("tenants/<str:tenant_id>/members/<str:user_id>", "PUT"): {"role": "member"},
     ("tenants", "POST"): {"name": "Swept"},
     ("tenants/<str:tenant_id>", "PATCH"): {"name": "Renamed"},
     ("runs/<str:run_id>/documents", "PUT"): {"items": []},
@@ -93,6 +99,7 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
 }
 # A query may name an id of the world as ``{tenant_id}``.
 QUERIES: dict[tuple[str, str], str] = {
+    ("users", "GET"): "?preferred_username=outsider@example.com",
     ("audit", "GET"): "?tenant_id={tenant_id}",
     (
         "runs/<str:run_id>/files/<str:file_id>/extraction/records/<str:record_id>",
@@ -126,6 +133,28 @@ OUTSIDER = "outsider@example.com"
 # Routes whose rule is not "one permission on the tenant or the workspace": what
 # every person of PEOPLE gets, spelled out as "allowed", "403" or "404".
 EXPECTED: dict[tuple[str, str], dict[str, str]] = {
+    # A platform admin lists people; a tenant admin looks up one exact name.
+    ("users", "GET"): {
+        "outsider": "403",
+        "no_tenant": "403",
+        "stranger": "403",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "403",
+        "editor": "403",
+        "owner": "403",
+    },
+    # Declared ``workspace.view``; the admins who manage the members read them too.
+    ("workspaces/<str:workspace_id>/members", "GET"): {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "404",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "allowed",
+        "editor": "allowed",
+        "owner": "allowed",
+    },
     # With the tenant named: whoever manages its members (see ``tenants.list_audit``).
     ("audit", "GET"): {
         "outsider": "404",

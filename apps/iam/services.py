@@ -18,9 +18,9 @@ from django.db import connection, transaction
 from apps.core.errors import ApiError
 
 from . import audit
-from .models import PlatformAdmin, Tenant, TenantMembership
+from .models import PlatformAdmin, Tenant, TenantMembership, WorkspaceMembership
 from .roles import Permission, PlatformAdminRole, TenantRole
-from .selectors import is_platform_admin, tenant_permissions
+from .selectors import find_user_by_username, is_platform_admin, tenant_permissions
 
 log = structlog.get_logger(__name__)
 
@@ -29,45 +29,88 @@ _PLATFORM_ADMIN_LOCK = 483_486
 
 
 def set_tenant_role(
-    actor: Any | None, tenant_id: UUID, user_id: int, role: TenantRole | str
+    actor: Any | None,
+    tenant_id: UUID | str,
+    user_id: int,
+    role: TenantRole | str,
+    *,
+    must_exist: bool = False,
 ) -> TenantMembership:
-    """Make the person ``role`` in the tenant, adding them when they are not a member."""
+    """Make the person ``role`` in the tenant.
+
+    Adding a non-member by id is for a platform admin or an operator only: ids are
+    small numbers, so a tenant admin who could add by id could add (and then read
+    the names of) everyone by counting. For a tenant admin a non-member is
+    ``user_not_found``, the same as an id nobody has; they add by sign-in name
+    (``add_tenant_member``).
+    """
     role = TenantRole(role)
     with transaction.atomic():
         tenant = _locked_tenant(actor, tenant_id)
-        target = _user(user_id)
-        membership = TenantMembership.objects.filter(tenant=tenant, user=target).first()
-        old = TenantRole(membership.role) if membership else None
-        if membership is not None and old == role:
-            return membership
-        if old == TenantRole.ADMIN:
-            _keep_an_admin(actor, tenant, target)
-        if membership is None:
-            membership = TenantMembership.objects.create(
-                tenant=tenant, user=target, role=role
-            )
-        else:
-            membership.role = role
-            membership.save(update_fields=["role", "updated_at"])
-        audit.record(
-            actor=actor,
-            action="tenant.role.set",
-            target_user=target,
-            tenant=tenant,
-            old_role=old or "",
-            new_role=role,
-        )
-        return membership
+        membership = TenantMembership.objects.filter(
+            tenant=tenant, user_id=user_id
+        ).first()
+        if membership is None and (must_exist or not _may_add_by_id(actor)):
+            raise ApiError("user_not_found")
+        return _apply_role(actor, tenant, _user(user_id), membership, role)
 
 
-def remove_tenant_member(actor: Any | None, tenant_id: UUID, user_id: int) -> None:
-    """Take the person out of the tenant. Not a member: answers ``user_not_found``."""
+def change_member_role(
+    actor: Any | None, tenant_id: UUID | str, user_id: int, role: TenantRole | str
+) -> TenantMembership:
+    """Change the role of a member. Not a member (or no such person): ``user_not_found``."""
+    return set_tenant_role(actor, tenant_id, user_id, role, must_exist=True)
+
+
+def add_tenant_member(
+    actor: Any | None,
+    tenant_id: UUID | str,
+    role: TenantRole | str,
+    *,
+    preferred_username: str | None = None,
+    user_id: int | None = None,
+) -> TenantMembership:
+    """Add a person who has signed in, by exact sign-in name (case does not matter).
+
+    No such person, or more than one with that name: ``user_not_found``. Already a
+    member: 409 ``already_a_member``. ``user_id`` is for a platform admin or an
+    operator; anyone else who gives one is refused (``forbidden``).
+    """
+    role = TenantRole(role)
+    if (preferred_username is None) == (user_id is None):
+        raise ApiError("validation_error")
     with transaction.atomic():
         tenant = _locked_tenant(actor, tenant_id)
-        target = _user(user_id)
-        membership = TenantMembership.objects.filter(tenant=tenant, user=target).first()
+        if user_id is not None:
+            if not _may_add_by_id(actor):
+                raise ApiError("forbidden")
+            target = _user(user_id)
+        else:
+            target = find_user_by_username(preferred_username or "")
+            if target is None:
+                raise ApiError("user_not_found")
+        if TenantMembership.objects.filter(tenant=tenant, user=target).exists():
+            raise ApiError("already_a_member")
+        return _apply_role(actor, tenant, target, None, role)
+
+
+def remove_tenant_member(
+    actor: Any | None, tenant_id: UUID | str, user_id: int
+) -> None:
+    """Take the person out of the tenant, and out of every workspace of it.
+
+    Not a member: ``user_not_found``, the same as for an id nobody has. Their roles
+    in the tenant's workspaces go in the same transaction, one audit entry each; a
+    workspace may be left without an owner.
+    """
+    with transaction.atomic():
+        tenant = _locked_tenant(actor, tenant_id)
+        membership = TenantMembership.objects.filter(
+            tenant=tenant, user_id=user_id
+        ).first()
         if membership is None:
             raise ApiError("user_not_found")
+        target = _user(user_id)
         if membership.role == TenantRole.ADMIN:
             _keep_an_admin(actor, tenant, target)
         old = membership.role
@@ -79,6 +122,19 @@ def remove_tenant_member(actor: Any | None, tenant_id: UUID, user_id: int) -> No
             tenant=tenant,
             old_role=old,
         )
+        roles = WorkspaceMembership.objects.filter(
+            user=target, workspace__tenant=tenant
+        ).order_by("created_at")
+        for row in roles:
+            audit.record(
+                actor=actor,
+                action="workspace.member.remove",
+                target_user=target,
+                tenant=tenant,
+                workspace_id=row.workspace_id,
+                old_role=row.role,
+            )
+        roles.delete()
 
 
 def grant_platform_admin(actor: Any | None, user_id: int) -> None:
@@ -159,14 +215,19 @@ def join_default_tenant(user: Any) -> None:
     )
 
 
-def _locked_tenant(actor: Any | None, tenant_id: UUID) -> Tenant:
+def _locked_tenant(actor: Any | None, tenant_id: UUID | str) -> Tenant:
     """The tenant, locked, after checking the actor may manage its members.
 
     A tenant the actor may not see is ``tenant_not_found``; one they see but may
     not change is ``forbidden``. Locking the row makes every change of one tenant's
     members run one after the other.
     """
-    tenant = Tenant.objects.select_for_update().filter(pk=tenant_id).first()
+    try:
+        tenant = (
+            Tenant.objects.select_for_update().filter(pk=UUID(str(tenant_id))).first()
+        )
+    except ValueError:
+        tenant = None
     if tenant is None:
         raise ApiError("tenant_not_found")
     if actor is not None:
@@ -176,6 +237,41 @@ def _locked_tenant(actor: Any | None, tenant_id: UUID) -> Tenant:
         if Permission.TENANT_MEMBERS_MANAGE not in held:
             raise ApiError("forbidden")
     return tenant
+
+
+def _may_add_by_id(actor: Any | None) -> bool:
+    return actor is None or is_platform_admin(actor)
+
+
+def _apply_role(
+    actor: Any | None,
+    tenant: Tenant,
+    target: Any,
+    membership: TenantMembership | None,
+    role: TenantRole,
+) -> TenantMembership:
+    """Create or change the membership and record it. The tenant is locked."""
+    old = TenantRole(membership.role) if membership else None
+    if membership is not None and old == role:
+        return membership
+    if old == TenantRole.ADMIN:
+        _keep_an_admin(actor, tenant, target)
+    if membership is None:
+        membership = TenantMembership.objects.create(
+            tenant=tenant, user=target, role=role
+        )
+    else:
+        membership.role = role
+        membership.save(update_fields=["role", "updated_at"])
+    audit.record(
+        actor=actor,
+        action="tenant.role.set",
+        target_user=target,
+        tenant=tenant,
+        old_role=old or "",
+        new_role=role,
+    )
+    return membership
 
 
 def _keep_an_admin(actor: Any | None, tenant: Tenant, leaving: Any) -> None:

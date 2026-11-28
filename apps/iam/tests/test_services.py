@@ -50,9 +50,9 @@ def platform_admin() -> Any:
 
 def test_a_tenant_admin_adds_and_changes_a_member() -> None:
     tenant = TenantFactory()
-    admin, person = tenant_admin(tenant), UserFactory()
+    admin, person = tenant_admin(tenant), UserFactory(preferred_username="p@x.org")
 
-    services.set_tenant_role(admin, tenant.pk, person.pk, "member")
+    services.add_tenant_member(admin, tenant.pk, "member", preferred_username="p@x.org")
     assert role_of(tenant, person) == "member"
     services.set_tenant_role(admin, tenant.pk, person.pk, TenantRole.ADMIN)
     assert role_of(tenant, person) == "admin"
@@ -342,9 +342,9 @@ def test_two_revokes_of_the_two_platform_admins_leave_one() -> None:
 @pytest.mark.django_db(transaction=True)
 def test_the_same_person_added_twice_together_is_one_membership() -> None:
     tenant = Tenant.objects.create(name="Race")
-    admin, person = tenant_admin(tenant), UserFactory()
+    boss, person = platform_admin(), UserFactory()
     results = run_together(
-        [lambda: services.set_tenant_role(admin, tenant.pk, person.pk, "member")] * 2
+        [lambda: services.set_tenant_role(boss, tenant.pk, person.pk, "member")] * 2
     )
     assert results == [None, None]
     assert TenantMembership.objects.filter(tenant=tenant, user=person).count() == 1

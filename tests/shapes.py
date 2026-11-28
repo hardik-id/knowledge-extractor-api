@@ -253,6 +253,21 @@ def check_workspaces(value: Any) -> None:
     nullable(o.get("next"), lambda v: string(v, "next"))
 
 
+def check_workspace_member(value: Any, path: str = "member") -> None:
+    o = obj(value, path)
+    user = obj(o.get("user"), f"{path}.user")
+    number(user.get("id"), f"{path}.user.id")
+    string(user.get("name"), f"{path}.user.name")
+    string(user.get("preferred_username"), f"{path}.user.preferred_username")
+    one_of(o.get("role"), ("owner", "editor", "viewer"), f"{path}.role")
+    string(o.get("added_at"), f"{path}.added_at")
+
+
+def check_workspace_members(value: Any) -> None:
+    for i, item in enumerate(array(obj(value, "response").get("items"), "items")):
+        check_workspace_member(item, f"items[{i}]")
+
+
 def check_version_entry(value: Any, path: str = "version") -> None:
     o = obj(value, path)
     number(o.get("version"), f"{path}.version")
@@ -339,6 +354,34 @@ def check_me(value: Any) -> None:
         for key in ("id", "name"):
             string(tenant.get(key), f"me.tenants[{i}].{key}")
         one_of(tenant.get("role"), ("admin", "member"), f"me.tenants[{i}].role")
+
+
+def check_tenant_member(value: Any, path: str = "member") -> None:
+    """A tenant member: ``{ user: { id, name, preferred_username }, role, added_at }``."""
+    o = obj(value, path)
+    person = obj(o.get("user"), f"{path}.user")
+    number(person.get("id"), f"{path}.user.id")
+    for key in ("name", "preferred_username"):
+        string(person.get(key), f"{path}.user.{key}")
+    one_of(o.get("role"), ("admin", "member"), f"{path}.role")
+    string(o.get("added_at"), f"{path}.added_at")
+
+
+def check_tenant_members(value: Any) -> None:
+    """A page of members: ``GET /tenants/{id}/members``."""
+    o = obj(value, "members")
+    for i, item in enumerate(array(o.get("items"), "members.items")):
+        check_tenant_member(item, f"members.items[{i}]")
+
+
+def check_people(value: Any) -> None:
+    """A page of people: ``GET /users``."""
+    o = obj(value, "people")
+    for i, item in enumerate(array(o.get("items"), "people.items")):
+        person = obj(item, f"people.items[{i}]")
+        number(person.get("id"), f"people.items[{i}].id")
+        for key in ("name", "preferred_username"):
+            string(person.get(key), f"people.items[{i}].{key}")
 
 
 def check_tenant(value: Any, path: str = "tenant") -> None:

@@ -4,6 +4,8 @@ from typing import Any
 from uuid import UUID
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db.models import Q, QuerySet
 from django.db.models.functions import Lower
 
 from apps.core.errors import ApiError
@@ -132,8 +134,67 @@ def workspace_role(user: Any, workspace_id: UUID | str) -> WorkspaceRole | None:
 
 
 def workspace_permissions(user: Any, workspace_id: UUID | str) -> list[Permission]:
-    """The person's permissions in the workspace, sorted by name."""
+    """The person's permissions in the workspace, sorted by name.
+
+    Empty without a role in it. An admin of the workspace's tenant and a platform admin
+    who have a role also hold ``workspace.members.manage`` (they hold it without one).
+    """
     role = workspace_role(user, workspace_id)
     if role is None:
         return []
-    return sorted(permissions_of(role))
+    held = set(permissions_of(role))
+    if Permission.WORKSPACE_MEMBERS_MANAGE not in held:
+        tenant = tenant_of_workspace(workspace_id)
+        if (
+            tenant is not None
+            and Permission.WORKSPACE_MEMBERS_MANAGE
+            in tenant_permissions(user, tenant.pk)
+        ):
+            held.add(Permission.WORKSPACE_MEMBERS_MANAGE)
+    return sorted(held)
+
+
+def list_tenant_members(tenant: Tenant, search: str = "") -> QuerySet[TenantMembership]:
+    """The tenant's members with their people, ``?search=`` on name or sign-in name."""
+    rows = TenantMembership.objects.filter(tenant=tenant).select_related("user")
+    if search:
+        rows = rows.filter(
+            Q(user__name__icontains=search)
+            | Q(user__preferred_username__icontains=search)
+        )
+    return rows
+
+
+def list_users(search: str = "") -> QuerySet[Any]:
+    """Everyone who has signed in (and is active). For a platform admin only."""
+    users = get_user_model().objects.filter(is_active=True)
+    if search:
+        users = users.filter(
+            Q(name__icontains=search) | Q(preferred_username__icontains=search)
+        )
+    return users
+
+
+def find_user_by_username(preferred_username: str) -> Any | None:
+    """The one active person with exactly this sign-in name (case does not matter).
+
+    None when nobody has it, or when more than one person does: a name that does
+    not name one person names nobody.
+    """
+    name = preferred_username.strip()
+    if not name:
+        return None
+    found = list(
+        get_user_model().objects.filter(
+            is_active=True, preferred_username__iexact=name
+        )[:2]
+    )
+    return found[0] if len(found) == 1 else None
+
+
+def is_admin_of_a_tenant(user: Any) -> bool:
+    """True when the person is an admin of some tenant (may look a person up by name)."""
+    return (
+        _active(user)
+        and TenantMembership.objects.filter(user=user, role=TenantRole.ADMIN).exists()
+    )

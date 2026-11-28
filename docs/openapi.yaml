@@ -485,7 +485,10 @@ paths:
   /runs:
     post:
       operationId: runs_create
-      description: Turn the picked documents into a run.
+      description: |-
+        Turn the picked documents into a run.
+
+        Needs a tenant role with ``workspaces.create``, as a new workspace does.
       tags:
       - runs
       requestBody:

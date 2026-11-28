@@ -7,6 +7,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.status import build_status, run_test
+from apps.iam.roles import Permission
+from apps.iam.routes import SIGNED_IN, requires
 
 
 class PartSerializer(serializers.Serializer):  # type: ignore[type-arg]
@@ -23,6 +25,7 @@ class BackendStatusSerializer(serializers.Serializer):  # type: ignore[type-arg]
     parts = PartSerializer(many=True)
 
 
+@requires(GET=SIGNED_IN)
 @extend_schema(responses=BackendStatusSerializer)
 @api_view(["GET"])
 def backend_status(request: Request) -> Response:
@@ -32,6 +35,7 @@ def backend_status(request: Request) -> Response:
     return Response(BackendStatusSerializer(build_status().model_dump()).data)
 
 
+@requires(POST=Permission.STATUS_TEST)
 @extend_schema(
     request=None,
     responses={

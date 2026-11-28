@@ -2,7 +2,7 @@
 
 A workspace is a name on a run: one run with its documents, extraction configuration, conversation with the assistant and records. A person starts one workspace per use case, comes back to it later, and keeps several side by side. Nothing inside a workspace is duplicated under `/workspaces`: documents, configuration, records and conversation keep going through the run's own endpoints, with the workspace's `run_id`.
 
-A workspace lives in one tenant and is seen through membership: a person sees it when they have a role in it (`owner`, `editor` or `viewer`, `docs/iam.md`). `owner` on the row is who made it and no longer decides access. A workspace the person has no role in and an unknown id answer 404 `workspace_not_found`. Roles are not yet checked on writes (#488); until the members API exists every workspace has only owners.
+A workspace lives in one tenant and is seen through membership: a person sees it when they have a role in it (`owner`, `editor` or `viewer`, `docs/iam.md`). `owner` on the row is who made it and no longer decides access. A workspace the person has no role in and an unknown id answer 404 `workspace_not_found`. What each role may do on each route is in `docs/iam.md` (reading needs `workspace.view`, renaming and deleting `workspace.manage`).
 
 ## Endpoints
 

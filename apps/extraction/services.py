@@ -55,6 +55,7 @@ from apps.extraction.models import (
 )
 from apps.extraction.spans import check_span
 from apps.extraction.validation import NOTE_MAX_LENGTH, parse_draft
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors as runs
@@ -71,7 +72,9 @@ def save_definition(
     Otherwise 409 ``definition_conflict``. Two saves on the same base cannot both
     succeed: the database refuses a second row for one version number.
     """
-    current = selectors.get_definition(user, run_id)
+    current = selectors.definition_of(
+        runs.get_run(user, run_id, Permission.WORKSPACE_EDIT)
+    )
     if isinstance(data, dict) and "chunking" not in data:
         # A client that does not know the key keeps what the latest version has.
         data = {**data, "chunking": stored_chunking(current.chunking).model_dump()}
@@ -125,7 +128,8 @@ def start_definition(run: Any, template_id: str | None = None) -> DefinitionVers
 
 def restore_definition(user: User, run_id: Any, version: int) -> DefinitionVersion:
     """Save a copy of an earlier version as the newest one, and say where it came from."""
-    source = selectors.get_definition_version_of(user, run_id, version)
+    run = runs.get_run(user, run_id, Permission.WORKSPACE_EDIT)
+    source = selectors.saved_version(run, version)
     for _ in range(3):  # a concurrent save takes the number: try the next
         latest = selectors.latest_version(source.run_id)
         number = (latest.version if latest else 0) + 1
@@ -160,7 +164,7 @@ def generate_custom_chunking(
     for a refused link, ``custom_chunking_failed`` when no code that works came out;
     504 ``custom_chunking_timeout``; 502 ``model_unreachable``. Someone else's run is 404.
     """
-    runs.get_run(user, run_id)
+    run = runs.get_run(user, run_id, Permission.WORKSPACE_RUN)
     instruction = instruction.strip()
     source_url = (source_url or "").strip() or None
     size = size or min(CHUNK_DEFAULT_SIZE, chunk_size_range()[1])
@@ -181,9 +185,7 @@ def generate_custom_chunking(
             raise ApiError(
                 "validation_error", details={"source_url": [str(refusal)]}
             ) from None
-    documents = [
-        d for d in selectors.custom_chunking_documents(user, run_id) if d.text.strip()
-    ]
+    documents = [d for d in selectors.custom_chunking_documents(run) if d.text.strip()]
     if not documents:
         message = (
             "Add a document first: the splitting code is tested on the workspace's "
@@ -291,7 +293,7 @@ def change_extraction(
     on the run's socket once it is committed, and never when it was refused.
     """
     with transaction.atomic():
-        run_file = runs.get_run_file(user, run_id, file_id)
+        run_file = runs.get_run_file(user, run_id, file_id, Permission.WORKSPACE_EDIT)
         extraction = (
             Extraction.objects.select_for_update().filter(file=run_file).first()
         )
@@ -301,7 +303,7 @@ def change_extraction(
             document = _document(run_file)
             if revision != 0:
                 raise _revision_conflict(0)
-            definition = selectors.get_definition(user, run_id)
+            definition = selectors.definition_of(run_file.run)
             try:
                 with transaction.atomic():
                     extraction = Extraction.objects.create(
@@ -337,7 +339,7 @@ def change_extraction(
                 "revision": extraction.revision,
             },
         )
-    return selectors.get_extraction(user, run_id, file_id)
+    return selectors.extraction_of(run_file)
 
 
 def _document(run_file: Any) -> Any:
@@ -589,7 +591,7 @@ def start_execution(
     with the new execution's id and one job per file is enqueued once that is
     committed. Cells a dead worker left active are released first.
     """
-    run = runs.get_run(user, run_id)
+    run = runs.get_run(user, run_id, Permission.WORKSPACE_RUN)
     if stage != EXTRACT:
         raise ApiError("not_found", "Stage not found.")
     run_cells.release_stuck_cells(run)
@@ -603,7 +605,7 @@ def start_execution(
     execution_id = str(uuid.uuid7())
     with transaction.atomic():
         run_cells.queue_cells(files, EXTRACT, execution_id)
-        latest = selectors.get_definition(user, run.pk)
+        latest = selectors.definition_of(run)
         if definition_version is not None and definition_version != latest.version:
             raise _conflict(latest.version)
         for file in files:

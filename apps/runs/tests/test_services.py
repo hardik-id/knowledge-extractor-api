@@ -1,10 +1,13 @@
 import pytest
 
 from apps.core.errors import ApiError
+from apps.iam.roles import Permission
 from apps.identity.tests.factories import UserFactory
 from apps.runs import selectors, services
 from apps.runs.models import CellStatus
 from apps.runs.tests.factories import CellFactory, RunFileFactory
+
+VIEW = Permission.WORKSPACE_VIEW
 
 pytestmark = pytest.mark.django_db
 
@@ -40,10 +43,10 @@ def test_set_cell_records_an_error() -> None:
 def test_get_run_file() -> None:
     file = RunFileFactory()
     owner = file.run.owner
-    assert selectors.get_run_file(owner, file.run_id, file.pk) == file
+    assert selectors.get_run_file(owner, file.run_id, file.pk, VIEW) == file
     with pytest.raises(ApiError) as missing:
-        selectors.get_run_file(owner, file.run_id, RunFileFactory().pk)
+        selectors.get_run_file(owner, file.run_id, RunFileFactory().pk, VIEW)
     assert missing.value.code == "file_not_found"
     with pytest.raises(ApiError) as other:
-        selectors.get_run_file(UserFactory(), file.run_id, file.pk)
+        selectors.get_run_file(UserFactory(), file.run_id, file.pk, VIEW)
     assert other.value.code == "run_not_found"

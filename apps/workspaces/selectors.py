@@ -18,7 +18,10 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce, Greatest
 
+from apps.core.errors import ApiError
 from apps.core.permissions import get_visible_or_404
+from apps.iam import selectors as iam
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.workspaces.models import Workspace
 
@@ -83,11 +86,17 @@ def list_workspaces(user: User, tenant_id: Any = None) -> QuerySet[Workspace]:
     return _annotated(seen, user).order_by("-activity", "-id")  # type: ignore[misc]
 
 
-def get_workspace(user: User, workspace_id: Any) -> Workspace:
-    """The workspace, if ``user`` has a role in it. One they have none in and an unknown id are both 404."""
+def get_workspace(user: User, workspace_id: Any, permission: Permission) -> Workspace:
+    """The workspace, if ``user`` has a role in it that gives ``permission``.
+
+    One they have no role in and an unknown id are both 404 ``workspace_not_found``;
+    one they have a role in without ``permission`` is 403 ``forbidden``.
+    """
     found = get_visible_or_404(
         Workspace, user, workspace_id, code="workspace_not_found"
     )
+    if permission not in iam.workspace_permissions(user, found.pk):
+        raise ApiError("forbidden")
     return _annotated(Workspace.objects.filter(pk=found.pk), user).get()
 
 

@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.realtime import services as realtime
 from apps.runs import selectors
@@ -88,7 +89,7 @@ def replace_documents(user: User, run_id: Any, items: Sequence[dict[str, Any]]) 
     409 ``execution_in_progress`` while a file of the run is queued or running.
     All or nothing; the run's sockets get ``{"type": "run.changed"}`` after the commit.
     """
-    run = selectors.get_run(user, run_id)
+    run = selectors.get_run(user, run_id, Permission.WORKSPACE_EDIT)
     release_stuck_cells(run)
     with transaction.atomic():
         Run.objects.select_for_update().get(pk=run.pk)

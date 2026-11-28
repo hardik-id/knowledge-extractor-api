@@ -16,7 +16,7 @@ from apps.assistant.agents.base import (
     RunView,
     ValueView,
 )
-from apps.assistant.selectors import OwnerRunView, run_view_of
+from apps.assistant.selectors import StoredRunView, run_view_of
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.extraction.definition import Draft
@@ -73,7 +73,7 @@ def file(run: Any) -> Any:
 
 
 @pytest.fixture
-def run_view(run: Any) -> OwnerRunView:
+def run_view(run: Any) -> StoredRunView:
     return run_view_of(run)
 
 
@@ -160,7 +160,7 @@ def test_a_run_without_documents_has_an_empty_run_view(run: Any) -> None:
 
 
 def test_extractions_show_what_a_run_of_the_extractor_stored(
-    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
+    client: Any, run: Any, file: Any, run_view: StoredRunView, capture: Any
 ) -> None:
     CellFactory(file=RunFileFactory(run=run, source_ref=OTHER, name="never.md"))
     assert async_to_sync(run_view.extractions)() == []
@@ -189,7 +189,7 @@ def test_extractions_show_what_a_run_of_the_extractor_stored(
 
 
 def test_extractions_show_the_reviews_after_a_correction_through_the_api(
-    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
+    client: Any, run: Any, file: Any, run_view: StoredRunView, capture: Any
 ) -> None:
     execute(client, run, capture)
     data = client.get(extraction_url(file)).json()
@@ -249,7 +249,7 @@ def test_extractions_of_other_runs_do_not_show(
 
 
 def test_preview_returns_what_a_real_execution_stores_and_stores_nothing(
-    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
+    client: Any, run: Any, file: Any, run_view: StoredRunView, capture: Any
 ) -> None:
     before = snapshot()
     preview = async_to_sync(run_view.preview)(definition(), ADR)
@@ -264,7 +264,7 @@ def test_preview_returns_what_a_real_execution_stores_and_stores_nothing(
 
 
 def test_preview_changes_no_cell_and_no_stored_record(
-    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
+    client: Any, run: Any, file: Any, run_view: StoredRunView, capture: Any
 ) -> None:
     execute(client, run, capture)
     before = snapshot()
@@ -310,7 +310,7 @@ def test_everything_an_agent_receives_is_plain_frozen_data() -> None:
 
 
 def test_what_a_run_view_returns_is_not_a_model_instance(
-    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
+    client: Any, run: Any, file: Any, run_view: StoredRunView, capture: Any
 ) -> None:
     execute(client, run, capture)
     [found] = async_to_sync(run_view.extractions)()
@@ -339,7 +339,7 @@ def test_a_run_view_offers_four_reads_and_nothing_that_writes() -> None:
         }
 
     assert public(RunView) == reads
-    assert public(OwnerRunView) == reads
+    assert public(StoredRunView) == reads
     for name in reads:
-        assert inspect.iscoroutinefunction(getattr(OwnerRunView, name))
+        assert inspect.iscoroutinefunction(getattr(StoredRunView, name))
     assert not hasattr(base, "RunDocuments")

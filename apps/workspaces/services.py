@@ -9,6 +9,7 @@ from django.db import transaction
 
 from apps.extraction import services as extraction
 from apps.iam import audit, workspace_access
+from apps.iam.roles import Permission
 from apps.identity.models import User
 from apps.runs import services as runs
 from apps.workspaces import selectors
@@ -35,7 +36,7 @@ def create_workspace(
         owner=user, tenant=tenant, name=name, description=description, run=run
     )
     workspace_access.make_owner(user, workspace.pk, tenant)
-    return selectors.get_workspace(user, workspace.pk)
+    return selectors.get_workspace(user, workspace.pk, Permission.WORKSPACE_VIEW)
 
 
 def update_workspace(
@@ -45,18 +46,18 @@ def update_workspace(
     name: str | None = None,
     description: str | None = None,
 ) -> Workspace:
-    workspace = selectors.get_workspace(user, workspace_id)
+    workspace = selectors.get_workspace(user, workspace_id, Permission.WORKSPACE_MANAGE)
     if name is not None:
         workspace.name = name
     if description is not None:
         workspace.description = description
     workspace.save()
-    return selectors.get_workspace(user, workspace.pk)
+    return selectors.get_workspace(user, workspace.pk, Permission.WORKSPACE_VIEW)
 
 
 def delete_workspace(user: User, workspace_id: object) -> None:
     """Delete the workspace, its run and everything on it. The run's sockets close."""
-    workspace = selectors.get_workspace(user, workspace_id)
+    workspace = selectors.get_workspace(user, workspace_id, Permission.WORKSPACE_MANAGE)
     run = workspace.run
     with transaction.atomic():
         audit.record(

@@ -48,6 +48,19 @@ def tenants_of(user: Any) -> list[tuple[Tenant, TenantRole]]:
     return [(m.tenant, TenantRole(m.role)) for m in memberships]
 
 
+def may_create_workspaces(user: Any) -> bool:
+    """True when the person holds, in some tenant, a role with ``workspaces.create``.
+
+    The same right makes a run with no workspace (``POST /runs``) and keeps it usable.
+    """
+    if not _active(user):
+        return False
+    return any(
+        Permission.WORKSPACES_CREATE in permissions_of(role)
+        for _, role in tenants_of(user)
+    )
+
+
 def default_tenant() -> Tenant:
     return Tenant.objects.get(is_default=True)
 

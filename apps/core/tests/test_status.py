@@ -13,6 +13,8 @@ from openai import APIConnectionError, APITimeoutError
 
 from apps.core import status
 from apps.core.models import ModelCall
+from apps.iam.tests.factories import PlatformAdminFactory
+from apps.identity.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -29,8 +31,18 @@ def _fresh_throttle() -> None:
 
 @pytest.fixture
 def client(api_client: Any, user: Any) -> Any:
+    """A platform admin: only they may run the real test (``status.test``)."""
+    PlatformAdminFactory(user=user)
     api_client.force_authenticate(user)
     return api_client
+
+
+def test_only_a_platform_admin_may_run_the_test(api_client: Any) -> None:
+    api_client.force_authenticate(UserFactory())
+    assert api_client.get(URL).status_code == 200
+    response = api_client.post(f"{URL}/test")
+    assert response.status_code == 403
+    assert response.json()["code"] == "forbidden"
 
 
 def parts(client: Any) -> dict[str, dict[str, Any]]:

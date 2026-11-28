@@ -310,7 +310,7 @@ def test_preview_hands_the_drafts_chunking_to_the_extractor(
             "chunking": {"strategy": "fixed", "size": 1500},
         }
     )
-    selectors.preview_records(user, run.pk, "text", draft)
+    selectors.preview_records(run, "text", draft)
     assert seen[0].chunking.model_dump() == {
         "strategy": "fixed",
         "size": 1500,

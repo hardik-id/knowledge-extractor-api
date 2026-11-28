@@ -25,9 +25,16 @@ from apps.extraction.api.serializers import (
     serialize_extraction,
     summarize_version,
 )
+from apps.iam.roles import Permission
+from apps.iam.routes import SIGNED_IN, requires
 from apps.identity.models import User
 
+VIEW = Permission.WORKSPACE_VIEW
+EDIT = Permission.WORKSPACE_EDIT
+RUN = Permission.WORKSPACE_RUN
 
+
+@requires(GET=VIEW, PUT=EDIT)
 @extend_schema(methods=["GET"], responses=DefinitionSerializer)
 @extend_schema(
     methods=["PUT"], request=SaveDefinitionSerializer, responses=DefinitionSerializer
@@ -51,6 +58,7 @@ def definition(request: Request, run_id: str) -> Response:
     return Response(DefinitionSerializer(selectors.get_definition(user, run_id)).data)
 
 
+@requires(GET=VIEW)
 @extend_schema(
     operation_id="runs_extract_definition_versions_list",
     responses=DefinitionVersionListSerializer,
@@ -62,6 +70,7 @@ def definition_versions(request: Request, run_id: str) -> Response:
     return Response({"items": [summarize_version(v) for v in versions]})
 
 
+@requires(GET=VIEW)
 @extend_schema(
     operation_id="runs_extract_definition_versions_read",
     responses=DefinitionSerializer,
@@ -75,6 +84,7 @@ def definition_version(request: Request, run_id: str, version: int) -> Response:
     return Response(DefinitionSerializer(found).data)
 
 
+@requires(POST=EDIT)
 @extend_schema(request=None, responses=DefinitionSerializer)
 @api_view(["POST"])
 def restore_definition_version(request: Request, run_id: str, version: int) -> Response:
@@ -83,6 +93,7 @@ def restore_definition_version(request: Request, run_id: str, version: int) -> R
     return Response(DefinitionSerializer(restored).data)
 
 
+@requires(POST=RUN)
 @extend_schema(
     request=GenerateChunkingSerializer, responses=GeneratedChunkingSerializer
 )
@@ -102,6 +113,7 @@ def generate_chunking(request: Request, run_id: str) -> Response:
     return Response(generated.model_dump())
 
 
+@requires(POST=RUN)
 @extend_schema(request=StartExecutionSerializer, responses={202: ExecutionSerializer})
 @api_view(["POST"])
 def executions(request: Request, run_id: str, stage: str) -> Response:
@@ -126,6 +138,7 @@ def executions(request: Request, run_id: str, stage: str) -> Response:
     )
 
 
+@requires(GET=VIEW)
 @extend_schema(responses=ExtractionSerializer)
 @api_view(["GET"])
 def extraction(request: Request, run_id: str, file_id: str) -> Response:
@@ -136,6 +149,7 @@ def extraction(request: Request, run_id: str, file_id: str) -> Response:
     )
 
 
+@requires(POST=EDIT)
 @extend_schema(request=AddRecordSerializer, responses={200: ExtractionSerializer})
 @api_view(["POST"])
 def records(request: Request, run_id: str, file_id: str) -> Response:
@@ -147,6 +161,7 @@ def records(request: Request, run_id: str, file_id: str) -> Response:
     return Response(serialize_extraction(extraction))
 
 
+@requires(PATCH=EDIT, DELETE=EDIT)
 @extend_schema(
     methods=["PATCH"],
     request=UpdateRecordSerializer,
@@ -177,6 +192,7 @@ def record(request: Request, run_id: str, file_id: str, record_id: str) -> Respo
     return Response(serialize_extraction(extraction))
 
 
+@requires(PUT=EDIT)
 @extend_schema(
     request=ReplaceFieldValuesSerializer, responses={200: ExtractionSerializer}
 )
@@ -194,6 +210,7 @@ def field(
     return Response(serialize_extraction(extraction))
 
 
+@requires(PATCH=EDIT)
 @extend_schema(request=ReviewValueSerializer, responses={200: ExtractionSerializer})
 @api_view(["PATCH"])
 def value(
@@ -209,6 +226,7 @@ def value(
     return Response(serialize_extraction(extraction))
 
 
+@requires(GET=SIGNED_IN)
 @extend_schema(
     operation_id="definition_templates_list", responses=TemplateListSerializer
 )

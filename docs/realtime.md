@@ -49,7 +49,7 @@ ws://<host>/ws/runs/{run_id}/?ticket=k3J...
 The route the UI opens for a run (`createHttpRunEvents` in the UI), with the trailing slash. `RunConsumer` in `apps/realtime/consumers.py`, routed in `apps/realtime/routing.py`.
 
 1. The ticket signs the person in (above).
-2. The run must be visible to that person (`runs.selectors.get_run`). Otherwise the socket is accepted and closed with **4404**: someone else's run, an unknown id and a malformed id look the same.
+2. The person needs `workspace.view` on the run (`runs.selectors.get_run`), that is a role in its workspace. Otherwise the socket is accepted and closed with **4404**: a run they have no role in, an unknown id and a malformed id look the same.
 3. The socket joins the run's group (`run.<run_id>` on the channel layer) and from then on receives every event published for the run.
 
 The server only sends. Each event is one JSON text frame. Whatever the client sends is dropped unread: it changes nothing and gets no answer.

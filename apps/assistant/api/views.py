@@ -12,9 +12,16 @@ from apps.assistant.api.serializers import (
     SendMessageSerializer,
 )
 from apps.core.errors import ApiError
+from apps.iam.roles import Permission
+from apps.iam.routes import requires
 from apps.identity.models import User
 
 
+@requires(
+    GET=Permission.WORKSPACE_VIEW,
+    POST=Permission.WORKSPACE_EDIT,
+    DELETE=Permission.WORKSPACE_EDIT,
+)
 @extend_schema(methods=["GET"], responses=MessageListSerializer)
 @extend_schema(methods=["DELETE"], request=None, responses={204: None})
 @extend_schema(

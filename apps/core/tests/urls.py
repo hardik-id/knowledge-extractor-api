@@ -1,7 +1,6 @@
 """Test-only URLconf: the real routes plus views that raise each kind of error."""
 
 from collections.abc import Callable
-from typing import Any
 
 import structlog
 from django.http import HttpRequest, JsonResponse
@@ -19,7 +18,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ApiError
-from apps.core.permissions import get_visible_or_404, require_can_change
+from apps.core.permissions import get_visible_or_404
 from apps.core.tests.models import Note, SharedNote
 from config.urls import handler404, handler500
 from config.urls import urlpatterns as real_patterns
@@ -131,15 +130,10 @@ def shared_note_list(request: Request) -> Response:
     return Response({"items": SharedNoteSerializer(rows, many=True).data})
 
 
-@api_view(["GET", "PATCH"])
+@api_view(["GET"])
 def shared_note_detail(request: Request, pk: str) -> Response:
     """Built only from the helpers: no ownership check of its own."""
     note = get_visible_or_404(SharedNote, request.user, pk)
-    if request.method == "PATCH":
-        require_can_change(note, request.user)
-        data: Any = request.data
-        note.text = data["text"]
-        note.save()
     return Response(SharedNoteSerializer(note).data)
 
 

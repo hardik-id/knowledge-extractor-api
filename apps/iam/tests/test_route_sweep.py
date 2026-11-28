@@ -89,6 +89,7 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ): {"revision": 1, "review": "accepted"},
     ("runs/<str:run_id>/extraction/assistant/messages", "POST"): {"text": "Hello"},
 }
+# A query may name an id of the world as ``{tenant_id}``.
 QUERIES: dict[tuple[str, str], str] = {
     (
         "runs/<str:run_id>/files/<str:file_id>/extraction/records/<str:record_id>",
@@ -116,6 +117,8 @@ ROLES: dict[str, tuple[PlatformAdminRole | TenantRole | WorkspaceRole, ...]] = {
     "owner": (TenantRole.MEMBER, WorkspaceRole.OWNER),
 }
 PEOPLE = tuple(ROLES)
+# The outsider's sign-in name, for a body that must name a person outside the tenant.
+OUTSIDER = "outsider@example.com"
 
 # Routes whose rule is not "one permission on the tenant or the workspace": what
 # every person of PEOPLE gets, spelled out as "allowed", "403" or "404".
@@ -232,7 +235,9 @@ def make_world() -> World:
         "document_id": document.id,
     }
     people = {
-        "outsider": TenantMembershipFactory().user,
+        "outsider": TenantMembershipFactory(
+            user=UserFactory(in_default_tenant=False, preferred_username=OUTSIDER)
+        ).user,
         "no_tenant": UserFactory(in_default_tenant=False),
         "stranger": UserFactory(),
         "tenant_admin": tenant_admin,
@@ -259,7 +264,7 @@ def _url(route: str, ids: dict[str, str]) -> str:
 
 
 def _call(client: APIClient, route: str, method: str, ids: dict[str, str]) -> Any:
-    url = _url(route, ids) + QUERIES.get((route, method), "")
+    url = _url(route, ids) + QUERIES.get((route, method), "").format(**ids)
     body = BODIES.get((route, method))
     data = "" if body is None else json.dumps(body)
     return client.generic(method, url, data, content_type="application/json")

@@ -18,10 +18,10 @@ from agents.tool_context import ToolContext
 from asgiref.sync import async_to_sync
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
-from apps.assistant.agents.base import Workspace
+from apps.assistant.agents.base import RunView
 from apps.assistant.agents.openai_sdk.context import ReplyContext
 from apps.assistant.agents.openai_sdk.tools import TOOLS
-from apps.assistant.selectors import workspace_of_run
+from apps.assistant.selectors import run_view_of
 from apps.core.errors import ApiError
 from apps.runs import selectors as runs
 
@@ -72,13 +72,11 @@ class Command(BaseCommand):
         except ApiError as error:
             raise CommandError(error.message) from None
         arguments = json.dumps(parse_arguments(options["arguments"]))
-        workspace = workspace_of_run(run)
-        self.stdout.write(async_to_sync(self._call)(tools[name], workspace, arguments))
+        run_view = run_view_of(run)
+        self.stdout.write(async_to_sync(self._call)(tools[name], run_view, arguments))
 
-    async def _call(
-        self, tool: FunctionTool, workspace: Workspace, arguments: str
-    ) -> str:
-        state = ReplyContext(workspace=workspace, refs=await workspace.documents())
+    async def _call(self, tool: FunctionTool, run_view: RunView, arguments: str) -> str:
+        state = ReplyContext(run_view=run_view, refs=await run_view.documents())
         context = ToolContext(
             state,
             tool_name=tool.name,

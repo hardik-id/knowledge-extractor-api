@@ -9,7 +9,7 @@ from apps.assistant.agents.openai_sdk.tools.summarize_records import (
     EXAMPLE_CHARS,
     EXAMPLES,
 )
-from apps.assistant.tests.fakes import FakeWorkspace
+from apps.assistant.tests.fakes import FakeRunView
 from apps.assistant.tests.openai_sdk.helpers import *  # noqa: F403
 from apps.assistant.tests.openai_sdk.helpers import collect, tool_outputs
 
@@ -37,7 +37,7 @@ async def summary(files: list[FileRecords]) -> str:
             [assistant_message("ok")],
         ]
     )
-    await collect(OpenAIAgent(model), docs=FakeWorkspace(extracted=files))
+    await collect(OpenAIAgent(model), docs=FakeRunView(extracted=files))
     return tool_outputs(model.calls[1])[0]
 
 

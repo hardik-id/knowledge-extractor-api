@@ -10,7 +10,7 @@ from apps.assistant.agents.base import Agent, AgentEvent, Message, TextDelta
 from apps.assistant.agents.registry import check_settings, get_agent
 from apps.assistant.agents.scripted import ScriptedAgent, split_into_deltas
 from apps.assistant.proposal import Proposal
-from apps.assistant.tests.fakes import FakeAgent, FakeWorkspace
+from apps.assistant.tests.fakes import FakeAgent, FakeRunView
 from apps.assistant.tests.test_scripted import adr, assert_valid, bare, validated
 from apps.extraction.definition import Draft
 
@@ -54,7 +54,7 @@ async def collect(
     history: list[Message] | None = None,
 ) -> list[AgentEvent]:
     stream = agent.reply(
-        text, Draft.model_validate(definition), history or [], FakeWorkspace()
+        text, Draft.model_validate(definition), history or [], FakeRunView()
     )
     return [event async for event in stream]
 
@@ -135,10 +135,10 @@ async def test_a_fake_agent_implements_the_interface() -> None:
 
 @pytest.mark.asyncio
 async def test_documents_can_be_read_through_the_interface() -> None:
-    workspace = FakeWorkspace({"a.md": "alpha"})
-    [ref] = await workspace.documents()
+    run_view = FakeRunView({"a.md": "alpha"})
+    [ref] = await run_view.documents()
     assert ref.id == "a.md"
-    assert await workspace.read(ref.id) == "alpha"
+    assert await run_view.read(ref.id) == "alpha"
 
 
 # the choice of agent

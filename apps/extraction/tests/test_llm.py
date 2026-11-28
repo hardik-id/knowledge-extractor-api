@@ -20,7 +20,7 @@ from django.core.management.base import CommandError
 from openai import APIConnectionError
 from openai.types.responses import ResponseOutputMessage, ResponseOutputRefusal
 
-from apps.assistant.selectors import workspace_of_run
+from apps.assistant.selectors import run_view_of
 from apps.core.tests.otel import Telemetry
 from apps.documents.samples import SAMPLES_DIR
 from apps.extraction import services
@@ -412,8 +412,8 @@ def test_the_preview_path_works_in_a_thread_without_a_loop(
             "output": DEFAULT_OUTPUT,
         }
     )
-    # As the preview tool calls it: the workspace awaits a sync function in a thread.
-    views = async_to_sync(workspace_of_run(run).preview)(draft, run_file.source_ref)
+    # As the preview tool calls it: the run view awaits a sync function in a thread.
+    views = async_to_sync(run_view_of(run).preview)(draft, run_file.source_ref)
     (view,) = views
     assert view.origin == "llm"
     assert {v.value for v in view.values if v.field_id == TITLE} == {
@@ -446,8 +446,8 @@ def test_an_extraction_error_is_an_error_text_in_the_preview_tool(
             [assistant_message("ok")],
         ]
     )
-    workspace = workspace_of_run(run)
-    async_to_sync(collect)(OpenAIAgent(scripted), docs=workspace)  # type: ignore[arg-type]
+    run_view = run_view_of(run)
+    async_to_sync(collect)(OpenAIAgent(scripted), docs=run_view)  # type: ignore[arg-type]
     (out,) = tool_outputs(scripted.calls[1])
     assert out == "Error: No language model is configured for extraction."
 

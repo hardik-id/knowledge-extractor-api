@@ -1,4 +1,4 @@
-"""The workspace an agent looks at: the run's documents, its extractions and a dry run."""
+"""The run view an agent looks at: the run's documents, its extractions and a dry run."""
 
 import dataclasses
 import inspect
@@ -13,10 +13,10 @@ from apps.assistant.agents.base import (
     DocumentRef,
     FileRecords,
     RecordView,
+    RunView,
     ValueView,
-    Workspace,
 )
-from apps.assistant.selectors import OwnerWorkspace, workspace_of_run
+from apps.assistant.selectors import OwnerRunView, run_view_of
 from apps.core.errors import ApiError
 from apps.documents import selectors as documents
 from apps.extraction.definition import Draft
@@ -73,8 +73,8 @@ def file(run: Any) -> Any:
 
 
 @pytest.fixture
-def workspace(run: Any) -> OwnerWorkspace:
-    return workspace_of_run(run)
+def run_view(run: Any) -> OwnerRunView:
+    return run_view_of(run)
 
 
 @pytest.fixture
@@ -122,18 +122,18 @@ def snapshot() -> dict[str, Any]:
 # --- documents ----------------------------------------------------------------
 
 
-def test_a_workspace_lists_and_reads_the_documents_of_its_run(
+def test_a_run_view_lists_and_reads_the_documents_of_its_run(
     run: Any, user: Any
 ) -> None:
     RunFileFactory(run=run, source_ref=OTHER, name="b.md")
     RunFileFactory(run=run, source_ref=ADR, name="a.md")
     RunFileFactory(source_ref=OTHER, name="someone else's.md")  # another run
-    workspace = workspace_of_run(run)
-    assert async_to_sync(workspace.documents)() == [
+    run_view = run_view_of(run)
+    assert async_to_sync(run_view.documents)() == [
         DocumentRef(ADR, "a.md"),
         DocumentRef(OTHER, "b.md"),
     ]
-    assert async_to_sync(workspace.read)(ADR) == documents.read_document(user, ADR).text
+    assert async_to_sync(run_view.read)(ADR) == documents.read_document(user, ADR).text
 
 
 def test_a_document_in_the_catalog_but_not_in_the_run_is_refused(
@@ -141,31 +141,31 @@ def test_a_document_in_the_catalog_but_not_in_the_run_is_refused(
 ) -> None:
     RunFileFactory(run=run, source_ref=ADR)
     assert documents.read_document(user, OTHER).text  # the owner can open it
-    workspace = workspace_of_run(run)
+    run_view = run_view_of(run)
     with pytest.raises(ApiError) as error:
-        async_to_sync(workspace.read)(OTHER)
+        async_to_sync(run_view.read)(OTHER)
     assert error.value.code == "document_not_found"
     with pytest.raises(ApiError) as error:
-        async_to_sync(workspace.preview)(definition(), OTHER)
+        async_to_sync(run_view.preview)(definition(), OTHER)
     assert error.value.code == "document_not_found"
 
 
-def test_a_run_without_documents_has_an_empty_workspace(run: Any) -> None:
-    workspace = workspace_of_run(run)
-    assert async_to_sync(workspace.documents)() == []
-    assert async_to_sync(workspace.extractions)() == []
+def test_a_run_without_documents_has_an_empty_run_view(run: Any) -> None:
+    run_view = run_view_of(run)
+    assert async_to_sync(run_view.documents)() == []
+    assert async_to_sync(run_view.extractions)() == []
 
 
 # --- extractions ----------------------------------------------------------------
 
 
 def test_extractions_show_what_a_run_of_the_extractor_stored(
-    client: Any, run: Any, file: Any, workspace: OwnerWorkspace, capture: Any
+    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
 ) -> None:
     CellFactory(file=RunFileFactory(run=run, source_ref=OTHER, name="never.md"))
-    assert async_to_sync(workspace.extractions)() == []
+    assert async_to_sync(run_view.extractions)() == []
     execute(client, run, capture, [file])
-    [found] = async_to_sync(workspace.extractions)()  # only the file with a cell
+    [found] = async_to_sync(run_view.extractions)()  # only the file with a cell
     stored = client.get(extraction_url(file)).json()
     assert isinstance(found, FileRecords)
     assert (found.document_id, found.name, found.definition_version) == (
@@ -189,7 +189,7 @@ def test_extractions_show_what_a_run_of_the_extractor_stored(
 
 
 def test_extractions_show_the_reviews_after_a_correction_through_the_api(
-    client: Any, run: Any, file: Any, workspace: OwnerWorkspace, capture: Any
+    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
 ) -> None:
     execute(client, run, capture)
     data = client.get(extraction_url(file)).json()
@@ -220,7 +220,7 @@ def test_extractions_show_the_reviews_after_a_correction_through_the_api(
     )
     assert added.status_code == 200, added.json()
 
-    [found] = async_to_sync(workspace.extractions)()
+    [found] = async_to_sync(run_view.extractions)()
     by_title = {
         next(v.value for v in r.values if v.field_id == TITLE): r for r in found.records
     }
@@ -241,7 +241,7 @@ def test_extractions_of_other_runs_do_not_show(
     DefinitionVersionFactory(run=other)
     CellFactory(file=RunFileFactory(run=other, source_ref=OTHER, name="o.md"))
     execute(client, run, capture)
-    [found] = async_to_sync(workspace_of_run(run).extractions)()
+    [found] = async_to_sync(run_view_of(run).extractions)()
     assert found.document_id == ADR
 
 
@@ -249,28 +249,28 @@ def test_extractions_of_other_runs_do_not_show(
 
 
 def test_preview_returns_what_a_real_execution_stores_and_stores_nothing(
-    client: Any, run: Any, file: Any, workspace: OwnerWorkspace, capture: Any
+    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
 ) -> None:
     before = snapshot()
-    preview = async_to_sync(workspace.preview)(definition(), ADR)
+    preview = async_to_sync(run_view.preview)(definition(), ADR)
     assert snapshot() == before
     assert Extraction.objects.count() == 0
     assert len(preview) >= 2
     assert all(isinstance(record, RecordView) for record in preview)
 
     execute(client, run, capture)
-    [found] = async_to_sync(workspace.extractions)()
+    [found] = async_to_sync(run_view.extractions)()
     assert preview == found.records
 
 
 def test_preview_changes_no_cell_and_no_stored_record(
-    client: Any, run: Any, file: Any, workspace: OwnerWorkspace, capture: Any
+    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
 ) -> None:
     execute(client, run, capture)
     before = snapshot()
     draft = definition()
     draft.record_types[0].name = "Something else"
-    assert async_to_sync(workspace.preview)(draft, ADR) == []
+    assert async_to_sync(run_view.preview)(draft, ADR) == []
     assert snapshot() == before
 
 
@@ -309,17 +309,17 @@ def test_everything_an_agent_receives_is_plain_frozen_data() -> None:
                 assert leaf in (str, int, bool, type(None), RecordView, ValueView)
 
 
-def test_what_a_workspace_returns_is_not_a_model_instance(
-    client: Any, run: Any, file: Any, workspace: OwnerWorkspace, capture: Any
+def test_what_a_run_view_returns_is_not_a_model_instance(
+    client: Any, run: Any, file: Any, run_view: OwnerRunView, capture: Any
 ) -> None:
     execute(client, run, capture)
-    [found] = async_to_sync(workspace.extractions)()
+    [found] = async_to_sync(run_view.extractions)()
     views: list[Any] = [
         found,
         *found.records,
         *(v for r in found.records for v in r.values),
     ]
-    for view in [*views, *async_to_sync(workspace.documents)()]:
+    for view in [*views, *async_to_sync(run_view.documents)()]:
         assert dataclasses.is_dataclass(type(view))
         assert not isinstance(view, django_models.Model)
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -328,7 +328,7 @@ def test_what_a_workspace_returns_is_not_a_model_instance(
             assert isinstance(item, str | int | bool | list | type(None))
 
 
-def test_a_workspace_offers_four_reads_and_nothing_that_writes() -> None:
+def test_a_run_view_offers_four_reads_and_nothing_that_writes() -> None:
     reads = {"documents", "read", "extractions", "preview"}
 
     def public(cls: type) -> set[str]:
@@ -338,8 +338,8 @@ def test_a_workspace_offers_four_reads_and_nothing_that_writes() -> None:
             if not name.startswith("_") and inspect.isfunction(member)
         }
 
-    assert public(Workspace) == reads
-    assert public(OwnerWorkspace) == reads
+    assert public(RunView) == reads
+    assert public(OwnerRunView) == reads
     for name in reads:
-        assert inspect.iscoroutinefunction(getattr(OwnerWorkspace, name))
+        assert inspect.iscoroutinefunction(getattr(OwnerRunView, name))
     assert not hasattr(base, "RunDocuments")

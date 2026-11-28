@@ -231,7 +231,7 @@ def check_assistant_messages(value: Any) -> None:
         check_assistant_message(m, f"messages[{i}]")
 
 
-def check_project(value: Any, path: str = "project") -> None:
+def check_workspace(value: Any, path: str = "workspace") -> None:
     o = obj(value, path)
     for key in ("id", "name", "description", "run_id", "created_at", "updated_at"):
         string(o.get(key), f"{path}.{key}")
@@ -242,10 +242,10 @@ def check_project(value: Any, path: str = "project") -> None:
     )
 
 
-def check_projects(value: Any) -> None:
+def check_workspaces(value: Any) -> None:
     o = obj(value, "response")
     for i, item in enumerate(array(o.get("items"), "items")):
-        check_project(item, f"items[{i}]")
+        check_workspace(item, f"items[{i}]")
     nullable(o.get("next"), lambda v: string(v, "next"))
 
 

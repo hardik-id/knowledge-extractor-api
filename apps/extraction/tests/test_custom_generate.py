@@ -462,7 +462,7 @@ def test_no_documents_is_a_422_with_a_message(client: Any, agent: FakeAgent) -> 
     assert answer.status_code == 422
     assert answer.json()["code"] == "validation_error"
     assert answer.json()["message"] == (
-        "Add a document first: the splitting code is tested on the project's documents."
+        "Add a document first: the splitting code is tested on the workspace's documents."
     )
     assert agent.requests == []
 

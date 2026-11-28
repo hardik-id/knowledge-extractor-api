@@ -1,4 +1,4 @@
-"""A fake agent and a fake workspace: the smallest implementations of the interfaces."""
+"""A fake agent and a fake run_view: the smallest implementations of the interfaces."""
 
 from collections.abc import AsyncIterator
 
@@ -8,8 +8,8 @@ from apps.assistant.agents.base import (
     FileRecords,
     Message,
     RecordView,
+    RunView,
     TextDelta,
-    Workspace,
 )
 from apps.assistant.proposal import Proposal, Reason
 from apps.core.errors import ApiError
@@ -24,7 +24,7 @@ class FakeAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Hello, ")
         yield TextDelta(f"you said {text}.")
@@ -34,8 +34,8 @@ class FakeAgent:
         )
 
 
-class FakeWorkspace:
-    """A workspace of a few documents, with what was extracted and what a preview finds."""
+class FakeRunView:
+    """A run view of a few documents, with what was extracted and what a preview finds."""
 
     def __init__(
         self,
@@ -70,7 +70,7 @@ class FailingAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Let me see")
         raise RuntimeError("the model is down")
@@ -84,7 +84,7 @@ class SilentFailingAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         raise RuntimeError("the model is down")
         yield TextDelta("never")  # pragma: no cover
@@ -100,10 +100,10 @@ class RecordingAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
-        refs = await workspace.documents()
-        texts = [await workspace.read(ref.id) for ref in refs]
+        refs = await run_view.documents()
+        texts = [await run_view.read(ref.id) for ref in refs]
         RecordingAgent.calls.append(
             {"text": text, "definition": definition, "history": history, "texts": texts}
         )
@@ -118,7 +118,7 @@ class BadProposalAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         yield TextDelta("Here you go.")
         yield Proposal.model_validate({"definition": {"prompt": "x"}, "reasons": []})

@@ -1,7 +1,7 @@
 """The scripted assistant: keyword rules, no model, no key.
 
 A port of the UI's ``src/services/mock/mock-assistant.ts``, so the chat can be
-built and tried end to end. It is deterministic. It does not use the workspace.
+built and tried end to end. It is deterministic. It does not use the run view.
 
 Phrases it understands (case does not matter):
 
@@ -25,7 +25,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
 
-from apps.assistant.agents.base import AgentEvent, Message, TextDelta, Workspace
+from apps.assistant.agents.base import AgentEvent, Message, RunView, TextDelta
 from apps.assistant.proposal import Proposal, Reason
 from apps.extraction.definition import Draft, Field, Output, RecordType
 from apps.extraction.template_registry import default_template
@@ -664,7 +664,7 @@ class ScriptedAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         reply = assistant_reply(text, definition, self._ids)
         for piece in split_into_deltas(reply.text):

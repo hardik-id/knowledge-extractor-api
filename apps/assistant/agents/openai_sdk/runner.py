@@ -28,9 +28,9 @@ from openai import APIError, AsyncOpenAI
 from apps.assistant.agents.base import (
     AgentEvent,
     Message,
+    RunView,
     TextDelta,
     ToolUsed,
-    Workspace,
 )
 from apps.assistant.agents.openai_sdk.agent import build_agent
 from apps.assistant.agents.openai_sdk.context import ReplyContext
@@ -81,7 +81,7 @@ class OpenAIAgent:
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         client: AsyncOpenAI | None = None
         model = self._model
@@ -93,9 +93,9 @@ class OpenAIAgent:
                 return
             model, client = connect()
         try:
-            refs = await workspace.documents()
+            refs = await run_view.documents()
             state = ReplyContext(
-                workspace=workspace, refs=refs, chunking=definition.chunking
+                run_view=run_view, refs=refs, chunking=definition.chunking
             )
             async for event in self._run(model, state, text, definition, history):
                 yield event

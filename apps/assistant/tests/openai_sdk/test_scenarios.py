@@ -19,7 +19,7 @@ from apps.assistant.agents.base import (
 from apps.assistant.agents.openai_sdk import OpenAIAgent
 from apps.assistant.agents.openai_sdk.tools._shared import MAX_TOOL_CALLS
 from apps.assistant.proposal import Proposal
-from apps.assistant.tests.fakes import FakeWorkspace
+from apps.assistant.tests.fakes import FakeRunView
 from apps.assistant.tests.openai_sdk.helpers import (
     collect,
     proposal_args,
@@ -76,7 +76,7 @@ async def test_what_can_i_extract_on_an_empty_definition() -> None:
     events = await collect(
         OpenAIAgent(model),
         "What can I extract from these documents?",
-        docs=FakeWorkspace(DOCS, previewed=previewed),
+        docs=FakeRunView(DOCS, previewed=previewed),
     )
     model.assert_complete()
     assert called(events) == [
@@ -106,7 +106,7 @@ async def test_is_there_an_owner_anywhere_answers_without_a_proposal() -> None:
         ]
     )
     events = await collect(
-        OpenAIAgent(model), "Is there an owner anywhere?", docs=FakeWorkspace(DOCS)
+        OpenAIAgent(model), "Is there an owner anywhere?", docs=FakeRunView(DOCS)
     )
     model.assert_complete()
     assert called(events) == [("find_in_documents", "ok")]
@@ -147,7 +147,7 @@ async def test_what_should_i_improve_after_a_run_summarizes_then_proposes() -> N
         OpenAIAgent(model),
         "What should I improve?",
         definition=adr(),
-        docs=FakeWorkspace(DOCS, extracted=extracted),
+        docs=FakeRunView(DOCS, extracted=extracted),
     )
     model.assert_complete()
     assert called(events) == [
@@ -173,7 +173,7 @@ async def test_only_the_first_proposal_is_kept_and_the_budget_is_enforced() -> N
     model = ScriptedModel(steps)
     events = await collect(
         OpenAIAgent(model, max_turns=MAX_TOOL_CALLS + 4),
-        docs=FakeWorkspace(DOCS),
+        docs=FakeRunView(DOCS),
     )
     proposals = [e for e in events if isinstance(e, Proposal)]
     assert len(proposals) == 1

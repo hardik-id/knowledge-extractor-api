@@ -2,16 +2,16 @@
 
 from dataclasses import dataclass, field
 
-from apps.assistant.agents.base import DocumentRef, ToolUsed, Workspace
+from apps.assistant.agents.base import DocumentRef, RunView, ToolUsed
 from apps.assistant.proposal import Proposal
 from apps.extraction.definition import Chunking
 
 
 @dataclass
 class ReplyContext:
-    """The run's workspace and what the tools have done so far in one reply."""
+    """The run's view and what the tools have done so far in one reply."""
 
-    workspace: Workspace
+    run_view: RunView
     refs: list[DocumentRef]
     chunking: Chunking = field(
         default_factory=Chunking

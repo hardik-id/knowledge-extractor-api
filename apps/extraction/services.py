@@ -186,7 +186,7 @@ def generate_custom_chunking(
     ]
     if not documents:
         message = (
-            "Add a document first: the splitting code is tested on the project's "
+            "Add a document first: the splitting code is tested on the workspace's "
             "documents."
         )
         raise ApiError("validation_error", message, {"documents": [message]})

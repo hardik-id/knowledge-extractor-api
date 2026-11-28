@@ -103,7 +103,7 @@ async def _preview(state: ReplyContext, arguments: str) -> str:
         )
     state.previews += 1
     try:
-        records = await state.workspace.preview(definition, args.document_id)
+        records = await state.run_view.preview(definition, args.document_id)
     except ApiError:
         return error("this document cannot be previewed now.")
     except ExtractionError as err:

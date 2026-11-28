@@ -1,4 +1,4 @@
-"""Reads for the projects app.
+"""Reads for the workspaces app.
 
 A selector takes the acting user and returns only what that user may see.
 """
@@ -19,7 +19,7 @@ from django.db.models.functions import Coalesce, Greatest
 
 from apps.core.permissions import get_visible_or_404
 from apps.identity.models import User
-from apps.projects.models import Project
+from apps.workspaces.models import Workspace
 
 
 def _latest(model: str, path: str, field: str = "updated_at") -> Subquery:
@@ -34,18 +34,18 @@ def _latest(model: str, path: str, field: str = "updated_at") -> Subquery:
     )
 
 
-def _annotated(projects: Any) -> QuerySet[Project]:
+def _annotated(workspaces: Any) -> QuerySet[Workspace]:
     """Add ``document_count``, ``configuration_version`` and ``activity``.
 
     Every figure is a subquery, so the number of queries does not depend on the
-    number of projects. ``activity`` is the newest change among the project, the
+    number of workspaces. ``activity`` is the newest change among the workspace, the
     run's files and cells, its definition versions, its records and its messages.
     """
     files = apps.get_model("runs.RunFile").objects.filter(run=OuterRef("run_id"))
     versions = apps.get_model("extraction.DefinitionVersion").objects.filter(
         run=OuterRef("run_id")
     )
-    return projects.annotate(  # type: ignore[no-any-return]
+    return workspaces.annotate(  # type: ignore[no-any-return]
         document_count=Coalesce(
             Subquery(
                 files.order_by().values("run").annotate(n=Count("pk")).values("n"),
@@ -70,18 +70,20 @@ def _annotated(projects: Any) -> QuerySet[Project]:
     )
 
 
-def list_projects(user: User) -> QuerySet[Project]:
-    """The person's projects, with the figures of the wire shape, last activity first."""
-    owned = cast(QuerySet[Project], Project.objects.visible_to(user))
+def list_workspaces(user: User) -> QuerySet[Workspace]:
+    """The person's workspaces, with the figures of the wire shape, last activity first."""
+    owned = cast(QuerySet[Workspace], Workspace.objects.visible_to(user))
     return _annotated(owned).order_by("-activity", "-id")  # type: ignore[misc]
 
 
-def get_project(user: User, project_id: Any) -> Project:
-    """The project, if ``user`` owns it. Someone else's and an unknown id are both 404."""
-    found = get_visible_or_404(Project, user, project_id, code="project_not_found")
-    return _annotated(Project.objects.filter(pk=found.pk)).get()
+def get_workspace(user: User, workspace_id: Any) -> Workspace:
+    """The workspace, if ``user`` owns it. Someone else's and an unknown id are both 404."""
+    found = get_visible_or_404(
+        Workspace, user, workspace_id, code="workspace_not_found"
+    )
+    return _annotated(Workspace.objects.filter(pk=found.pk)).get()
 
 
-def run_has_project(run_id: Any) -> bool:
-    """Whether a project owns this run."""
-    return Project.objects.filter(run_id=run_id).exists()
+def run_has_workspace(run_id: Any) -> bool:
+    """Whether a workspace owns this run."""
+    return Workspace.objects.filter(run_id=run_id).exists()

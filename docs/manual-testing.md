@@ -105,19 +105,19 @@ Each built-in template (`GET /api/v1/templates`) has a sample document the scrip
 
 The text starts with `---` front matter, then `# Architecture decisions 2026`, and holds three decisions (`## ADR-012: ...` to `## ADR-014: ...`).
 
-### Start a project
+### Start a workspace
 
-A project is a name on a run. Start one, then set the documents of its run:
+A workspace is a name on a run. Start one, then set the documents of its run:
 
 ```sh
-PROJECT=$(call -d '{"name":"Architecture decisions"}' $API/projects)   # or add "template_id":"skill" (see $API/definition-templates)
-echo "$PROJECT" | show
-PROJECT_ID=$(echo "$PROJECT" | pick id)
-RUN_ID=$(echo "$PROJECT" | pick run_id)
-call $API/projects | show                  # { "items": [ ... ], "next": null }, last activity first
+WORKSPACE=$(call -d '{"name":"Architecture decisions"}' $API/workspaces)   # or add "template_id":"skill" (see $API/definition-templates)
+echo "$WORKSPACE" | show
+WORKSPACE_ID=$(echo "$WORKSPACE" | pick id)
+RUN_ID=$(echo "$WORKSPACE" | pick run_id)
+call $API/workspaces | show                  # { "items": [ ... ], "next": null }, last activity first
 ```
 
-The answer (201) has the project `id`, its `name`, `run_id`, `document_count` 0 and `configuration_version` 1 (the configuration is made from the template, the default one without `template_id`, and the version list shows the note `From template: ...`). The run is empty. Everything else goes through the run:
+The answer (201) has the workspace `id`, its `name`, `run_id`, `document_count` 0 and `configuration_version` 1 (the configuration is made from the template, the default one without `template_id`, and the version list shows the note `From template: ...`). The run is empty. Everything else goes through the run:
 
 ```sh
 RUN=$(call -X PUT -d "{\"items\":[{\"source\":\"storage\",\"source_ref\":\"$DOC\"}]}" $API/runs/$RUN_ID/documents)
@@ -159,7 +159,7 @@ Open a second terminal in this directory and leave it running while you do the n
 TOKEN=$(make -s token) uv run python scripts/watch_run.py <RUN_ID>
 ```
 
-Replace `<RUN_ID>` with the value of `$RUN_ID` (the project's `run_id`). The script asks for a ticket, connects to `ws://localhost:8000/ws/runs/<RUN_ID>/` and prints one JSON line per event. `API_URL` (default `http://localhost:8000`) points it elsewhere. A close with code 4401 means the ticket was refused, 4404 that the run is not yours or is gone. Events sent while nobody listens are lost, so start the watcher first.
+Replace `<RUN_ID>` with the value of `$RUN_ID` (the workspace's `run_id`). The script asks for a ticket, connects to `ws://localhost:8000/ws/runs/<RUN_ID>/` and prints one JSON line per event. `API_URL` (default `http://localhost:8000`) points it elsewhere. A close with code 4401 means the ticket was refused, 4404 that the run is not yours or is gone. Events sent while nobody listens are lost, so start the watcher first.
 
 ### The assistant
 
@@ -234,10 +234,10 @@ import json,sys; d=json.load(sys.stdin); print(d["version"], d["note"])'
 3 Restored from version 1
 ```
 
-The list is newest first and holds `version`, `note`, `created_at`, `record_type_count` and `field_count`. The project's `configuration_version` is now 3:
+The list is newest first and holds `version`, `note`, `created_at`, `record_type_count` and `field_count`. The workspace's `configuration_version` is now 3:
 
 ```sh
-call $API/projects/$PROJECT_ID | show
+call $API/workspaces/$WORKSPACE_ID | show
 ```
 
 ### Clear the conversation
@@ -249,18 +249,18 @@ call $API/runs/$RUN_ID/extraction/assistant/messages | show                     
 
 The watcher prints `assistant.cleared`. The configuration and the records stay.
 
-### Rename the project
+### Rename the workspace
 
 ```sh
-call -X PATCH -d '{"name":"ADRs, second try","description":"Why we chose"}' $API/projects/$PROJECT_ID | show
+call -X PATCH -d '{"name":"ADRs, second try","description":"Why we chose"}' $API/workspaces/$WORKSPACE_ID | show
 ```
 
 ### Clean up
 
-Delete the project; its run and everything on it go with it. (Deleting the run alone is refused: 409 `run_belongs_to_project`.)
+Delete the workspace; its run and everything on it go with it. (Deleting the run alone is refused: 409 `run_belongs_to_workspace`.)
 
 ```sh
-call -X DELETE $API/projects/$PROJECT_ID -o /dev/null -w '%{http_code}\n'    # 204
+call -X DELETE $API/workspaces/$WORKSPACE_ID -o /dev/null -w '%{http_code}\n'    # 204
 rm extraction.json draft.json message.json
 ```
 
@@ -319,7 +319,7 @@ make e2e ARGS="e2e/smoke.spec.ts"         # only one spec
 make e2e-report                           # where the report of the last run is, and how to open it
 ```
 
-It needs the UI checkout at `../knowledge-extractor` (or `UI_DIR=<path>`) with `npm ci` done there, and Docker. The exit code is the tests' exit code. The report is `playwright-report/index.html` in the UI checkout. The tests make their own people, so they do not touch the demo projects.
+It needs the UI checkout at `../knowledge-extractor` (or `UI_DIR=<path>`) with `npm ci` done there, and Docker. The exit code is the tests' exit code. The report is `playwright-report/index.html` in the UI checkout. The tests make their own people, so they do not touch the demo workspaces.
 
 ## Stopping and resetting
 

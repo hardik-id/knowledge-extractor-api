@@ -1,7 +1,7 @@
 """The interface every assistant agent implements.
 
 An agent reads what the person wrote, the definition on their screen, the
-conversation so far and (when it wants to) the run's workspace. It answers with
+conversation so far and (when it wants to) the run's view. It answers with
 a stream of events: any number of ``TextDelta`` and ``ToolUsed`` and at most one
 ``Proposal``.
 The stream ends when the reply is complete. An agent never saves anything:
@@ -82,7 +82,7 @@ class FileRecords:
     records: list[RecordView]
 
 
-class Workspace(Protocol):
+class RunView(Protocol):
     """What an agent can look at: one read-only view of a run.
 
     It is the only way a tool reaches data, and it is limited to this run and
@@ -121,7 +121,7 @@ class Agent(Protocol):
         text: str,
         definition: Draft,
         history: list[Message],
-        workspace: Workspace,
+        run_view: RunView,
     ) -> AsyncIterator[AgentEvent]:
         """The reply to ``text`` as a stream of events.
 

@@ -64,7 +64,7 @@ async def _find(state: ReplyContext, arguments: str) -> str:
     matching = 0
     for ref in searched:
         try:
-            text = await state.workspace.read(ref.id)
+            text = await state.run_view.read(ref.id)
         except ApiError:
             continue
         room = min(MAX_SNIPPETS_PER_DOCUMENT, MAX_SNIPPETS - shown)

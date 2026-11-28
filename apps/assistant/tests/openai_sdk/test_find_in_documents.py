@@ -8,7 +8,7 @@ from apps.assistant.agents.openai_sdk.tools.find_in_documents import (
     MAX_SNIPPETS,
     MAX_SNIPPETS_PER_DOCUMENT,
 )
-from apps.assistant.tests.fakes import FakeWorkspace
+from apps.assistant.tests.fakes import FakeRunView
 from apps.assistant.tests.openai_sdk.helpers import collect, tool_outputs
 
 DOCS = {
@@ -26,9 +26,7 @@ async def search(text: str, docs: dict[str, str] | None = None) -> str:
             [assistant_message("ok")],
         ]
     )
-    await collect(
-        OpenAIAgent(model), docs=FakeWorkspace(DOCS if docs is None else docs)
-    )
+    await collect(OpenAIAgent(model), docs=FakeRunView(DOCS if docs is None else docs))
     return tool_outputs(model.calls[1])[0]
 
 

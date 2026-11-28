@@ -116,7 +116,7 @@ async def _survey(state: ReplyContext, arguments: str) -> str:
     read = 0
     for ref in looked:
         try:
-            text = await state.workspace.read(ref.id)
+            text = await state.run_view.read(ref.id)
         except ApiError:
             continue
         read += 1

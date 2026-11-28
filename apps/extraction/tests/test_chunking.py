@@ -264,7 +264,7 @@ def test_the_built_in_templates_start_auto(client: Any) -> None:
         assert item["definition"]["chunking"] == AUTO
 
 
-def test_a_template_with_chunking_starts_a_project_with_it(
+def test_a_template_with_chunking_starts_a_workspace_with_it(
     client: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     template = template_registry.get_template("skill").model_copy(deep=True)
@@ -278,7 +278,7 @@ def test_a_template_with_chunking_starts_a_project_with_it(
         lambda template_id: template if template_id == "skill" else real(template_id),
     )
     created = client.post(
-        "/api/v1/projects", {"name": "P", "template_id": "skill"}, format="json"
+        "/api/v1/workspaces", {"name": "P", "template_id": "skill"}, format="json"
     )
     assert created.status_code == 201, created.content
     path = f"/api/v1/runs/{created.json()['run_id']}/stages/extract/definition"

@@ -3,9 +3,12 @@
 A service takes the acting user as its first argument.
 """
 
+from uuid import UUID
+
 from django.db import transaction
 
 from apps.extraction import services as extraction
+from apps.iam import workspace_access
 from apps.identity.models import User
 from apps.runs import services as runs
 from apps.workspaces import selectors
@@ -19,16 +22,19 @@ def create_workspace(
     name: str,
     description: str = "",
     template_id: str | None = None,
+    tenant_id: UUID | str | None = None,
 ) -> Workspace:
-    """A workspace with its own empty run and its configuration, made together.
+    """A workspace with its own empty run, its configuration and its owner, made together.
 
     Version 1 of the definition comes from the template (the default when None).
     """
+    tenant = workspace_access.tenant_for_new_workspace(user, tenant_id)
     run = runs.create_empty_run(user)
     extraction.start_definition(run, template_id)
     workspace = Workspace.objects.create(
-        owner=user, name=name, description=description, run=run
+        owner=user, tenant=tenant, name=name, description=description, run=run
     )
+    workspace_access.make_owner(user, workspace.pk)
     return selectors.get_workspace(user, workspace.pk)
 
 

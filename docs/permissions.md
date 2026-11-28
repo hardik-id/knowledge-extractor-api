@@ -40,4 +40,6 @@ require_can_change(run, request.user)
 
 The test-only app `apps.core.tests` has `SharedNote` (visible to all when shared, changeable by its owner) and views built only from the helpers; see `apps/core/tests/test_permissions.py`.
 
+`Workspace` and `Run` override `visible_to`: a workspace is visible to the people with a `WorkspaceMembership` in it, a run to those of its workspace (or to its owner when it has none). `owner` only says who made it.
+
 Who may do what (tenants, workspaces, roles and the permission table): `docs/iam.md`.

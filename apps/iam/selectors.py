@@ -5,8 +5,8 @@ from uuid import UUID
 
 from django.db.models.functions import Lower
 
-from .models import PlatformAdmin, Tenant, TenantMembership
-from .roles import TenantRole
+from .models import PlatformAdmin, Tenant, TenantMembership, WorkspaceMembership
+from .roles import Permission, TenantRole, WorkspaceRole, permissions_of
 
 
 def _active(user: Any) -> bool:
@@ -46,3 +46,27 @@ def tenants_of(user: Any) -> list[tuple[Tenant, TenantRole]]:
 
 def default_tenant() -> Tenant:
     return Tenant.objects.get(is_default=True)
+
+
+def workspace_role(user: Any, workspace_id: UUID | str) -> WorkspaceRole | None:
+    """The person's role in the workspace, or None when they have none."""
+    if not _active(user):
+        return None
+    try:
+        workspace_id = UUID(str(workspace_id))
+    except ValueError:
+        return None
+    role = (
+        WorkspaceMembership.objects.filter(user=user, workspace_id=workspace_id)
+        .values_list("role", flat=True)
+        .first()
+    )
+    return WorkspaceRole(role) if role else None
+
+
+def workspace_permissions(user: Any, workspace_id: UUID | str) -> list[Permission]:
+    """The person's permissions in the workspace, sorted by name."""
+    role = workspace_role(user, workspace_id)
+    if role is None:
+        return []
+    return sorted(permissions_of(role))

@@ -40,7 +40,7 @@ def test_selectors_are_safe_for_anonymous_inactive_and_malformed_input() -> None
 
 
 def test_tenants_of_orders_by_name_without_regard_to_case() -> None:
-    user = UserFactory()
+    user = UserFactory(in_default_tenant=False)
     TenantMembershipFactory(user=user, tenant=TenantFactory(name="b"))
     TenantMembershipFactory(user=user, tenant=TenantFactory(name="Z"))
     TenantMembershipFactory(user=user, tenant=TenantFactory(name="A"))
@@ -49,7 +49,7 @@ def test_tenants_of_orders_by_name_without_regard_to_case() -> None:
 
 
 def test_tenants_of_lists_each_with_the_role() -> None:
-    user = UserFactory()
+    user = UserFactory(in_default_tenant=False)
     b = TenantMembershipFactory(user=user, tenant=TenantFactory(name="B"), role="admin")
     a = TenantMembershipFactory(
         user=user, tenant=TenantFactory(name="A"), role="member"

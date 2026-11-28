@@ -12,6 +12,7 @@ from apps.identity.models import User
 from apps.workspaces import selectors, services
 from apps.workspaces.api.serializers import (
     CreateWorkspaceSerializer,
+    ListWorkspacesSerializer,
     UpdateWorkspaceSerializer,
     WorkspaceSerializer,
 )
@@ -39,8 +40,12 @@ def _workspaces(request: Request) -> Response:
         serializer.is_valid(raise_exception=True)
         workspace = services.create_workspace(user, **serializer.validated_data)
         return Response(WorkspaceSerializer(workspace).data, status=201)
+    query = ListWorkspacesSerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
     paginator: BasePagination = WorkspacePagination()
-    page = paginator.paginate_queryset(selectors.list_workspaces(user), request)
+    page = paginator.paginate_queryset(
+        selectors.list_workspaces(user, query.validated_data.get("tenant_id")), request
+    )
     return paginator.get_paginated_response(WorkspaceSerializer(page, many=True).data)
 
 
@@ -61,7 +66,12 @@ def _workspace_detail(request: Request, workspace_id: str) -> Response:
     )
 
 
-@extend_schema(methods=["GET"], operation_id="workspaces_list", responses=WorkspaceList)
+@extend_schema(
+    methods=["GET"],
+    operation_id="workspaces_list",
+    parameters=[ListWorkspacesSerializer],
+    responses=WorkspaceList,
+)
 @extend_schema(
     methods=["POST"],
     request=CreateWorkspaceSerializer,
@@ -90,6 +100,7 @@ def workspace_detail(request: Request, workspace_id: str) -> Response:
 @extend_schema(
     methods=["GET"],
     operation_id="projects_list",
+    parameters=[ListWorkspacesSerializer],
     responses=WorkspaceList,
     deprecated=True,
 )

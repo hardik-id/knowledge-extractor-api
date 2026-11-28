@@ -22,6 +22,7 @@ ERRORS: dict[str, ErrorCode] = {
     "document_not_found": ErrorCode(404, "Document not found."),
     "run_not_found": ErrorCode(404, "Run not found."),
     "workspace_not_found": ErrorCode(404, "Workspace not found."),
+    "tenant_not_found": ErrorCode(404, "Tenant not found."),
     "file_not_found": ErrorCode(404, "File not found."),
     "extraction_not_found": ErrorCode(404, "This file has no extraction yet."),
     "record_not_found": ErrorCode(404, "Record not found."),

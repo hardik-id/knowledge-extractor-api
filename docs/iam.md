@@ -56,7 +56,7 @@ Point at the models by string (`"iam.Tenant"`); call `apps.iam.selectors` (`is_p
 
 ## Platform admins
 
-A person is a platform admin when their `oid` is in `IAM_PLATFORM_ADMIN_OIDS` (no row, changed only in the setting) or a `PlatformAdmin` row exists. In production a system check (`iam.W001`, run by `manage.py check --database default` and `migrate`) warns when there is neither. Operators use:
+A person is a platform admin when their `oid` is in `IAM_PLATFORM_ADMIN_OIDS` (no row, changed only in the setting) or a `PlatformAdmin` row exists. On a developer machine in dev mode (`config.settings.local`, `AUTH_MODE=dev`) the dev issuer's default person is listed when the setting is not set at all, so a local stack has a platform admin with no setup; production never gets this, because it refuses dev mode. In production a system check (`iam.W001`, run by `manage.py check --database default` and `migrate`) warns when there is neither. Operators use:
 
 ```sh
 uv run python manage.py platform_admin list

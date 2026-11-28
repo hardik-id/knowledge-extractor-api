@@ -87,7 +87,11 @@ def grant_platform_admin(actor: Any | None, user_id: int) -> None:
         _lock_platform_admins()
         _require_platform_admin(actor)
         target = _user(user_id)
-        if is_platform_admin(target):
+        # A row may exist for a deactivated person, who is not an admin while inactive.
+        if (
+            is_platform_admin(target)
+            or PlatformAdmin.objects.filter(user=target).exists()
+        ):
             return
         PlatformAdmin.objects.create(user=target)
         audit.record(

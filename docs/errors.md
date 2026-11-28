@@ -21,6 +21,8 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `method_not_allowed` | 405 | Method not allowed. |
 | `document_not_found` | 404 | Document not found. |
 | `run_not_found` | 404 | Run not found. |
+| `tenant_not_found` | 404 | Tenant not found. |
+| `user_not_found` | 404 | Person not found. |
 | `workspace_not_found` | 404 | Workspace not found. |
 | `file_not_found` | 404 | File not found. |
 | `extraction_not_found` | 404 | This file has no extraction yet. |
@@ -50,6 +52,8 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `run_belongs_to_workspace` | 409 | This run belongs to a workspace. Delete the workspace instead. |
 | `execution_in_progress` | 409 | This stage is already running. |
 | `unknown_file` | 422 | One of the files is not part of this run. |
+| `last_platform_admin` | 409 | The last platform admin cannot be removed. |
+| `last_tenant_admin` | 409 | A tenant keeps at least one admin. |
 | `conflict` | 409 | The request conflicts with the current state. |
 | `validation_error` | 422 | The request is not valid. |
 | `server_error` | 500 | Something went wrong. |

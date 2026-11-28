@@ -8,6 +8,7 @@ Sections are labelled so that later changes touch one section each.
 """
 
 import os
+import uuid
 from pathlib import Path
 
 import environ
@@ -220,6 +221,30 @@ if AUTH_MODE == "entra":
 DEV_AUTH_KEY_PATH = Path(
     env.str("DEV_AUTH_KEY_PATH", default=str(BASE_DIR / ".dev-keys" / "issuer.pem"))
 )
+
+# ---------------------------------------------------------------------------
+# IAM (docs/iam.md)
+# A new person gets IAM_DEFAULT_TENANT_ROLE ('member' or 'admin') of the default
+# tenant; empty means no membership. A person whose oid is listed in
+# IAM_PLATFORM_ADMIN_OIDS (comma separated) is a platform admin without a row.
+# ---------------------------------------------------------------------------
+
+IAM_DEFAULT_TENANT_ROLE = env.str("IAM_DEFAULT_TENANT_ROLE", default="member")
+if IAM_DEFAULT_TENANT_ROLE not in ("", "member", "admin"):
+    raise environ.ImproperlyConfigured(
+        "IAM_DEFAULT_TENANT_ROLE must be 'member', 'admin' or empty, "
+        f"got {IAM_DEFAULT_TENANT_ROLE!r}"
+    )
+try:
+    IAM_PLATFORM_ADMIN_OIDS = frozenset(
+        uuid.UUID(oid.strip())
+        for oid in env.list("IAM_PLATFORM_ADMIN_OIDS", default=[])
+        if oid.strip()
+    )
+except ValueError as error:
+    raise environ.ImproperlyConfigured(
+        f"IAM_PLATFORM_ADMIN_OIDS must list UUIDs: {error}"
+    ) from None
 
 # ---------------------------------------------------------------------------
 # Logging

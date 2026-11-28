@@ -46,7 +46,14 @@ def tenant_for_new_workspace(user: Any, tenant_id: UUID | str | None) -> Tenant:
 
 @transaction.atomic
 def make_owner(user: Any, workspace_id: UUID, tenant: Tenant) -> WorkspaceMembership:
-    """The creator of a new workspace is its owner. Recorded in the audit."""
+    """The creator of a new workspace is its owner. Recorded in the audit.
+
+    Takes the tenant lock that removing a member takes and checks the creator is
+    still allowed to create there, so a person being removed cannot keep a workspace
+    made during the removal.
+    """
+    Tenant.objects.select_for_update().get(pk=tenant.pk)
+    tenant_for_new_workspace(user, tenant.pk)
     membership = WorkspaceMembership.objects.create(
         workspace_id=workspace_id, user=user, role=WorkspaceRole.OWNER
     )

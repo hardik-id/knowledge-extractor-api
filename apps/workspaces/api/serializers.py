@@ -84,7 +84,7 @@ class MemberUserSerializer(serializers.Serializer):  # type: ignore[type-arg]
     preferred_username = serializers.CharField(read_only=True)
 
 
-class MemberSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class WorkspaceMemberSerializer(serializers.Serializer):  # type: ignore[type-arg]
     """A person's role in a workspace on the wire."""
 
     user = MemberUserSerializer(read_only=True)
@@ -92,9 +92,9 @@ class MemberSerializer(serializers.Serializer):  # type: ignore[type-arg]
     added_at = serializers.DateTimeField(source="created_at", read_only=True)
 
 
-class MemberListSerializer(serializers.Serializer):  # type: ignore[type-arg]
-    items = MemberSerializer(many=True, read_only=True)
+class WorkspaceMemberListSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    items = WorkspaceMemberSerializer(many=True, read_only=True)
 
 
-class SetRoleSerializer(serializers.Serializer):  # type: ignore[type-arg]
+class SetWorkspaceRoleSerializer(serializers.Serializer):  # type: ignore[type-arg]
     role = serializers.ChoiceField(choices=[r.value for r in WorkspaceRole])

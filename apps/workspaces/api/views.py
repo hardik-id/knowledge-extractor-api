@@ -16,10 +16,10 @@ from apps.workspaces import selectors, services
 from apps.workspaces.api.serializers import (
     CreateWorkspaceSerializer,
     ListWorkspacesSerializer,
-    MemberListSerializer,
-    MemberSerializer,
-    SetRoleSerializer,
+    SetWorkspaceRoleSerializer,
     UpdateWorkspaceSerializer,
+    WorkspaceMemberListSerializer,
+    WorkspaceMemberSerializer,
     WorkspaceSerializer,
 )
 
@@ -85,7 +85,7 @@ def _workspace_detail(request: Request, workspace_id: str) -> Response:
 
 def _members(request: Request, workspace_id: str) -> Response:
     items = workspace_members.list_members(cast(User, request.user), workspace_id)
-    return Response({"items": MemberSerializer(items, many=True).data})
+    return Response({"items": WorkspaceMemberSerializer(items, many=True).data})
 
 
 def _member(request: Request, workspace_id: str, user_id: str) -> Response:
@@ -93,12 +93,12 @@ def _member(request: Request, workspace_id: str, user_id: str) -> Response:
     if request.method == "DELETE":
         workspace_members.remove_workspace_member(user, workspace_id, user_id)
         return Response(status=204)
-    serializer = SetRoleSerializer(data=request.data)
+    serializer = SetWorkspaceRoleSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     membership = workspace_members.set_workspace_role(
         user, workspace_id, user_id, serializer.validated_data["role"]
     )
-    return Response(MemberSerializer(membership).data)
+    return Response(WorkspaceMemberSerializer(membership).data)
 
 
 # The creating tenant is checked by the service (workspaces.create).
@@ -141,7 +141,7 @@ def workspace_detail(request: Request, workspace_id: str) -> Response:
 
 
 @requires(GET=Permission.WORKSPACE_VIEW)
-@extend_schema(responses=MemberListSerializer)
+@extend_schema(responses=WorkspaceMemberListSerializer)
 @api_view(["GET"])
 def workspace_members_list(request: Request, workspace_id: str) -> Response:
     """Who has a role in the workspace, owners first. Also for those who manage its members."""
@@ -151,7 +151,11 @@ def workspace_members_list(request: Request, workspace_id: str) -> Response:
 @requires(
     PUT=Permission.WORKSPACE_MEMBERS_MANAGE, DELETE=Permission.WORKSPACE_MEMBERS_MANAGE
 )
-@extend_schema(methods=["PUT"], request=SetRoleSerializer, responses=MemberSerializer)
+@extend_schema(
+    methods=["PUT"],
+    request=SetWorkspaceRoleSerializer,
+    responses=WorkspaceMemberSerializer,
+)
 @extend_schema(methods=["DELETE"], responses={204: None})
 @api_view(["PUT", "DELETE"])
 def workspace_member(request: Request, workspace_id: str, user_id: str) -> Response:

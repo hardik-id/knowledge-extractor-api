@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from uuid import UUID
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import (
@@ -31,8 +32,14 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     user_group: str | None = None
 
     async def connect(self) -> None:
-        run_id = self.scope["url_route"]["kwargs"]["run_id"]
         user = self.scope["user"]
+        try:
+            # Only a real id may name a channel group: anything else is no run.
+            run_id = UUID(str(self.scope["url_route"]["kwargs"]["run_id"]))
+        except ValueError:
+            await self.accept()
+            await self.close(code=NOT_FOUND)
+            return
         # Join the groups first, then check access: a close sent at the commit of
         # a removal then cannot fall between the check and the join and be lost.
         group = services.run_group(run_id)

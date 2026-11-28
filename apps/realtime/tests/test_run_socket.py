@@ -100,6 +100,10 @@ async def test_an_unknown_run_is_4404(user: Any) -> None:
     await closed_with(socket, 4404)
     socket = await open_socket(user, "not-a-uuid")
     await closed_with(socket, 4404)
+    # An id that could not even name a channel group (a sign, or far too long).
+    for odd in ("x!y", "a" * 200):
+        socket = await open_socket(user, odd)
+        await closed_with(socket, 4404)
 
 
 async def test_a_bad_ticket_is_4401() -> None:

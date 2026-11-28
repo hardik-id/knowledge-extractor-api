@@ -135,6 +135,7 @@ def main() -> None:
             f"const PLAN = {js(data)}\n\n"
             f"{engine}"
         )
+        OUT.mkdir(parents=True, exist_ok=True)
         path = OUT / f"{workflow['name']}.js"
         path.write_text(text)
         wanted.add(path.name)

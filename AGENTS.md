@@ -36,7 +36,7 @@ apps/core/         shared components, no domain rules
 apps/identity/     the custom user (oid + tid)
 apps/<domain>/     one app per domain, made with make app: api/, models.py, services.py, selectors.py, tests/
 scaffolding/       app_template, used by make app
-.claude/skills/    skills for agents (below); .claude/workflows/ are the delivery workflows
+.claude/skills/    skills for agents (below); .claude/workflows/ are the delivery workflows, built by make workflows
 docs/              one file per topic (below)
 ```
 

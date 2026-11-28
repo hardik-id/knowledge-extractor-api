@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from django.apps import apps
 from django.db.models import (
+    CharField,
     Count,
     DateTimeField,
     IntegerField,
@@ -34,7 +35,7 @@ def _latest(model: str, path: str, field: str = "updated_at") -> Subquery:
     )
 
 
-def _annotated(workspaces: Any) -> QuerySet[Workspace]:
+def _annotated(workspaces: Any, user: User) -> QuerySet[Workspace]:
     """Add ``document_count``, ``configuration_version`` and ``activity``.
 
     Every figure is a subquery, so the number of queries does not depend on the
@@ -45,7 +46,11 @@ def _annotated(workspaces: Any) -> QuerySet[Workspace]:
     versions = apps.get_model("extraction.DefinitionVersion").objects.filter(
         run=OuterRef("run_id")
     )
+    roles = apps.get_model("iam.WorkspaceMembership").objects.filter(
+        workspace=OuterRef("pk"), user=user
+    )
     return workspaces.annotate(  # type: ignore[no-any-return]
+        role=Subquery(roles.values("role")[:1], output_field=CharField()),
         document_count=Coalesce(
             Subquery(
                 files.order_by().values("run").annotate(n=Count("pk")).values("n"),
@@ -70,18 +75,20 @@ def _annotated(workspaces: Any) -> QuerySet[Workspace]:
     )
 
 
-def list_workspaces(user: User) -> QuerySet[Workspace]:
+def list_workspaces(user: User, tenant_id: Any = None) -> QuerySet[Workspace]:
     """The person's workspaces, with the figures of the wire shape, last activity first."""
-    owned = cast(QuerySet[Workspace], Workspace.objects.visible_to(user))
-    return _annotated(owned).order_by("-activity", "-id")  # type: ignore[misc]
+    seen = cast(QuerySet[Workspace], Workspace.objects.visible_to(user))
+    if tenant_id is not None:
+        seen = seen.filter(tenant_id=tenant_id)
+    return _annotated(seen, user).order_by("-activity", "-id")  # type: ignore[misc]
 
 
 def get_workspace(user: User, workspace_id: Any) -> Workspace:
-    """The workspace, if ``user`` owns it. Someone else's and an unknown id are both 404."""
+    """The workspace, if ``user`` has a role in it. One they have none in and an unknown id are both 404."""
     found = get_visible_or_404(
         Workspace, user, workspace_id, code="workspace_not_found"
     )
-    return _annotated(Workspace.objects.filter(pk=found.pk)).get()
+    return _annotated(Workspace.objects.filter(pk=found.pk), user).get()
 
 
 def run_has_workspace(run_id: Any) -> bool:

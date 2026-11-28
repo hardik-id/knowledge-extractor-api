@@ -6,7 +6,7 @@ from django.db.models.functions import Lower
 
 from apps.core.models import BaseModel
 
-from .roles import TenantRole
+from .roles import TenantRole, WorkspaceRole
 
 
 class Tenant(BaseModel):
@@ -51,6 +51,33 @@ class TenantMembership(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.user_id} is {self.role} of {self.tenant_id}"
+
+
+class WorkspaceMembership(BaseModel):
+    """A person's role in one workspace. This row is what makes the workspace visible."""
+
+    workspace = models.ForeignKey(
+        "projects.Workspace", on_delete=models.CASCADE, related_name="memberships"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workspace_memberships",
+    )
+    role = models.CharField(
+        max_length=16, choices=[(r.value, r.value) for r in WorkspaceRole]
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "user"],
+                name="iam_workspace_membership_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} is {self.role} of {self.workspace_id}"
 
 
 class PlatformAdmin(BaseModel):

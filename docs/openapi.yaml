@@ -219,6 +219,12 @@ paths:
     get:
       operationId: projects_list
       description: 'Deprecated: use /workspaces.'
+      parameters:
+      - in: query
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
       tags:
       - projects
       security:
@@ -1604,6 +1610,12 @@ paths:
       operationId: workspaces_list
       description: The person's workspaces, last activity first (GET), or start one
         (POST).
+      parameters:
+      - in: query
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
       tags:
       - workspaces
       security:
@@ -1954,6 +1966,9 @@ components:
         template_id:
           type: string
           minLength: 1
+        tenant_id:
+          type: string
+          format: uuid
       required:
       - name
     CustomChunking:
@@ -2911,6 +2926,19 @@ components:
           type: string
           format: uuid
           readOnly: true
+        tenant_id:
+          type: string
+          format: uuid
+          readOnly: true
+        role:
+          type: string
+          readOnly: true
+        permissions:
+          type: array
+          items:
+            type: string
+          description: The person's permission names in this workspace, sorted.
+          readOnly: true
         document_count:
           type: integer
           readOnly: true
@@ -2932,7 +2960,10 @@ components:
       - document_count
       - id
       - name
+      - permissions
+      - role
       - run_id
+      - tenant_id
       - updated_at
     WorkspaceList:
       type: object

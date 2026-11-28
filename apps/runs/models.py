@@ -1,10 +1,23 @@
+from typing import Any, Self
+
 from django.db import models
 
-from apps.core.models import BaseModel, OwnedModel
+from apps.core.models import BaseModel, OwnedModel, OwnedQuerySet
+
+
+class RunQuerySet(OwnedQuerySet):
+    def visible_to(self, user: Any) -> Self:
+        """Runs of a workspace the person has a role in, and their own runs with no workspace."""
+        return self.filter(
+            models.Q(workspace__memberships__user=user)
+            | models.Q(workspace__isnull=True, owner=user)
+        )
 
 
 class Run(OwnedModel):
     """A set of files a person works on, one cell per file and stage."""
+
+    objects = RunQuerySet.as_manager()  # type: ignore[misc]
 
 
 class RunFile(BaseModel):

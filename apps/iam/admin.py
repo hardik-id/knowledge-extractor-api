@@ -2,7 +2,13 @@ from typing import Any
 
 from django.contrib import admin
 
-from .models import AuditEntry, PlatformAdmin, Tenant, TenantMembership
+from .models import (
+    AuditEntry,
+    PlatformAdmin,
+    Tenant,
+    TenantMembership,
+    WorkspaceMembership,
+)
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):  # type: ignore[type-arg]  # generic only for stubs
@@ -29,6 +35,12 @@ class TenantAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 @admin.register(TenantMembership)
 class TenantMembershipAdmin(ReadOnlyAdmin):
     list_display = ("tenant", "user", "role")
+    list_filter = ("role",)
+
+
+@admin.register(WorkspaceMembership)
+class WorkspaceMembershipAdmin(ReadOnlyAdmin):
+    list_display = ("workspace", "user", "role")
     list_filter = ("role",)
 
 

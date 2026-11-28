@@ -67,3 +67,7 @@ uv run python manage.py platform_admin revoke --oid <uuid>
 ## First sign-in
 
 When `apps.identity` creates a user it calls `services.join_default_tenant` in the same transaction: the person becomes `IAM_DEFAULT_TENANT_ROLE` (default `member`; empty means none) of the default tenant, and the entry is recorded. Only creation does this.
+
+## Workspace membership
+
+`WorkspaceMembership` (workspace, person, role; one row per pair) is what makes a workspace visible: `Workspace.objects.visible_to(user)` is the workspaces the person has a row in. A workspace belongs to a tenant (`Workspace.tenant`). Creating one needs `workspaces.create` in the tenant, and the creator gets the `owner` row in the same transaction, recorded as `workspace.role.set`. `apps.iam.selectors.workspace_role(user, workspace_id)` and `workspace_permissions(user, workspace_id)` read it. See `docs/workspaces.md`.

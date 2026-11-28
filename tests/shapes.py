@@ -235,6 +235,10 @@ def check_workspace(value: Any, path: str = "workspace") -> None:
     o = obj(value, path)
     for key in ("id", "name", "description", "run_id", "created_at", "updated_at"):
         string(o.get(key), f"{path}.{key}")
+    string(o.get("tenant_id"), f"{path}.tenant_id")
+    string(o.get("role"), f"{path}.role")
+    for i, name in enumerate(array(o.get("permissions"), f"{path}.permissions")):
+        string(name, f"{path}.permissions[{i}]")
     number(o.get("document_count"), f"{path}.document_count")
     nullable(
         o.get("configuration_version"),

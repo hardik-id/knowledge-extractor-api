@@ -13,7 +13,8 @@ from apps.runs.models import Cell, Run, RunFile
 
 
 def get_run(user: User, run_id: Any) -> Run:
-    """The run, if ``user`` owns it. Someone else's run and an unknown id are both 404."""
+    """The run, if ``user`` sees it: through workspace membership, or by owning a run with no
+    workspace. Any other run and an unknown id are both 404."""
     return get_visible_or_404(Run, user, run_id, code="run_not_found")
 
 

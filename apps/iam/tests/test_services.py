@@ -227,6 +227,15 @@ def test_granting_again_records_nothing() -> None:
     assert AuditEntry.objects.count() == 0
 
 
+def test_granting_to_a_deactivated_person_who_has_a_row_changes_nothing() -> None:
+    boss, gone = platform_admin(), platform_admin()
+    gone.is_active = False
+    gone.save(update_fields=["is_active"])
+    services.grant_platform_admin(boss, gone.pk)
+    assert PlatformAdmin.objects.filter(user=gone).count() == 1
+    assert AuditEntry.objects.count() == 0
+
+
 def test_only_a_platform_admin_may_grant_or_revoke() -> None:
     tenant = TenantFactory()
     admin, person = tenant_admin(tenant), UserFactory()

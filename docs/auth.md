@@ -57,7 +57,7 @@ After a token is accepted the person's id is bound to the log context as `user_i
 | `ENTRA_REQUIRED_SCOPE` | The scope `scp` must contain. Default `access_as_user` |
 | `AUTH_MODE` | `entra` or `dev`. `dev` is refused in production |
 | `IAM_DEFAULT_TENANT_ROLE` | The role a new person gets in the default tenant: `member` (default), `admin` or empty for none. See [iam.md](iam.md) |
-| `IAM_PLATFORM_ADMIN_OIDS` | Comma separated `oid`s that are platform admins without a row. `.env.example` lists the dev issuer's default person |
+| `IAM_PLATFORM_ADMIN_OIDS` | Comma separated `oid`s that are platform admins without a row. Not set: nobody, except with the local settings in dev mode, where the dev issuer's default person is one (set it empty for nobody) |
 | `DEV_AUTH_KEY_PATH` | Where the dev issuer keeps its private key. Default `.dev-keys/issuer.pem` in the project. Dev mode only |
 
 None of them is a secret. Without `ENTRA_TENANT_ID` and `ENTRA_CLIENT_ID` the validator refuses to start work and a signed-in request answers 500. The signing keys are fetched from the tenant's OpenID configuration and cached (see `tokens.py`).

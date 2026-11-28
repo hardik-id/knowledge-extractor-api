@@ -53,9 +53,9 @@ A member on the wire is `{ "user": { "id", "name", "preferred_username" }, "role
 
 `DELETE /api/v1/runs/{run_id}` on a run that a workspace owns answers 409 `run_belongs_to_workspace`. Delete the workspace instead. The UI should add a line for the two new codes, `workspace_not_found` and `run_belongs_to_workspace`.
 
-## The old paths
+## The app label
 
-`/api/v1/projects` and `/api/v1/projects/{project_id}` still answer through the same code and are marked deprecated in the schema, until the UI has moved. They are removed in #493. The app label stays `projects` (the migration history), the table is `workspaces_workspace`.
+The app label stays `projects` (the migration history), the table is `workspaces_workspace`. The old `/api/v1/projects` paths are gone and answer the JSON 404.
 
 ## Existing data
 

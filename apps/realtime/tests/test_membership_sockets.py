@@ -114,3 +114,70 @@ async def test_a_role_lowered_to_viewer_keeps_the_socket() -> None:
     await say(workspace.run_id, {"type": "run.changed"})
     assert await sb.receive_json_from() == {"type": "run.changed"}
     await sb.disconnect()
+
+
+@sync_to_async
+def two_workspaces_for(user: Any) -> Any:
+    first = WorkspaceFactory()
+    second = WorkspaceFactory(tenant=first.tenant)
+    for ws in (first, second):
+        WorkspaceMembership.objects.create(
+            workspace=ws, user=user, role=WorkspaceRole.VIEWER
+        )
+    TenantMembership.objects.get_or_create(
+        tenant=first.tenant, user=user, defaults={"role": "member"}
+    )
+    return first, second
+
+
+async def test_leaving_the_tenant_closes_the_sockets_of_every_workspace() -> None:
+    user = await sync_to_async(UserFactory)()
+    first, second = await two_workspaces_for(user)
+    s1 = await open_socket(user, first.run_id)
+    s2 = await open_socket(user, second.run_id)
+    await remove_from_tenant(first, user)
+    await closed_with(s1, ACCESS_REMOVED)
+    await closed_with(s2, ACCESS_REMOVED)
+
+
+@sync_to_async
+def remove_then_roll_back(workspace: Any, actor: Any, user: Any) -> None:
+    from django.db import transaction
+
+    class Undo(Exception):
+        pass
+
+    try:
+        with transaction.atomic():
+            workspace_members.remove_workspace_member(actor, workspace.pk, user.pk)
+            raise Undo
+    except Undo:
+        pass
+
+
+async def test_a_rolled_back_removal_keeps_the_socket() -> None:
+    workspace, a, b = await two_members()
+    sb = await open_socket(b, workspace.run_id)
+    await remove_then_roll_back(workspace, a, b)
+    await say(workspace.run_id, {"type": "run.changed"})
+    assert await sb.receive_json_from() == {"type": "run.changed"}
+    await sb.disconnect()
+
+
+async def test_a_removal_between_the_check_and_the_join_still_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from apps.runs import selectors as run_selectors
+
+    workspace, a, b = await two_members()
+    real = run_selectors.get_run
+
+    def get_run_then_remove(*args: Any, **kwargs: Any) -> Any:
+        run = real(*args, **kwargs)
+        # the removal commits right after the check passed
+        workspace_members.remove_workspace_member(a, workspace.pk, b.pk)
+        return run
+
+    monkeypatch.setattr(run_selectors, "get_run", get_run_then_remove)
+    sb = await open_socket(b, workspace.run_id)
+    await closed_with(sb, ACCESS_REMOVED)

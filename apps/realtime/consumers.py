@@ -32,19 +32,32 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
     async def connect(self) -> None:
         run_id = self.scope["url_route"]["kwargs"]["run_id"]
+        user = self.scope["user"]
+        # Join the groups first, then check access: a close sent at the commit of
+        # a removal then cannot fall between the check and the join and be lost.
+        group = services.run_group(run_id)
+        user_group = services.run_user_group(run_id, user.pk)
+        await self.channel_layer.group_add(group, self.channel_name)
+        await self.channel_layer.group_add(user_group, self.channel_name)
         try:
             run = await database_sync_to_async(runs.get_run)(
-                self.scope["user"], run_id, Permission.WORKSPACE_VIEW
+                user, run_id, Permission.WORKSPACE_VIEW
             )
         except ApiError:
+            await self.channel_layer.group_discard(group, self.channel_name)
+            await self.channel_layer.group_discard(user_group, self.channel_name)
             # Accept first, so the close code reaches the browser.
             await self.accept()
             await self.close(code=NOT_FOUND)
             return
         self.group = services.run_group(run.pk)
-        self.user_group = services.run_user_group(run.pk, self.scope["user"].pk)
-        await self.channel_layer.group_add(self.group, self.channel_name)
-        await self.channel_layer.group_add(self.user_group, self.channel_name)
+        self.user_group = services.run_user_group(run.pk, user.pk)
+        if (self.group, self.user_group) != (group, user_group):
+            # The id in the URL was spelled differently from the run's own.
+            await self.channel_layer.group_discard(group, self.channel_name)
+            await self.channel_layer.group_discard(user_group, self.channel_name)
+            await self.channel_layer.group_add(self.group, self.channel_name)
+            await self.channel_layer.group_add(self.user_group, self.channel_name)
         telemetry.connection_opened()
         await self.accept()
 

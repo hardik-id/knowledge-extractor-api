@@ -44,3 +44,14 @@ def test_a_project_made_before_the_rename_is_read_back_as_a_workspace() -> None:
         assert "projects_project" not in connection.introspection.table_names()
     finally:
         migrate(list(MigrationExecutor(connection).loader.graph.leaf_nodes()))
+
+
+def test_the_rename_can_be_reversed() -> None:
+    migrate(AFTER)
+    try:
+        migrate(BEFORE)
+        tables = connection.introspection.table_names()
+        assert "projects_project" in tables
+        assert "workspaces_workspace" not in tables
+    finally:
+        migrate(list(MigrationExecutor(connection).loader.graph.leaf_nodes()))

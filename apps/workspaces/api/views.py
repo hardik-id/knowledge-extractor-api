@@ -8,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.pagination import DefaultPagination
+from apps.iam import workspace_members
 from apps.iam.roles import Permission
 from apps.iam.routes import SIGNED_IN, requires
 from apps.identity.models import User
@@ -15,6 +16,9 @@ from apps.workspaces import selectors, services
 from apps.workspaces.api.serializers import (
     CreateWorkspaceSerializer,
     ListWorkspacesSerializer,
+    MemberListSerializer,
+    MemberSerializer,
+    SetRoleSerializer,
     UpdateWorkspaceSerializer,
     WorkspaceSerializer,
 )
@@ -35,20 +39,28 @@ WorkspaceList = inline_serializer(
 )
 
 
+def _context(request: Request) -> dict[str, object]:
+    return {"request": request}
+
+
 def _workspaces(request: Request) -> Response:
     user = cast(User, request.user)
     if request.method == "POST":
         serializer = CreateWorkspaceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         workspace = services.create_workspace(user, **serializer.validated_data)
-        return Response(WorkspaceSerializer(workspace).data, status=201)
+        return Response(
+            WorkspaceSerializer(workspace, context=_context(request)).data, status=201
+        )
     query = ListWorkspacesSerializer(data=request.query_params)
     query.is_valid(raise_exception=True)
     paginator: BasePagination = WorkspacePagination()
     page = paginator.paginate_queryset(
         selectors.list_workspaces(user, query.validated_data.get("tenant_id")), request
     )
-    return paginator.get_paginated_response(WorkspaceSerializer(page, many=True).data)
+    return paginator.get_paginated_response(
+        WorkspaceSerializer(page, many=True, context=_context(request)).data
+    )
 
 
 def _workspace_detail(request: Request, workspace_id: str) -> Response:
@@ -62,12 +74,31 @@ def _workspace_detail(request: Request, workspace_id: str) -> Response:
         workspace = services.update_workspace(
             user, workspace_id, **serializer.validated_data
         )
-        return Response(WorkspaceSerializer(workspace).data)
+        return Response(WorkspaceSerializer(workspace, context=_context(request)).data)
     return Response(
         WorkspaceSerializer(
-            selectors.get_workspace(user, workspace_id, Permission.WORKSPACE_VIEW)
+            selectors.get_workspace(user, workspace_id, Permission.WORKSPACE_VIEW),
+            context=_context(request),
         ).data
     )
+
+
+def _members(request: Request, workspace_id: str) -> Response:
+    items = workspace_members.list_members(cast(User, request.user), workspace_id)
+    return Response({"items": MemberSerializer(items, many=True).data})
+
+
+def _member(request: Request, workspace_id: str, user_id: str) -> Response:
+    user = cast(User, request.user)
+    if request.method == "DELETE":
+        workspace_members.remove_workspace_member(user, workspace_id, user_id)
+        return Response(status=204)
+    serializer = SetRoleSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    membership = workspace_members.set_workspace_role(
+        user, workspace_id, user_id, serializer.validated_data["role"]
+    )
+    return Response(MemberSerializer(membership).data)
 
 
 # The creating tenant is checked by the service (workspaces.create).
@@ -107,6 +138,25 @@ def workspaces(request: Request) -> Response:
 def workspace_detail(request: Request, workspace_id: str) -> Response:
     """One workspace (GET), rename or describe it (PATCH), or delete it with its run (DELETE)."""
     return _workspace_detail(request, workspace_id)
+
+
+@requires(GET=Permission.WORKSPACE_VIEW)
+@extend_schema(responses=MemberListSerializer)
+@api_view(["GET"])
+def workspace_members_list(request: Request, workspace_id: str) -> Response:
+    """Who has a role in the workspace, owners first. Also for those who manage its members."""
+    return _members(request, workspace_id)
+
+
+@requires(
+    PUT=Permission.WORKSPACE_MEMBERS_MANAGE, DELETE=Permission.WORKSPACE_MEMBERS_MANAGE
+)
+@extend_schema(methods=["PUT"], request=SetRoleSerializer, responses=MemberSerializer)
+@extend_schema(methods=["DELETE"], responses={204: None})
+@api_view(["PUT", "DELETE"])
+def workspace_member(request: Request, workspace_id: str, user_id: str) -> Response:
+    """Give a person a role (PUT) or take them out of the workspace (DELETE)."""
+    return _member(request, workspace_id, user_id)
 
 
 # The old paths, until the UI has moved. #493 removes them.

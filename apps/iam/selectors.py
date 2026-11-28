@@ -132,8 +132,21 @@ def workspace_role(user: Any, workspace_id: UUID | str) -> WorkspaceRole | None:
 
 
 def workspace_permissions(user: Any, workspace_id: UUID | str) -> list[Permission]:
-    """The person's permissions in the workspace, sorted by name."""
+    """The person's permissions in the workspace, sorted by name.
+
+    Empty without a role in it. An admin of the workspace's tenant and a platform admin
+    who have a role also hold ``workspace.members.manage`` (they hold it without one).
+    """
     role = workspace_role(user, workspace_id)
     if role is None:
         return []
-    return sorted(permissions_of(role))
+    held = set(permissions_of(role))
+    if Permission.WORKSPACE_MEMBERS_MANAGE not in held:
+        tenant = tenant_of_workspace(workspace_id)
+        if (
+            tenant is not None
+            and Permission.WORKSPACE_MEMBERS_MANAGE
+            in tenant_permissions(user, tenant.pk)
+        ):
+            held.add(Permission.WORKSPACE_MEMBERS_MANAGE)
+    return sorted(held)

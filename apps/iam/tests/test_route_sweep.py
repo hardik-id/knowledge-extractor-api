@@ -62,6 +62,7 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("workspaces/<str:workspace_id>", "PATCH"): {"name": "Renamed"},
     ("projects", "POST"): {"name": "Swept"},
     ("projects/<str:project_id>", "PATCH"): {"name": "Renamed"},
+    ("workspaces/<str:workspace_id>/members/<str:user_id>", "PUT"): {"role": "viewer"},
     ("runs", "POST"): {"items": []},
     ("runs/<str:run_id>/documents", "PUT"): {"items": []},
     ("runs/<str:run_id>/stages/extract/definition", "PUT"): {"base_version": 1},
@@ -122,7 +123,19 @@ OUTSIDER = "outsider@example.com"
 
 # Routes whose rule is not "one permission on the tenant or the workspace": what
 # every person of PEOPLE gets, spelled out as "allowed", "403" or "404".
-EXPECTED: dict[tuple[str, str], dict[str, str]] = {}
+EXPECTED: dict[tuple[str, str], dict[str, str]] = {
+    # Declared ``workspace.view``; the admins who manage the members read them too.
+    ("workspaces/<str:workspace_id>/members", "GET"): {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "404",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "allowed",
+        "editor": "allowed",
+        "owner": "allowed",
+    },
+}
 
 
 def _walk(patterns: list[Any], prefix: str = "") -> list[tuple[str, Any]]:

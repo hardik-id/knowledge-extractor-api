@@ -54,6 +54,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `unknown_file` | 422 | One of the files is not part of this run. |
 | `last_platform_admin` | 409 | The last platform admin cannot be removed. |
 | `last_tenant_admin` | 409 | A tenant keeps at least one admin. |
+| `platform_admin_by_setting` | 409 | This person is a platform admin through a setting and cannot be removed here. |
 | `last_owner` | 409 | A workspace keeps at least one owner. |
 | `already_a_member` | 409 | This person is already a member. |
 | `not_a_tenant_member` | 422 | This person is not a member of the workspace's tenant. |

@@ -339,3 +339,75 @@ def check_me(value: Any) -> None:
         for key in ("id", "name"):
             string(tenant.get(key), f"me.tenants[{i}].{key}")
         one_of(tenant.get("role"), ("admin", "member"), f"me.tenants[{i}].role")
+
+
+def check_tenant(value: Any, path: str = "tenant") -> None:
+    """A tenant: ``GET /tenants``, ``POST /tenants``, ``PATCH /tenants/{id}``."""
+    o = obj(value, path)
+    for key in ("id", "name", "created_at"):
+        string(o.get(key), f"{path}.{key}")
+    boolean(o.get("is_default"), f"{path}.is_default")
+    nullable(o.get("role"), lambda v: one_of(v, ("admin", "member"), f"{path}.role"))
+    for key in ("member_count", "workspace_count"):
+        if o.get(key) is not None:
+            number(o.get(key), f"{path}.{key}")
+
+
+def check_tenants(value: Any) -> None:
+    o = obj(value, "response")
+    for i, item in enumerate(array(o.get("items"), "items")):
+        check_tenant(item, f"items[{i}]")
+    nullable(o.get("next"), lambda v: string(v, "next"))
+
+
+def check_person(value: Any, path: str) -> None:
+    o = obj(value, path)
+    number(o.get("id"), f"{path}.id")
+    string(o.get("name"), f"{path}.name")
+
+
+def check_tenant_workspace(value: Any, path: str = "workspace") -> None:
+    """A workspace in a tenant's list: no content, only who and when."""
+    o = obj(value, path)
+    for key in ("id", "name", "last_activity", "created_at"):
+        string(o.get(key), f"{path}.{key}")
+    number(o.get("member_count"), f"{path}.member_count")
+    boolean(o.get("no_owner"), f"{path}.no_owner")
+    for i, owner in enumerate(array(o.get("owners"), f"{path}.owners")):
+        check_person(owner, f"{path}.owners[{i}]")
+
+
+def check_tenant_workspaces(value: Any) -> None:
+    o = obj(value, "response")
+    for i, item in enumerate(array(o.get("items"), "items")):
+        check_tenant_workspace(item, f"items[{i}]")
+    nullable(o.get("next"), lambda v: string(v, "next"))
+
+
+def check_platform_admins(value: Any) -> None:
+    o = obj(value, "response")
+    for i, item in enumerate(array(o.get("items"), "items")):
+        p = obj(item, f"items[{i}]")
+        number(p.get("user_id"), f"items[{i}].user_id")
+        string(p.get("name"), f"items[{i}].name")
+        one_of(p.get("source"), ("row", "setting"), f"items[{i}].source")
+    nullable(o.get("next"), lambda v: string(v, "next"))
+
+
+def check_audit_entry(value: Any, path: str = "entry") -> None:
+    o = obj(value, path)
+    for key in ("id", "action", "old_role", "new_role", "created_at"):
+        string(o.get(key), f"{path}.{key}")
+    for key in ("actor", "target"):
+        if o.get(key) is not None:
+            check_person(o.get(key), f"{path}.{key}")
+    for key in ("tenant_id", "workspace_id"):
+        if o.get(key) is not None:
+            string(o.get(key), f"{path}.{key}")
+
+
+def check_audit(value: Any) -> None:
+    o = obj(value, "response")
+    for i, item in enumerate(array(o.get("items"), "items")):
+        check_audit_entry(item, f"items[{i}]")
+    nullable(o.get("next"), lambda v: string(v, "next"))

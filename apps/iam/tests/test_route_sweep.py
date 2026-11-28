@@ -63,6 +63,8 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("projects", "POST"): {"name": "Swept"},
     ("projects/<str:project_id>", "PATCH"): {"name": "Renamed"},
     ("runs", "POST"): {"items": []},
+    ("tenants", "POST"): {"name": "Swept"},
+    ("tenants/<str:tenant_id>", "PATCH"): {"name": "Renamed"},
     ("runs/<str:run_id>/documents", "PUT"): {"items": []},
     ("runs/<str:run_id>/stages/extract/definition", "PUT"): {"base_version": 1},
     ("runs/<str:run_id>/stages/extract/chunking/generate", "POST"): {
@@ -91,6 +93,7 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
 }
 # A query may name an id of the world as ``{tenant_id}``.
 QUERIES: dict[tuple[str, str], str] = {
+    ("audit", "GET"): "?tenant_id={tenant_id}",
     (
         "runs/<str:run_id>/files/<str:file_id>/extraction/records/<str:record_id>",
         "DELETE",
@@ -122,7 +125,19 @@ OUTSIDER = "outsider@example.com"
 
 # Routes whose rule is not "one permission on the tenant or the workspace": what
 # every person of PEOPLE gets, spelled out as "allowed", "403" or "404".
-EXPECTED: dict[tuple[str, str], dict[str, str]] = {}
+EXPECTED: dict[tuple[str, str], dict[str, str]] = {
+    # With the tenant named: whoever manages its members (see ``tenants.list_audit``).
+    ("audit", "GET"): {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "403",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "403",
+        "editor": "403",
+        "owner": "403",
+    },
+}
 
 
 def _walk(patterns: list[Any], prefix: str = "") -> list[tuple[str, Any]]:

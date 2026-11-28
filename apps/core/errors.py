@@ -74,6 +74,10 @@ ERRORS: dict[str, ErrorCode] = {
     "unknown_file": ErrorCode(422, "One of the files is not part of this run."),
     "last_platform_admin": ErrorCode(409, "The last platform admin cannot be removed."),
     "last_tenant_admin": ErrorCode(409, "A tenant keeps at least one admin."),
+    "platform_admin_by_setting": ErrorCode(
+        409,
+        "This person is a platform admin through a setting and cannot be removed here.",
+    ),
     "last_owner": ErrorCode(409, "A workspace keeps at least one owner."),
     "already_a_member": ErrorCode(409, "This person is already a member."),
     "not_a_tenant_member": ErrorCode(

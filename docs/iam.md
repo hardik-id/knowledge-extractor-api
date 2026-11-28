@@ -73,6 +73,12 @@ What each route needs, declared with `@requires` on its view (`apps/iam/routes.p
 | `.../records/{record_id}/values/{value_id}` | PATCH | `workspace.edit` |
 | `/runs/{run_id}/extraction/assistant/messages` | GET | `workspace.view` |
 | `/runs/{run_id}/extraction/assistant/messages` | POST, DELETE | `workspace.edit` |
+| `/tenants` | GET | signed in (a platform admin gets every tenant with counts, anyone else their own) |
+| `/tenants` | POST | `tenants.manage` |
+| `/tenants/{tenant_id}` | PATCH, DELETE | `tenants.manage` |
+| `/tenants/{tenant_id}/workspaces` | GET | `tenant.workspaces.list` |
+| `/platform-admins`, `/platform-admins/{user_id}` | GET, PUT, DELETE | `tenants.manage` |
+| `/audit` | GET | signed in; with `?tenant_id=`, `tenant.members.manage` in that tenant; without, a platform admin (all) or a tenant admin (their tenants) |
 | socket `ws/runs/{run_id}/` | connect | `workspace.view` (otherwise closed with 4404) |
 
 A workspace permission is checked against the person's role in the workspace of the route's run or workspace: no role is 404, a role without the permission 403 `forbidden`. A tenant admin or a platform admin with no role in the workspace gets 404 too (rule 1).
@@ -114,3 +120,12 @@ When `apps.identity` creates a user it calls `services.join_default_tenant` in t
 ## Workspace membership
 
 `WorkspaceMembership` (workspace, person, role; one row per pair) is what makes a workspace visible: `Workspace.objects.visible_to(user)` is the workspaces the person has a row in. A workspace belongs to a tenant (`Workspace.tenant`). Creating one needs `workspaces.create` in the tenant, and the creator gets the `owner` row in the same transaction, recorded as `workspace.role.set`. `apps.iam.selectors.workspace_role(user, workspace_id)` and `workspace_permissions(user, workspace_id)` read it. See `docs/workspaces.md`.
+
+## Tenants, platform admins and the audit list
+
+The services and reads are in `apps/iam/tenants.py`; the views in `apps/iam/api/tenants_views.py`, `platform_views.py` and `audit_views.py`.
+
+- **Tenants.** `GET /tenants` is `{ items, next }` (not paged: `next` is null), by name. A platform admin gets every tenant with `member_count` and `workspace_count`; anyone else gets the tenants they belong to with both counts null. `role` is the person's role in it (null for a platform admin who is not a member). `POST /tenants` and `PATCH /tenants/{id}` take `{ "name" }` (409 `tenant_name_taken`, ignoring case; a tenant keeps the right to change the case of its own name). `DELETE` is 409 `default_tenant` for Default and 409 `tenant_not_empty` while it has workspaces. A new tenant has no admin: a platform admin names one with the members routes. Audit actions: `tenant.create`, `tenant.rename`, `tenant.delete`. An entry of a deleted tenant keeps its place but has no tenant any more, so only the unfiltered list of a platform admin shows it.
+- **A tenant's workspaces.** `GET /tenants/{id}/workspaces`, paged, last activity first: `id`, `name`, `owners` (`id`, `name`), `member_count`, `no_owner`, `last_activity`, `created_at`. Never the description, configuration, documents, records or conversation.
+- **Platform admins.** `GET /platform-admins` lists the active people who have signed in and are admins, with `source`: `row`, or `setting` for a person listed in `IAM_PLATFORM_ADMIN_OIDS`. `PUT /platform-admins/{user_id}` grants (the person must have signed in: 404 `user_not_found`), `DELETE` revokes through `services.revoke_platform_admin` (409 `last_platform_admin`), and 409 `platform_admin_by_setting` for a person the setting names: change the setting instead.
+- **The audit list.** `GET /audit?tenant_id=`, paged, newest first. With a tenant: whoever holds `tenant.members.manage` there (404 `tenant_not_found` if unseen, 403 if seen without it). Without: a platform admin gets everything, a tenant admin the entries of the tenants they administer, anyone else 403. An item has only `id`, `action`, `actor` and `target` (`{ id, name }`, or null once the person's row is gone), `tenant_id`, `workspace_id`, `old_role`, `new_role`, `created_at`: never an `oid`, `tid` or sign-in name. The entry itself keeps `actor_oid` and `target_oid` for the record.

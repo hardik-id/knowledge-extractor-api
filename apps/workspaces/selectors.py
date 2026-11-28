@@ -13,6 +13,7 @@ from django.db.models import (
     IntegerField,
     Max,
     OuterRef,
+    Prefetch,
     QuerySet,
     Subquery,
 )
@@ -103,3 +104,41 @@ def get_workspace(user: User, workspace_id: Any, permission: Permission) -> Work
 def run_has_workspace(run_id: Any) -> bool:
     """Whether a workspace owns this run."""
     return Workspace.objects.filter(run_id=run_id).exists()
+
+
+def list_tenant_workspaces(user: User, tenant_id: Any) -> QuerySet[Workspace]:
+    """A tenant's workspaces for the people who manage it: names, owners, counts, no content.
+
+    Adds ``member_count`` and ``owner_count`` and prefetches the owners
+    (``owner_rows``). The figures of ``_annotated`` that describe content are not
+    serialized by the tenant list; ``activity`` is the only one it shows.
+    """
+    memberships = apps.get_model("iam.WorkspaceMembership").objects.filter(
+        workspace=OuterRef("pk")
+    )
+
+    def count(rows: Any) -> Any:
+        return Coalesce(
+            Subquery(
+                rows.order_by().values("workspace").annotate(n=Count("pk")).values("n"),
+                output_field=IntegerField(),
+            ),
+            0,
+        )
+
+    owners = memberships.filter(role="owner")
+    return (
+        _annotated(Workspace.objects.filter(tenant_id=tenant_id), user)
+        .annotate(member_count=count(memberships), owner_count=count(owners))
+        .prefetch_related(
+            Prefetch(
+                "memberships",
+                queryset=apps.get_model("iam.WorkspaceMembership")
+                .objects.filter(role="owner")
+                .select_related("user")
+                .order_by("created_at"),
+                to_attr="owner_rows",
+            )
+        )
+        .order_by("-activity", "-id")  # type: ignore[misc]
+    )

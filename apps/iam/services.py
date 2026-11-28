@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection, transaction
 
 from apps.core.errors import ApiError
+from apps.realtime import services as realtime
 
 from . import audit
 from .models import PlatformAdmin, Tenant, TenantMembership, WorkspaceMembership
@@ -122,9 +123,11 @@ def remove_tenant_member(
             tenant=tenant,
             old_role=old,
         )
-        roles = WorkspaceMembership.objects.filter(
-            user=target, workspace__tenant=tenant
-        ).order_by("created_at")
+        roles = (
+            WorkspaceMembership.objects.filter(user=target, workspace__tenant=tenant)
+            .select_related("workspace")
+            .order_by("created_at")
+        )
         for row in roles:
             audit.record(
                 actor=actor,
@@ -134,6 +137,7 @@ def remove_tenant_member(
                 workspace_id=row.workspace_id,
                 old_role=row.role,
             )
+            realtime.close_user_run_sockets(row.workspace.run_id, target.pk)
         roles.delete()
 
 

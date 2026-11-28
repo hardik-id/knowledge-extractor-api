@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.core.models import BaseModel
@@ -30,6 +31,13 @@ class Message(BaseModel):
     proposal = models.JSONField(null=True, blank=True)  # {definition, reasons}
     status = models.CharField(max_length=16, choices=Status.choices)
     definition = models.JSONField(null=True, blank=True)  # the draft sent with it
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )  # who wrote a person's message; null on the assistant's and on older ones
     reply_to = models.ForeignKey(
         "self", on_delete=models.CASCADE, null=True, blank=True, related_name="+"
     )

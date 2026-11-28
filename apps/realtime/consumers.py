@@ -14,6 +14,8 @@ from apps.runs import selectors as runs
 
 # The UI stops retrying on this close code: the run is not yours, or it is gone.
 NOT_FOUND = 4404
+# The person's role in the run's workspace was taken away while the socket was open.
+ACCESS_REMOVED = 4403
 
 
 class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
@@ -26,6 +28,7 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
     """
 
     group: str | None = None
+    user_group: str | None = None
 
     async def connect(self) -> None:
         run_id = self.scope["url_route"]["kwargs"]["run_id"]
@@ -39,13 +42,19 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
             await self.close(code=NOT_FOUND)
             return
         self.group = services.run_group(run.pk)
+        self.user_group = services.run_user_group(run.pk, self.scope["user"].pk)
         await self.channel_layer.group_add(self.group, self.channel_name)
+        await self.channel_layer.group_add(self.user_group, self.channel_name)
         telemetry.connection_opened()
         await self.accept()
 
     async def disconnect(self, code: int) -> None:
         if self.group is not None:
             await self.channel_layer.group_discard(self.group, self.channel_name)
+            if self.user_group is not None:
+                await self.channel_layer.group_discard(
+                    self.user_group, self.channel_name
+                )
             self.group = None
             telemetry.connection_closed()
 
@@ -59,6 +68,9 @@ class RunConsumer(AsyncWebsocketConsumer):  # type: ignore[misc]
 
     async def run_gone(self, message: dict[str, Any]) -> None:
         await self.close(code=NOT_FOUND)
+
+    async def run_access_removed(self, message: dict[str, Any]) -> None:
+        await self.close(code=ACCESS_REMOVED)
 
 
 class EchoConsumer(AsyncJsonWebsocketConsumer):  # type: ignore[misc]

@@ -89,6 +89,7 @@ INSTALLED_APPS = [
     "apps.extraction",
     "apps.assistant",
     "apps.projects",
+    "apps.iam",
 ]
 
 # ---------------------------------------------------------------------------

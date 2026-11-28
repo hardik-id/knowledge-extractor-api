@@ -2,7 +2,7 @@
 
 The backlog is GitHub issues. A PBI is one issue and one pull request, and its number is the issue number: PBI-007 is #7, PBI-142 is #142. Tracking issues: #25 for the foundation epic, #157 for the Studio epic.
 
-Agents build the PBIs through the workflows in `.claude/workflows/`. Each workflow delivers a few PBIs that belong together. The same workflows deliver work in the UI repository (`hardik-id/knowledge-extractor`), where the items are that repository's issues.
+Agents build the PBIs through the workflows in `.claude/workflows/`. They are not in git: `make install` builds them, and `make workflows` builds them again. Each workflow delivers a few PBIs that belong together. The same workflows deliver work in the UI repository (`hardik-id/knowledge-extractor`), where the items are that repository's issues.
 
 ## What happens to one PBI
 
@@ -180,12 +180,12 @@ The main checkout stays on `main` and clean. A workflow won't start otherwise.
 
 ## Changing the workflows
 
-The files in `.claude/workflows/` are generated. A workflow script can't import anything, so each one carries a copy of the engine.
+The files in `.claude/workflows/` are generated and ignored by git. A workflow script can't import anything, so each one carries a copy of the engine.
 
 ```sh
 # edit tools/delivery/plan.json (which PBIs, order, tiers, models)
 # or   tools/delivery/engine.js (the stages and what agents are told)
-python3 tools/delivery/build.py
+make workflows                         # python3 tools/delivery/build.py
 node tools/delivery/test_engine.mjs    # runs the workflows with fake agents
 ```
 

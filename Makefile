@@ -1,4 +1,4 @@
-.PHONY: help install lint format typecheck run migrate db worker test check app up logs token ui-env e2e e2e-report chart-check install-ant schema schema-check
+.PHONY: help install lint format typecheck workflows run migrate db worker test check app up logs token ui-env e2e e2e-report chart-check install-ant schema schema-check
 
 .DEFAULT_GOAL := help
 
@@ -11,6 +11,11 @@ help: ## List the available commands
 install: ## Install dependencies and the pre-commit hooks
 	uv sync
 	uv run pre-commit install
+	@$(MAKE) --no-print-directory workflows
+
+workflows: ## Build the delivery workflows into .claude/workflows/
+	@python3 tools/delivery/build.py > /dev/null
+	@echo "Built the delivery workflows in .claude/workflows/"
 
 lint: ## Check lint and formatting (ruff)
 	uv run ruff check .

@@ -39,3 +39,5 @@ require_can_change(run, request.user)
 ## Tests
 
 The test-only app `apps.core.tests` has `SharedNote` (visible to all when shared, changeable by its owner) and views built only from the helpers; see `apps/core/tests/test_permissions.py`.
+
+Who may do what (tenants, workspaces, roles and the permission table): `docs/iam.md`.

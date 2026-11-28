@@ -94,6 +94,11 @@ class AuditEntry(BaseModel):
         Tenant, null=True, on_delete=models.SET_NULL, related_name="+"
     )
     workspace_id = models.UUIDField(null=True)
+    # Who they were, kept when the person's row is gone (docs/iam.md, rule 7).
+    actor_oid = models.UUIDField(null=True)
+    actor_tid = models.UUIDField(null=True)
+    target_oid = models.UUIDField(null=True)
+    target_tid = models.UUIDField(null=True)
     old_role = models.CharField(max_length=32, blank=True, default="", db_default="")
     new_role = models.CharField(max_length=32, blank=True, default="", db_default="")
 

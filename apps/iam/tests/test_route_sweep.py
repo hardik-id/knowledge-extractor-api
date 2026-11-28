@@ -69,6 +69,8 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
         "role": "member",
     },
     ("tenants/<str:tenant_id>/members/<str:user_id>", "PUT"): {"role": "member"},
+    ("tenants", "POST"): {"name": "Swept"},
+    ("tenants/<str:tenant_id>", "PATCH"): {"name": "Renamed"},
     ("runs/<str:run_id>/documents", "PUT"): {"items": []},
     ("runs/<str:run_id>/stages/extract/definition", "PUT"): {"base_version": 1},
     ("runs/<str:run_id>/stages/extract/chunking/generate", "POST"): {
@@ -98,6 +100,7 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
 # A query may name an id of the world as ``{tenant_id}``.
 QUERIES: dict[tuple[str, str], str] = {
     ("users", "GET"): "?preferred_username=outsider@example.com",
+    ("audit", "GET"): "?tenant_id={tenant_id}",
     (
         "runs/<str:run_id>/files/<str:file_id>/extraction/records/<str:record_id>",
         "DELETE",
@@ -151,6 +154,17 @@ EXPECTED: dict[tuple[str, str], dict[str, str]] = {
         "viewer": "allowed",
         "editor": "allowed",
         "owner": "allowed",
+    },
+    # With the tenant named: whoever manages its members (see ``tenants.list_audit``).
+    ("audit", "GET"): {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "403",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "403",
+        "editor": "403",
+        "owner": "403",
     },
 }
 

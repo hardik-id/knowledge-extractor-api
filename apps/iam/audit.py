@@ -24,6 +24,7 @@ def record(
     workspace_id: UUID | None = None,
     old_role: str = "",
     new_role: str = "",
+    detail: str = "",
 ) -> AuditEntry:
     """Insert one entry and log ``iam.changed`` with ids and roles only, never names.
 
@@ -36,7 +37,9 @@ def record(
         action=action,
         target_user=target_user,
         tenant=tenant,
+        tenant_ref=tenant.pk if tenant else None,
         workspace_id=workspace_id,
+        detail=detail[:300],
         actor_oid=getattr(actor, "oid", None),
         actor_tid=getattr(actor, "tid", None),
         target_oid=getattr(target_user, "oid", None),

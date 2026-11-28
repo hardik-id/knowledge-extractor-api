@@ -3,6 +3,52 @@ info:
   title: Knowledge Extractor API
   version: v1
 paths:
+  /audit:
+    get:
+      operationId: audit_retrieve
+      description: Role changes, newest first. A platform admin sees all; a tenant
+        admin their tenant's.
+      parameters:
+      - in: query
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - audit
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /definition-templates:
     get:
       operationId: definition_templates_list
@@ -191,6 +237,133 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /platform-admins:
+    get:
+      operationId: platform_admins_retrieve
+      description: The platform admins who have signed in. ``source`` is ``setting``
+        for those the setting names.
+      tags:
+      - platform-admins
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAdminList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /platform-admins/{user_id}:
+    put:
+      operationId: platform_admins_update
+      description: Make a person who has signed in a platform admin (PUT), or take
+        it away (DELETE).
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - platform-admins
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAdmin'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    delete:
+      operationId: platform_admins_destroy
+      description: Make a person who has signed in a platform admin (PUT), or take
+        it away (DELETE).
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - platform-admins
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
         '401':
           content:
             application/json:
@@ -1608,6 +1781,181 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /tenants:
+    get:
+      operationId: tenants_retrieve
+      description: The tenants the person belongs to; a platform admin gets all, with
+        counts (GET). Make one (POST).
+      tags:
+      - tenants
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    post:
+      operationId: tenants_create
+      description: The tenants the person belongs to; a platform admin gets all, with
+        counts (GET). Make one (POST).
+      tags:
+      - tenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantNameRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /tenants/{tenant_id}:
+    patch:
+      operationId: tenants_partial_update
+      description: Rename a tenant (PATCH), or delete one with no workspaces (DELETE).
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTenantNameRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    delete:
+      operationId: tenants_destroy
+      description: Rename a tenant (PATCH), or delete one with no workspaces (DELETE).
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /tenants/{tenant_id}/members:
     get:
       operationId: tenants_members_retrieve
@@ -1789,6 +2137,52 @@ paths:
       responses:
         '204':
           description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /tenants/{tenant_id}/workspaces:
+    get:
+      operationId: tenants_workspaces_retrieve
+      description: 'Every workspace of the tenant: name, owners, member count, last
+        activity. No content.'
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantWorkspaceList'
+          description: ''
         '401':
           content:
             application/json:
@@ -2326,6 +2720,71 @@ components:
           minLength: 1
       required:
       - role
+    AuditEntry:
+      type: object
+      description: 'Ids, display names, roles, actions and times: nothing else.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        action:
+          type: string
+          maxLength: 64
+        actor:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        target:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
+        workspace_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        old_role:
+          type: string
+          maxLength: 32
+        new_role:
+          type: string
+          maxLength: 32
+        detail:
+          type: string
+          maxLength: 300
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - action
+      - actor
+      - created_at
+      - id
+      - target
+      - tenant_id
+      - workspace_id
+    AuditList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntry'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
     BackendStatus:
       type: object
       properties:
@@ -3002,6 +3461,13 @@ components:
           minimum: 0
         review:
           $ref: '#/components/schemas/ReviewEnum'
+    PatchedTenantNameRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
     PatchedUpdateRecordRequest:
       type: object
       description: 'The body of ``PATCH .../records/{record_id}``: only the keys sent
@@ -3027,6 +3493,32 @@ components:
           maxLength: 120
         description:
           type: string
+    PlatformAdmin:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        name:
+          type: string
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+      required:
+      - name
+      - source
+      - user_id
+    PlatformAdminList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformAdmin'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
     Proposal:
       type: object
       description: A complete definition (no ``version``) and why each thing changed.
@@ -3242,6 +3734,14 @@ components:
         * `owner` - owner
         * `editor` - editor
         * `viewer` - viewer
+    SourceEnum:
+      enum:
+      - row
+      - setting
+      type: string
+      description: |-
+        * `row` - row
+        * `setting` - setting
     Span:
       type: object
       properties:
@@ -3353,6 +3853,51 @@ components:
       required:
       - items
       - next
+    Tenant:
+      type: object
+      description: A tenant. The counts are the platform admin's; anyone else gets
+        null.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        is_default:
+          type: boolean
+        role:
+          type: string
+          nullable: true
+        member_count:
+          type: integer
+          nullable: true
+        workspace_count:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - created_at
+      - id
+      - is_default
+      - member_count
+      - name
+      - role
+      - workspace_count
+    TenantList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
     TenantMember:
       type: object
       properties:
@@ -3378,6 +3923,68 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TenantMember'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
+    TenantNameRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+      - name
+    TenantWorkspace:
+      type: object
+      description: 'A workspace as a tenant''s admin sees it: who and when, never
+        its content.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        owners:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        member_count:
+          type: integer
+          readOnly: true
+        no_owner:
+          type: boolean
+          readOnly: true
+        last_activity:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - last_activity
+      - member_count
+      - name
+      - no_owner
+      - owners
+    TenantWorkspaceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantWorkspace'
         next:
           type: string
           nullable: true

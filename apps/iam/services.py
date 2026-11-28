@@ -113,7 +113,9 @@ def revoke_platform_admin(actor: Any | None, user_id: int) -> None:
             return
         listed = settings.IAM_PLATFORM_ADMIN_OIDS
         remaining = set(
-            PlatformAdmin.objects.exclude(pk=row.pk).values_list("user_id", flat=True)
+            PlatformAdmin.objects.exclude(pk=row.pk)
+            .filter(user__is_active=True)
+            .values_list("user_id", flat=True)
         ) | set(
             get_user_model()
             .objects.filter(oid__in=listed, is_active=True)
@@ -186,6 +188,7 @@ def _keep_an_admin(actor: Any | None, tenant: Tenant, leaving: Any) -> None:
     others = (
         TenantMembership.objects.filter(tenant=tenant, role=TenantRole.ADMIN)
         .exclude(user=leaving)
+        .filter(user__is_active=True)
         .exists()
     )
     if not others:

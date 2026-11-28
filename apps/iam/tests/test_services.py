@@ -340,3 +340,26 @@ def test_the_same_person_added_twice_together_is_one_membership() -> None:
     assert results == [None, None]
     assert TenantMembership.objects.filter(tenant=tenant, user=person).count() == 1
     assert AuditEntry.objects.count() == 1
+
+
+def test_a_deactivated_tenant_admin_does_not_count_as_another_admin() -> None:
+    tenant = TenantFactory()
+    admin, other = tenant_admin(tenant), tenant_admin(tenant)
+    other.is_active = False
+    other.save()
+    assert (
+        code_of(lambda: services.set_tenant_role(admin, tenant.pk, admin.pk, "member"))
+        == "last_tenant_admin"
+    )
+    assert role_of(tenant, admin) == "admin"
+
+
+def test_a_deactivated_platform_admin_does_not_count_for_the_last_rule() -> None:
+    boss, gone = platform_admin(), platform_admin()
+    gone.is_active = False
+    gone.save()
+    assert (
+        code_of(lambda: services.revoke_platform_admin(boss, boss.pk))
+        == "last_platform_admin"
+    )
+    assert is_platform_admin(boss)

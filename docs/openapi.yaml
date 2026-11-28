@@ -1608,6 +1608,267 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: The request is not valid.
+  /tenants/{tenant_id}/members:
+    get:
+      operationId: tenants_members_retrieve
+      description: A tenant's members (any member may list), or add a person who has
+        signed in.
+      parameters:
+      - in: query
+        name: search
+        schema:
+          type: string
+          maxLength: 255
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMemberList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    post:
+      operationId: tenants_members_create
+      description: A tenant's members (any member may list), or add a person who has
+        signed in.
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /tenants/{tenant_id}/members/{user_id}:
+    put:
+      operationId: tenants_members_update
+      description: Change a member's role, or take them out of the tenant and its
+        workspaces.
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeRoleRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+    delete:
+      operationId: tenants_members_destroy
+      description: Change a member's role, or take them out of the tenant and its
+        workspaces.
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - tenants
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
+  /users:
+    get:
+      operationId: users_retrieve
+      description: |-
+        Find people. A platform admin lists everyone who has signed in (``?search=``).
+
+        A tenant admin may only ask for one exact sign-in name (``?preferred_username=``):
+        the answer is that person or nothing, never a part of a name or a list.
+        Anyone else is refused.
+      parameters:
+      - in: query
+        name: preferred_username
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 255
+      - in: query
+        name: search
+        schema:
+          type: string
+          maxLength: 255
+      tags:
+      - users
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserList'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not signed in, or the token is refused.
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Signed in, but not allowed to do this.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not found, or not visible to the signed-in person.
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The request is not valid.
   /workspaces:
     get:
       operationId: workspaces_list
@@ -1878,6 +2139,23 @@ paths:
           description: The request is not valid.
 components:
   schemas:
+    AddMemberRequest:
+      type: object
+      description: A sign-in name; a platform admin may give ``user_id`` instead.
+      properties:
+        preferred_username:
+          type: string
+          minLength: 1
+          maxLength: 255
+        user_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        role:
+          type: string
+          minLength: 1
+      required:
+      - role
     AddRecordRequest:
       type: object
       description: The body of ``POST .../records``.
@@ -1912,6 +2190,14 @@ components:
       required:
       - environment
       - parts
+    ChangeRoleRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          minLength: 1
+      required:
+      - role
     Chunking:
       type: object
       description: |-
@@ -2437,6 +2723,24 @@ components:
       - id
       - name
       - role
+    Member:
+      type: object
+      properties:
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        role:
+          type: string
+          readOnly: true
+        added_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - added_at
+      - role
+      - user
     Message:
       type: object
       properties:
@@ -2880,6 +3184,48 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Template'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
+    TenantMemberList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        next:
+          type: string
+          nullable: true
+      required:
+      - items
+      - next
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        preferred_username:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
+      - preferred_username
+    UserList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
         next:
           type: string
           nullable: true

@@ -53,6 +53,10 @@ What each route needs, declared with `@requires` on its view (`apps/iam/routes.p
 | `/documents`, `/documents/{document_id}` | GET | signed in |
 | `/definition-templates` | GET | signed in |
 | `/ws-ticket` | POST | signed in |
+| `/tenants/{tenant_id}/members` | GET | `tenant.members.list` |
+| `/tenants/{tenant_id}/members` | POST | `tenant.members.manage` |
+| `/tenants/{tenant_id}/members/{user_id}` | PUT, DELETE | `tenant.members.manage` |
+| `/users` | GET | signed in (a platform admin lists and searches everyone; a tenant admin asks for one exact `?preferred_username=`; anyone else 403; checked by the view) |
 | `/workspaces` | GET, POST | signed in (POST: `workspaces.create` in the tenant, checked by the service) |
 | `/workspaces/{workspace_id}` | GET | `workspace.view` |
 | `/workspaces/{workspace_id}` | PATCH, DELETE | `workspace.manage` |
@@ -94,6 +98,8 @@ Point at the models by string (`"iam.Tenant"`); call `apps.iam.selectors` (`is_p
 - Tenant changes need `tenant.members.manage`: a tenant the actor may not see is 404 `tenant_not_found`, one they see but may not change is 403 `forbidden`. Platform admin changes need a platform admin (403 otherwise).
 - 409 `last_platform_admin`: the last platform admin (a row, or a signed-in person whose `oid` is listed) cannot be revoked. 409 `last_tenant_admin`: a tenant admin cannot leave or step down when no other admin stays, unless a platform admin (or an operator) acts.
 - A person who never signed in is 404 `user_not_found`; so is removing someone who is not a member.
+- Adding a non-member by id (`set_tenant_role`) is for a platform admin or an operator only: ids are small numbers, so a tenant admin could count through them. For a tenant admin a non-member is `user_not_found`, as for an id nobody has. A tenant admin adds through `add_tenant_member` with the exact sign-in name (case does not matter; no match, or two people with the name, is `user_not_found`; a member already is 409 `already_a_member`). `change_member_role` is for a member only.
+- `remove_tenant_member` also removes the person's `WorkspaceMembership` rows in the tenant's workspaces, in the same transaction, with one `workspace.member.remove` entry each. A workspace may be left without an owner; an admin gives it one.
 - Races: tenant changes lock the tenant row, platform admin changes take one advisory lock, before the rule counts anything.
 - Audit actions: `tenant.role.set` (also the first sign-in, with no actor), `tenant.member.remove`, `platform_admin.grant`, `platform_admin.revoke`.
 
@@ -114,3 +120,9 @@ When `apps.identity` creates a user it calls `services.join_default_tenant` in t
 ## Workspace membership
 
 `WorkspaceMembership` (workspace, person, role; one row per pair) is what makes a workspace visible: `Workspace.objects.visible_to(user)` is the workspaces the person has a row in. A workspace belongs to a tenant (`Workspace.tenant`). Creating one needs `workspaces.create` in the tenant, and the creator gets the `owner` row in the same transaction, recorded as `workspace.role.set`. `apps.iam.selectors.workspace_role(user, workspace_id)` and `workspace_permissions(user, workspace_id)` read it. See `docs/workspaces.md`.
+
+## Tenant members and finding people
+
+`GET /tenants/{id}/members` (`?search=` on name or sign-in name, paged) answers `{ "items": [{ "user": { "id", "name", "preferred_username" }, "role", "added_at" }], "next" }` to any member, admin or platform admin of the tenant. `POST` adds a person by `{ "preferred_username", "role" }`; a platform admin may give `{ "user_id", "role" }` instead (a tenant admin who does gets 403). `PUT /tenants/{id}/members/{user_id}` with `{ "role" }` changes a role and `DELETE` removes the person. For PUT and DELETE every id that is not a member (a person of another tenant, an id nobody has, text) answers the same 404 `user_not_found`, so ids cannot be walked.
+
+`GET /users`: a platform admin gets everyone who has signed in (`?search=`, paged). A tenant admin gets only `?preferred_username=<exact>`: that one person, or an empty list when nobody or more than one person has the name; a part of a name finds nothing. Anyone else gets 403. A person who is deactivated is not found.

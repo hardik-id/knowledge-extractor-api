@@ -263,29 +263,24 @@ def test_two_workspaces_from_one_template_share_nothing(client: Any) -> None:
     assert all(t["definition"]["prompt"] != "Changed" for t in templates)
 
 
-# --- the old paths, until the UI has moved --------------------------------------------
+# --- the old paths are gone -----------------------------------------------------------
 
 
-def test_the_old_paths_answer_through_the_same_views(client: Any) -> None:
-    made = client.post("/api/v1/projects", {"name": "Old"}, format="json")
-    assert made.status_code == 201
-    one = made.json()
-    assert client.get(f"{URL}/{one['id']}").json() == one
-    assert [w["id"] for w in client.get("/api/v1/projects").json()["items"]] == [
-        one["id"]
-    ]
-    old = f"/api/v1/projects/{one['id']}"
-    assert client.get(old).json() == one
-    assert client.patch(old, {"name": "New"}, format="json").json()["name"] == "New"
-    assert client.delete(old).status_code == 204
-    assert client.get(f"{URL}/{one['id']}").status_code == 404
+def test_the_projects_paths_answer_404(client: Any) -> None:
+    for path in ("/api/v1/projects", "/api/v1/projects/abc"):
+        for method in (client.get, client.delete):
+            assert method(path).status_code == 404
+    gone = client.get("/api/v1/projects")
+    assert gone["Content-Type"].startswith("application/json")
+    assert gone.json() == {"code": "not_found", "message": "Not found."}
+    assert (
+        client.post("/api/v1/projects", {"name": "Old"}, format="json").status_code
+        == 404
+    )
 
 
-def test_the_old_paths_are_deprecated_in_the_schema(client: Any) -> None:
+def test_the_schema_has_no_projects_paths(client: Any) -> None:
     paths = client.get(
         "/api/schema", HTTP_ACCEPT="application/vnd.oai.openapi+json"
     ).json()["paths"]
-    for path in ("/projects", "/projects/{project_id}"):
-        assert all(op["deprecated"] for op in paths[path].values())
-    for path in ("/workspaces", "/workspaces/{workspace_id}"):
-        assert not any(op.get("deprecated") for op in paths[path].values())
+    assert not [p for p in paths if p.startswith("/projects")]

@@ -60,8 +60,6 @@ NOT_CALLED: dict[str, str] = {}
 BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("workspaces", "POST"): {"name": "Swept"},
     ("workspaces/<str:workspace_id>", "PATCH"): {"name": "Renamed"},
-    ("projects", "POST"): {"name": "Swept"},
-    ("projects/<str:project_id>", "PATCH"): {"name": "Renamed"},
     ("workspaces/<str:workspace_id>/members/<str:user_id>", "PUT"): {"role": "viewer"},
     ("runs", "POST"): {"items": []},
     ("tenants/<str:tenant_id>/members", "POST"): {
@@ -112,7 +110,7 @@ HIDDEN = {"run_not_found", "workspace_not_found", "tenant_not_found"}
 
 # Signed-in routes that need a tenant role with ``workspaces.create``: a person in
 # no tenant gets 403 on them (and nothing else is refused to that person).
-NEEDS_A_TENANT = {("workspaces", "POST"), ("projects", "POST"), ("runs", "POST")}
+NEEDS_A_TENANT = {("workspaces", "POST"), ("runs", "POST")}
 
 # The people of the world, with the roles each holds towards its tenant and its
 # workspace. The order is the order of the calls.
@@ -268,7 +266,6 @@ def make_world() -> World:
         "tenant_id": str(workspace.tenant_id),
         "user_id": str(acted_on.pk),
         "workspace_id": str(workspace.pk),
-        "project_id": str(workspace.pk),
         "run_id": str(run.pk),
         "file_id": str(file.pk),
         "record_id": str(record.pk),
@@ -467,8 +464,6 @@ def test_the_viewer_and_the_editor_are_refused_where_the_epic_says() -> None:
     assert editor_may_not == {
         ("workspaces/<str:workspace_id>", "PATCH"),
         ("workspaces/<str:workspace_id>", "DELETE"),
-        ("projects/<str:project_id>", "PATCH"),
-        ("projects/<str:project_id>", "DELETE"),
         ("runs/<str:run_id>", "DELETE"),
     }
     assert needs[("status/test", "POST")] == Permission.STATUS_TEST

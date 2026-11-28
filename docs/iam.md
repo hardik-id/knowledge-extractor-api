@@ -42,7 +42,7 @@ A tenant is a team or a customer inside the application. It is not the Entra dir
 
 ## The routes
 
-What each route needs, declared with `@requires` on its view (`apps/iam/routes.py`); the sweep `apps/iam/tests/test_route_sweep.py` fails when a route declares nothing or answers otherwise. Paths are under `/api/v1`. The deprecated `/projects` paths (until #493) need the same as `/workspaces`.
+What each route needs, declared with `@requires` on its view (`apps/iam/routes.py`); the sweep `apps/iam/tests/test_route_sweep.py` fails when a route declares nothing or answers otherwise. Paths are under `/api/v1`.
 
 | Route | Method | Needs |
 | --- | --- | --- |

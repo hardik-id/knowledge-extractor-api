@@ -14,6 +14,7 @@ from django.db.models import Case, IntegerField, QuerySet, Value, When
 from django.db.models.functions import Lower
 
 from apps.core.errors import ApiError
+from apps.realtime import services as realtime
 
 from . import audit
 from .models import Tenant, TenantMembership, WorkspaceMembership
@@ -120,6 +121,7 @@ def remove_workspace_member(actor: Any, workspace_id: Any, user_id: Any) -> None
             workspace_id=workspace.pk,
             old_role=old,
         )
+        realtime.close_user_run_sockets(workspace.run_id, target.pk)
 
 
 def _model() -> Any:

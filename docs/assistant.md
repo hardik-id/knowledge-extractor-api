@@ -18,6 +18,8 @@ A run has one conversation. Each message is stored (`apps/assistant/models.py`, 
 }
 ```
 
+`author` is `{ "id", "name" }` (the person who wrote it, `id` as a string) on a person's message, and `null` on the assistant's and on a message stored before authors were kept (`Message.author`, nullable; set to the person by `send_message`; `null` if that person is deleted).
+
 `role` is `user` or `assistant`. `status` is `streaming` while a reply is being written, then `done`; a person's message is `done` at once. `proposal` is `null` when there is none, and always `null` on a person's message. The proposal's `definition` has the shape of a saved definition without `version`, as `Draft.model_dump()` gives it.
 
 | Call | Body | Answer |

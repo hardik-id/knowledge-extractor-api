@@ -102,7 +102,19 @@ def test_post_answers_the_users_message_and_the_reply_arrives(
         response = post(client, run, f"  {ADR_ASK}  ")
         assert response.status_code == 201
         mine = response.json()
-        assert set(mine) == {"id", "role", "text", "proposal", "status", "created_at"}
+        assert set(mine) == {
+            "id",
+            "role",
+            "text",
+            "proposal",
+            "status",
+            "author",
+            "created_at",
+        }
+        assert mine["author"] == {
+            "id": str(run.owner.pk),
+            "name": run.owner.name,
+        }
         assert mine["role"] == "user"
         assert mine["text"] == ADR_ASK
         assert mine["proposal"] is None
@@ -474,3 +486,23 @@ def test_an_old_stored_proposal_without_chunking_is_still_served(
         "size": None,
         "custom": None,
     }
+
+
+def test_messages_carry_their_author_and_an_old_one_without_still_serializes() -> None:
+    from apps.assistant.models import Message, Role, Status
+    from apps.identity.tests.factories import UserFactory
+    from apps.runs.tests.factories import RunFactory
+
+    run = RunFactory()
+    person = UserFactory(name="Ada Lovelace")
+    Message.objects.create(
+        run=run, role=Role.USER, text="hi", status=Status.DONE, author=person
+    )
+    Message.objects.create(run=run, role=Role.USER, text="old", status=Status.DONE)
+    Message.objects.create(run=run, role=Role.ASSISTANT, status=Status.DONE)
+    from apps.assistant.api.serializers import MessageSerializer
+
+    data = [MessageSerializer(m).data for m in Message.objects.filter(run=run)]
+    assert data[0]["author"] == {"id": str(person.pk), "name": "Ada Lovelace"}
+    assert data[1]["author"] is None
+    assert data[2]["author"] is None

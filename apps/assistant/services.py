@@ -53,6 +53,7 @@ def send_message(user: User, run_id: Any, *, text: str, definition: Any) -> Mess
             asked = Message.objects.create(
                 run_id=run.pk,
                 role=Role.USER,
+                author=user,
                 text=text,
                 status=Status.DONE,
                 definition=draft.model_dump(),

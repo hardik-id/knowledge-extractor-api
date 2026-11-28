@@ -27,12 +27,18 @@ class ProposalSerializer(serializers.Serializer):  # type: ignore[type-arg]
         return super().to_representation(instance)
 
 
+class AuthorSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    id = serializers.CharField()
+    name = serializers.CharField()
+
+
 class MessageSerializer(serializers.ModelSerializer[Message]):
     proposal = ProposalSerializer(allow_null=True, read_only=True)
+    author = AuthorSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Message
-        fields = ["id", "role", "text", "proposal", "status", "created_at"]
+        fields = ["id", "role", "text", "proposal", "status", "author", "created_at"]
 
 
 class MessageListSerializer(serializers.Serializer):  # type: ignore[type-arg]

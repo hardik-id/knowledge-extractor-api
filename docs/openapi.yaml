@@ -2557,6 +2557,16 @@ components:
       required:
       - items
       - next
+    Author:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+      - id
+      - name
     BackendStatus:
       type: object
       properties:
@@ -3136,11 +3146,17 @@ components:
           nullable: true
         status:
           $ref: '#/components/schemas/StatusEnum'
+        author:
+          allOf:
+          - $ref: '#/components/schemas/Author'
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
           readOnly: true
       required:
+      - author
       - created_at
       - id
       - proposal

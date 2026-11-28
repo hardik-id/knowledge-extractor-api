@@ -223,7 +223,14 @@ def check_assistant_message(value: Any, path: str = "message") -> None:
     string(o.get("text"), f"{path}.text")
     nullable(o.get("proposal"), lambda v: check_proposal(v, f"{path}.proposal"))
     one_of(o.get("status"), MESSAGE_STATUSES, f"{path}.status")
+    nullable(o.get("author"), lambda v: _author(v, f"{path}.author"))
     string(o.get("created_at"), f"{path}.created_at")
+
+
+def _author(value: Any, path: str) -> None:
+    o = obj(value, path)
+    string(o.get("id"), f"{path}.id")
+    string(o.get("name"), f"{path}.name")
 
 
 def check_assistant_messages(value: Any) -> None:

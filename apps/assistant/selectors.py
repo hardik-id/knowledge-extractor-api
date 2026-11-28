@@ -26,7 +26,7 @@ def list_messages(user: User, run_id: Any) -> list[Message]:
     """The conversation of a run ``user`` may view, oldest first. A run they do not
     see is a 404."""
     run = runs.get_run(user, run_id, Permission.WORKSPACE_VIEW)
-    return list(Message.objects.filter(run_id=run.pk))
+    return list(Message.objects.filter(run_id=run.pk).select_related("author"))
 
 
 class StoredRunView:

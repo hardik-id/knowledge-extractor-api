@@ -69,6 +69,11 @@ def run_group(run_id: Any) -> str:
     return f"run.{str(run_id).lower()}"
 
 
+def run_user_group(run_id: Any, user_id: Any) -> str:
+    """The channel-layer group of one person's sockets on a run."""
+    return f"{run_group(run_id)}.user.{user_id}"
+
+
 def publish_run_event(run_id: Any, event: dict[str, Any]) -> None:
     """Send ``event`` to everyone who follows the run, once the transaction commits.
 
@@ -89,28 +94,39 @@ def close_run_sockets(run_id: Any) -> None:
     _on_commit(run_id, {"type": "run.gone"})
 
 
-def _on_commit(run_id: Any, message: dict[str, Any]) -> None:
+def close_user_run_sockets(run_id: Any, user_id: Any) -> None:
+    """Close one person's sockets on the run with 4403, once the transaction commits.
+
+    For when their access is taken away. Never raises.
+    """
+    _on_commit(run_id, {"type": "run.access_removed"}, user_id)
+
+
+def _on_commit(run_id: Any, message: dict[str, Any], user_id: Any = None) -> None:
     try:
-        transaction.on_commit(lambda: _send(run_id, message))
+        transaction.on_commit(lambda: _send(run_id, message, user_id))
     except Exception:
         log.exception("run_event_not_sent", run_id=str(run_id), kind=_kind(message))
 
 
-def _send(run_id: Any, message: dict[str, Any]) -> None:
+def _send(run_id: Any, message: dict[str, Any], user_id: Any = None) -> None:
     try:
-        async_to_sync(_asend)(run_id, message)
+        async_to_sync(_asend)(run_id, message, user_id)
     except Exception:
         # _asend logs its own failures; this is async_to_sync itself failing.
         # Run at commit time, an exception here would fail the caller's commit.
         log.exception("run_event_not_sent", run_id=str(run_id), kind=_kind(message))
 
 
-async def _asend(run_id: Any, message: dict[str, Any]) -> None:
+async def _asend(run_id: Any, message: dict[str, Any], user_id: Any = None) -> None:
     try:
         layer = get_channel_layer()
         if layer is None:
             raise RuntimeError("no channel layer is configured")
-        await layer.group_send(run_group(run_id), message)
+        group = (
+            run_group(run_id) if user_id is None else run_user_group(run_id, user_id)
+        )
+        await layer.group_send(group, message)
         telemetry.event_published(_kind(message))
     except Exception:
         log.exception("run_event_not_sent", run_id=str(run_id), kind=_kind(message))

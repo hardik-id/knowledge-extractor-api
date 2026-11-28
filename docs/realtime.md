@@ -63,9 +63,12 @@ Deleting a run (`DELETE /api/v1/runs/{run_id}`) closes its sockets with 4404, on
 | Code | Meaning | The UI |
 | --- | --- | --- |
 | 4401 | No ticket, or an unknown, used or expired one | asks for a new ticket and tries again |
+| 4403 | The person's role in the run's workspace was taken away (removed from the workspace, or from its tenant) while the socket was open | stops; a network drop is a different code, and a new ticket no longer opens the run (4404) |
 | 4404 | The run is not yours, does not exist, or was deleted | stops |
 
-The UI also stops on 4403 (not used by this API so far) and retries on any other code.
+The UI retries on any other code. A role lowered to viewer keeps the socket: a viewer still has `workspace.view`.
+
+Every person with a role in the workspace may open the run socket, and every event of the run reaches every connected member. Each socket also joins a group of its own person on the run (`run.<run_id>.user.<user_id>`), so access can be taken away from one person without touching the others.
 
 ### Events
 
@@ -94,6 +97,7 @@ await realtime.apublish_run_event(run_id, {"type": "assistant.done", ...})  # as
 - **The async twin** sends at once: async code holds no transaction of its own.
 - **Never raises.** If the channel layer is down or missing, the failure is logged (`run_event_not_sent`, with `run_id` and `kind`, the event type) and the caller carries on. The request or the job does not fail because nobody could be told.
 - The event must be plain JSON data (dicts, lists, strings, numbers, booleans, null): it goes through Redis and then into one text frame.
+- `close_user_run_sockets(run_id, user_id)` closes one person's sockets on the run with 4403, after the commit. `iam.workspace_members.remove_workspace_member` and `iam.services.remove_tenant_member` (once per workspace the person loses) call it.
 - `close_run_sockets(run_id)` closes the run's sockets with 4404 the same way; `runs.services.delete_run` calls it.
 
 ## Adding a socket route

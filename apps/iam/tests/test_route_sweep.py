@@ -62,6 +62,7 @@ BODIES: dict[tuple[str, str], dict[str, Any]] = {
     ("workspaces/<str:workspace_id>", "PATCH"): {"name": "Renamed"},
     ("projects", "POST"): {"name": "Swept"},
     ("projects/<str:project_id>", "PATCH"): {"name": "Renamed"},
+    ("workspaces/<str:workspace_id>/members/<str:user_id>", "PUT"): {"role": "viewer"},
     ("runs", "POST"): {"items": []},
     ("tenants/<str:tenant_id>/members", "POST"): {
         "preferred_username": "outsider@example.com",  # OUTSIDER, below
@@ -139,6 +140,17 @@ EXPECTED: dict[tuple[str, str], dict[str, str]] = {
         "viewer": "403",
         "editor": "403",
         "owner": "403",
+    },
+    # Declared ``workspace.view``; the admins who manage the members read them too.
+    ("workspaces/<str:workspace_id>/members", "GET"): {
+        "outsider": "404",
+        "no_tenant": "404",
+        "stranger": "404",
+        "tenant_admin": "allowed",
+        "platform_admin": "allowed",
+        "viewer": "allowed",
+        "editor": "allowed",
+        "owner": "allowed",
     },
 }
 

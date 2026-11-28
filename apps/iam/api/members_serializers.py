@@ -15,7 +15,7 @@ def _check_role(value: str) -> None:
         raise serializers.ValidationError(f"Use one of: {', '.join(ROLES)}.")
 
 
-class MemberSerializer(serializers.ModelSerializer[TenantMembership]):
+class TenantMemberSerializer(serializers.ModelSerializer[TenantMembership]):
     user = UserSerializer(read_only=True)
     role = serializers.CharField(read_only=True)
     added_at = serializers.DateTimeField(source="created_at", read_only=True)
@@ -26,11 +26,11 @@ class MemberSerializer(serializers.ModelSerializer[TenantMembership]):
         read_only_fields = fields
 
 
-class MemberListQuerySerializer(serializers.Serializer[Any]):
+class TenantMemberListQuerySerializer(serializers.Serializer[Any]):
     search = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
 
-class AddMemberSerializer(serializers.Serializer[Any]):
+class AddTenantMemberSerializer(serializers.Serializer[Any]):
     """A sign-in name; a platform admin may give ``user_id`` instead."""
 
     preferred_username = serializers.CharField(required=False, max_length=255)
@@ -45,5 +45,5 @@ class AddMemberSerializer(serializers.Serializer[Any]):
         return attrs
 
 
-class ChangeRoleSerializer(serializers.Serializer[Any]):
+class ChangeTenantRoleSerializer(serializers.Serializer[Any]):
     role = serializers.CharField(validators=[_check_role])

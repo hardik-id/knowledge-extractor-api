@@ -1,8 +1,9 @@
-from typing import Any
+from typing import Any, cast
 
 from rest_framework import serializers
 
-from apps.iam.roles import WorkspaceRole, permissions_of
+from apps.iam.roles import Permission, WorkspaceRole, permissions_of
+from apps.iam.selectors import tenant_permissions
 from apps.workspaces.models import Workspace
 
 
@@ -20,7 +21,26 @@ class WorkspaceSerializer(serializers.ModelSerializer[Workspace]):
     def get_permissions(self, obj: Workspace) -> list[str]:
         """The person's permission names in this workspace, sorted."""
         role = getattr(obj, "role", None)
-        return sorted(permissions_of(WorkspaceRole(role))) if role else []
+        if not role:
+            return []
+        held = set(permissions_of(WorkspaceRole(role)))
+        if self._manages_members(obj):
+            held.add(Permission.WORKSPACE_MEMBERS_MANAGE)
+        return sorted(held)
+
+    def _manages_members(self, obj: Workspace) -> bool:
+        """An admin of the tenant or a platform admin: asked once per tenant per request."""
+        request = self.context.get("request")
+        if request is None:
+            return False
+        context = cast(dict[str, Any], self.context)
+        asked: dict[Any, bool] = context.setdefault("members_manage", {})
+        if obj.tenant_id not in asked:
+            asked[obj.tenant_id] = (
+                Permission.WORKSPACE_MEMBERS_MANAGE
+                in tenant_permissions(request.user, obj.tenant_id)
+            )
+        return asked[obj.tenant_id]
 
     class Meta:
         model = Workspace
@@ -56,3 +76,25 @@ class UpdateWorkspaceSerializer(serializers.Serializer):  # type: ignore[type-ar
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         return attrs
+
+
+class MemberUserSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    preferred_username = serializers.CharField(read_only=True)
+
+
+class WorkspaceMemberSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    """A person's role in a workspace on the wire."""
+
+    user = MemberUserSerializer(read_only=True)
+    role = serializers.CharField(read_only=True)
+    added_at = serializers.DateTimeField(source="created_at", read_only=True)
+
+
+class WorkspaceMemberListSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    items = WorkspaceMemberSerializer(many=True, read_only=True)
+
+
+class SetWorkspaceRoleSerializer(serializers.Serializer):  # type: ignore[type-arg]
+    role = serializers.ChoiceField(choices=[r.value for r in WorkspaceRole])

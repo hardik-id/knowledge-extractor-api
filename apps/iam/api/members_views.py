@@ -14,16 +14,16 @@ from apps.iam.routes import requires
 from apps.identity.models import User
 
 from .members_serializers import (
-    AddMemberSerializer,
-    ChangeRoleSerializer,
-    MemberListQuerySerializer,
-    MemberSerializer,
+    AddTenantMemberSerializer,
+    ChangeTenantRoleSerializer,
+    TenantMemberListQuerySerializer,
+    TenantMemberSerializer,
 )
 
 MemberList = inline_serializer(
     "TenantMemberList",
     {
-        "items": MemberSerializer(many=True),
+        "items": TenantMemberSerializer(many=True),
         "next": serializers.CharField(allow_null=True),
     },
 )
@@ -38,21 +38,23 @@ def _person(user_id: str) -> int:
 
 @requires(GET=Permission.TENANT_MEMBERS_LIST, POST=Permission.TENANT_MEMBERS_MANAGE)
 @extend_schema(
-    methods=["GET"], parameters=[MemberListQuerySerializer], responses=MemberList
+    methods=["GET"], parameters=[TenantMemberListQuerySerializer], responses=MemberList
 )
 @extend_schema(
-    methods=["POST"], request=AddMemberSerializer, responses=MemberSerializer
+    methods=["POST"],
+    request=AddTenantMemberSerializer,
+    responses=TenantMemberSerializer,
 )
 @api_view(["GET", "POST"])
 def members(request: Request, tenant_id: str) -> Response:
     """A tenant's members (any member may list), or add a person who has signed in."""
     user = cast(User, request.user)
     if request.method == "POST":
-        body = AddMemberSerializer(data=request.data)
+        body = AddTenantMemberSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         membership = services.add_tenant_member(user, tenant_id, **body.validated_data)
-        return Response(MemberSerializer(membership).data, status=201)
-    query = MemberListQuerySerializer(data=request.query_params)
+        return Response(TenantMemberSerializer(membership).data, status=201)
+    query = TenantMemberListQuerySerializer(data=request.query_params)
     query.is_valid(raise_exception=True)
     tenant = selectors.get_tenant(user, tenant_id, Permission.TENANT_MEMBERS_LIST)
     paginator: BasePagination = DefaultPagination()
@@ -60,12 +62,16 @@ def members(request: Request, tenant_id: str) -> Response:
         selectors.list_tenant_members(tenant, query.validated_data.get("search", "")),
         request,
     )
-    return paginator.get_paginated_response(MemberSerializer(page, many=True).data)
+    return paginator.get_paginated_response(
+        TenantMemberSerializer(page, many=True).data
+    )
 
 
 @requires(PUT=Permission.TENANT_MEMBERS_MANAGE, DELETE=Permission.TENANT_MEMBERS_MANAGE)
 @extend_schema(
-    methods=["PUT"], request=ChangeRoleSerializer, responses=MemberSerializer
+    methods=["PUT"],
+    request=ChangeTenantRoleSerializer,
+    responses=TenantMemberSerializer,
 )
 @extend_schema(methods=["DELETE"], responses={204: None})
 @api_view(["PUT", "DELETE"])
@@ -75,9 +81,9 @@ def member(request: Request, tenant_id: str, user_id: str) -> Response:
     if request.method == "DELETE":
         services.remove_tenant_member(user, tenant_id, _person(user_id))
         return Response(status=204)
-    body = ChangeRoleSerializer(data=request.data)
+    body = ChangeTenantRoleSerializer(data=request.data)
     body.is_valid(raise_exception=True)
     membership = services.change_member_role(
         user, tenant_id, _person(user_id), body.validated_data["role"]
     )
-    return Response(MemberSerializer(membership).data)
+    return Response(TenantMemberSerializer(membership).data)

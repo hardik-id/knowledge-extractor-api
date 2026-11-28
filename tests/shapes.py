@@ -325,3 +325,17 @@ def check_socket_message(value: Any) -> None:
         check_assistant_cleared_message(value)
     else:
         check_assistant_event(value)
+
+
+def check_me(value: Any) -> None:
+    """The signed-in person: ``GET /me``."""
+    o = obj(value, "me")
+    for key in ("name", "preferred_username"):
+        string(o.get(key), f"me.{key}")
+    number(o.get("id"), "me.id")
+    boolean(o.get("platform_admin"), "me.platform_admin")
+    for i, t in enumerate(array(o.get("tenants"), "me.tenants")):
+        tenant = obj(t, f"me.tenants[{i}]")
+        for key in ("id", "name"):
+            string(tenant.get(key), f"me.tenants[{i}].{key}")
+        one_of(tenant.get("role"), ("admin", "member"), f"me.tenants[{i}].role")

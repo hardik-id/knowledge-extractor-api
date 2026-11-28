@@ -65,3 +65,10 @@ def test_default_tenant() -> None:
     tenant = selectors.default_tenant()
     assert tenant.name == "Default"
     assert tenant.is_default
+
+
+def test_a_listed_oid_is_a_platform_admin_without_a_row(settings: object) -> None:
+    person = UserFactory()
+    settings.IAM_PLATFORM_ADMIN_OIDS = frozenset({person.oid})  # type: ignore[attr-defined]
+    assert selectors.is_platform_admin(person)
+    assert not selectors.is_platform_admin(UserFactory())

@@ -3,6 +3,7 @@
 from typing import Any
 from uuid import UUID
 
+from django.conf import settings
 from django.db.models.functions import Lower
 
 from .models import PlatformAdmin, Tenant, TenantMembership, WorkspaceMembership
@@ -14,8 +15,11 @@ def _active(user: Any) -> bool:
 
 
 def is_platform_admin(user: Any) -> bool:
+    """True for a listed ``oid`` (IAM_PLATFORM_ADMIN_OIDS) or a ``PlatformAdmin`` row."""
     if not _active(user):
         return False
+    if user.oid is not None and user.oid in settings.IAM_PLATFORM_ADMIN_OIDS:
+        return True
     return PlatformAdmin.objects.filter(user=user).exists()
 
 

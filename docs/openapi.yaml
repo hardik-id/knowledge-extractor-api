@@ -2406,10 +2406,34 @@ components:
         preferred_username:
           type: string
           readOnly: true
+        platform_admin:
+          type: boolean
+          readOnly: true
+        tenants:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeTenant'
+          readOnly: true
       required:
       - id
       - name
+      - platform_admin
       - preferred_username
+      - tenants
+    MeTenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          type: string
+      required:
+      - id
+      - name
+      - role
     Message:
       type: object
       properties:

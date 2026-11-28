@@ -17,7 +17,8 @@ class TenantMembershipFactory(factory.django.DjangoModelFactory):
         model = TenantMembership
 
     tenant = factory.SubFactory(TenantFactory)
-    user = factory.SubFactory(UserFactory)
+    # The person this makes is in this tenant only, so asking for Default works too.
+    user = factory.SubFactory(UserFactory, in_default_tenant=False)
     role = TenantRole.MEMBER
 
 

@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = get_user_model()
+        skip_postgeneration_save = True  # the hook below adds a row, not a field
 
     username = factory.Sequence(lambda n: f"user{n}")
     oid = factory.LazyFunction(uuid.uuid4)

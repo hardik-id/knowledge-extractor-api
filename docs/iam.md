@@ -77,9 +77,15 @@ What each route needs, declared with `@requires` on its view (`apps/iam/routes.p
 
 A workspace permission is checked against the person's role in the workspace of the route's run or workspace: no role is 404, a role without the permission 403 `forbidden`. A tenant admin or a platform admin with no role in the workspace gets 404 too (rule 1).
 
+A tenant permission is checked by `apps.iam.selectors.get_tenant(user, tenant_id, permission)`, the one way a request fetches a tenant: a tenant the person has no role in is 404 `tenant_not_found` (a platform admin sees every tenant), a tenant seen without the permission is 403. `tenant_permissions(user, tenant_id)` is what the person holds there, from their role and from being a platform admin.
+
+The sweep's rule for a route that needs one permission: a person whose roles hold it is answered, a person who sees the tenant or the workspace without it gets 403, anyone else 404. It calls each route as eight people (`ROLES` in the sweep): one in another tenant, one in no tenant, a member of the tenant with no role in the workspace, a tenant admin and a platform admin who are not members of the workspace, a viewer, an editor and the owner. A route whose rule is not one permission (a list that answers differently per person) says what each of them gets in `EXPECTED`. A new route adds its body to `BODIES` and nothing else.
+
+The iam routes are in `apps/iam/api`: `members_urls.py` (a tenant's members, finding people) and `tenants_urls.py` (tenants, a tenant's workspaces, platform admins, the audit list), joined in `urls.py`. Workspace members are routes of a workspace and live in `apps/workspaces/api`.
+
 ## Other apps
 
-Point at the models by string (`"iam.Tenant"`); call `apps.iam.selectors` (`is_platform_admin`, `tenant_role`, `tenants_of`, `default_tenant`), never the models. A new column an older running container may write without needs `db_default` as well as `default`.
+Point at the models by string (`"iam.Tenant"`); call `apps.iam.selectors` (`is_platform_admin`, `tenant_role`, `tenant_permissions`, `get_tenant`, `tenant_of_workspace`, `tenants_of`, `default_tenant`, `workspace_role`, `workspace_permissions`), never the models. A new column an older running container may write without needs `db_default` as well as `default`.
 
 ## Granting roles (`apps/iam/services.py`)
 

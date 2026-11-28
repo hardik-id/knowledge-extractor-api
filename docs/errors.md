@@ -54,6 +54,12 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `unknown_file` | 422 | One of the files is not part of this run. |
 | `last_platform_admin` | 409 | The last platform admin cannot be removed. |
 | `last_tenant_admin` | 409 | A tenant keeps at least one admin. |
+| `last_owner` | 409 | A workspace keeps at least one owner. |
+| `already_a_member` | 409 | This person is already a member. |
+| `not_a_tenant_member` | 422 | This person is not a member of the workspace's tenant. |
+| `tenant_name_taken` | 409 | A tenant with this name already exists. |
+| `tenant_not_empty` | 409 | This tenant still has workspaces. Delete or move them first. |
+| `default_tenant` | 409 | The default tenant cannot be deleted. |
 | `conflict` | 409 | The request conflicts with the current state. |
 | `validation_error` | 422 | The request is not valid. |
 | `server_error` | 500 | Something went wrong. |

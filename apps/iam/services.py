@@ -19,8 +19,8 @@ from apps.core.errors import ApiError
 
 from . import audit
 from .models import PlatformAdmin, Tenant, TenantMembership
-from .roles import Permission, PlatformAdminRole, TenantRole, permissions_of
-from .selectors import is_platform_admin, tenant_role
+from .roles import Permission, PlatformAdminRole, TenantRole
+from .selectors import is_platform_admin, tenant_permissions
 
 log = structlog.get_logger(__name__)
 
@@ -170,17 +170,10 @@ def _locked_tenant(actor: Any | None, tenant_id: UUID) -> Tenant:
     if tenant is None:
         raise ApiError("tenant_not_found")
     if actor is not None:
-        roles: list[Any] = []
-        if is_platform_admin(actor):
-            roles.append(PlatformAdminRole.PLATFORM_ADMIN)
-        member_role = tenant_role(actor, tenant.pk)
-        if member_role is not None:
-            roles.append(member_role)
-        if not roles:
+        held = tenant_permissions(actor, tenant.pk)
+        if not held:
             raise ApiError("tenant_not_found")
-        if not any(
-            Permission.TENANT_MEMBERS_MANAGE in permissions_of(r) for r in roles
-        ):
+        if Permission.TENANT_MEMBERS_MANAGE not in held:
             raise ApiError("forbidden")
     return tenant
 

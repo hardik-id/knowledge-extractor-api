@@ -74,6 +74,16 @@ ERRORS: dict[str, ErrorCode] = {
     "unknown_file": ErrorCode(422, "One of the files is not part of this run."),
     "last_platform_admin": ErrorCode(409, "The last platform admin cannot be removed."),
     "last_tenant_admin": ErrorCode(409, "A tenant keeps at least one admin."),
+    "last_owner": ErrorCode(409, "A workspace keeps at least one owner."),
+    "already_a_member": ErrorCode(409, "This person is already a member."),
+    "not_a_tenant_member": ErrorCode(
+        422, "This person is not a member of the workspace's tenant."
+    ),
+    "tenant_name_taken": ErrorCode(409, "A tenant with this name already exists."),
+    "tenant_not_empty": ErrorCode(
+        409, "This tenant still has workspaces. Delete or move them first."
+    ),
+    "default_tenant": ErrorCode(409, "The default tenant cannot be deleted."),
     "conflict": ErrorCode(409, "The request conflicts with the current state."),
     "validation_error": ErrorCode(422, "The request is not valid."),
     "server_error": ErrorCode(500, "Something went wrong."),

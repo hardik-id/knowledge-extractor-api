@@ -1,4 +1,4 @@
-"""outline(text): a pure function, no workspace."""
+"""outline(text): a pure function, no run view."""
 
 from apps.assistant.agents.openai_sdk.tools._structure import outline
 

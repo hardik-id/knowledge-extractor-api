@@ -16,7 +16,7 @@ from apps.assistant.agents.openai_sdk.tools._shared import (
     MAX_TOOL_CALLS,
     declare,
 )
-from apps.assistant.tests.fakes import FakeWorkspace
+from apps.assistant.tests.fakes import FakeRunView
 from apps.assistant.tests.openai_sdk.helpers import (
     SECRET_DOC,
     collect,
@@ -77,7 +77,7 @@ async def test_the_budget_counts_every_tool_together(
     calls = [read("a.md", f"r{n}") for n in range(MAX_TOOL_CALLS)]
     calls.append(function_call("probe", {}, call_id="p"))
     model = ScriptedModel([calls, [assistant_message("done")]])
-    await collect(OpenAIAgent(model), docs=FakeWorkspace({"a.md": "x"}))
+    await collect(OpenAIAgent(model), docs=FakeRunView({"a.md": "x"}))
     assert tool_outputs(model.calls[1])[-1].startswith("Error: at most")
 
 
@@ -128,7 +128,7 @@ async def test_each_call_is_one_span_in_the_replys_trace_without_content(
         ]
     )
     with telemetry.reply_span("m1", "openai"):
-        await collect(OpenAIAgent(model), docs=FakeWorkspace({"a.md": SECRET_DOC}))
+        await collect(OpenAIAgent(model), docs=FakeRunView({"a.md": SECRET_DOC}))
     (reply,) = otel.named("assistant.reply")
     spans = otel.named("assistant.tool")
     assert len(spans) == 3

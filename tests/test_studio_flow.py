@@ -1,9 +1,9 @@
 """One person walks the whole Studio flow, in the order the UI makes the calls.
 
-Through the API and a run socket, as the app does it: start a project, set its
+Through the API and a run socket, as the app does it: start a workspace, set its
 documents, shape the extraction configuration with the assistant, extract,
 review the records, extract again, read and restore versions, change the
-documents, clear the conversation, rename and delete the project. Every response and every socket message goes
+documents, clear the conversation, rename and delete the workspace. Every response and every socket message goes
 through the checker of its shape (``tests/shapes.py``), so a change that would
 break the UI's parser fails here. A second person sees none of it.
 
@@ -99,31 +99,31 @@ async def test_a_person_walks_the_whole_studio_flow() -> None:
     read = await call(me, "get", f"{API}/documents/{ADR}")
     assert read["ETag"] == f'"{etag}"'
 
-    # A project, on the list, with its empty run.
-    project = (
+    # A workspace, on the list, with its empty run.
+    workspace = (
         await call(
             me,
             "post",
-            f"{API}/projects",
+            f"{API}/workspaces",
             {"name": "ADRs"},
-            shapes.check_project,
+            shapes.check_workspace,
             201,
         )
     ).json()
-    assert (project["document_count"], project["configuration_version"]) == (0, 1)
-    project_url = f"{API}/projects/{project['id']}"
-    projects = (
-        await call(me, "get", f"{API}/projects", check=shapes.check_projects)
+    assert (workspace["document_count"], workspace["configuration_version"]) == (0, 1)
+    workspace_url = f"{API}/workspaces/{workspace['id']}"
+    workspaces = (
+        await call(me, "get", f"{API}/workspaces", check=shapes.check_workspaces)
     ).json()
-    assert [p["id"] for p in projects["items"]] == [project["id"]]
-    # A project from a template: version 1 is the template, and says so.
+    assert [p["id"] for p in workspaces["items"]] == [workspace["id"]]
+    # A workspace from a template: version 1 is the template, and says so.
     skill = (
         await call(
             me,
             "post",
-            f"{API}/projects",
+            f"{API}/workspaces",
             {"name": "Skills", "template_id": "skill"},
-            shapes.check_project,
+            shapes.check_workspace,
             201,
         )
     ).json()
@@ -147,9 +147,9 @@ async def test_a_person_walks_the_whole_studio_flow() -> None:
         )
     ).json()
     assert [t["name"] for t in skill_one["record_types"]] == ["Skill"]
-    await call(me, "delete", f"{API}/projects/{skill['id']}", expect=204)
+    await call(me, "delete", f"{API}/workspaces/{skill['id']}", expect=204)
 
-    run_id = project["run_id"]
+    run_id = workspace["run_id"]
     run = f"{API}/runs/{run_id}"
     empty = (await call(me, "get", run, check=shapes.check_run)).json()
     assert (empty["files"], empty["cells"]) == ([], [])
@@ -390,12 +390,12 @@ async def test_a_person_walks_the_whole_studio_flow() -> None:
         await call(me, "get", messages_url, check=shapes.check_assistant_messages)
     ).json()["messages"]
     assert len(thread) == 2
-    listed_project = (
-        await call(me, "get", project_url, check=shapes.check_project)
+    listed_workspace = (
+        await call(me, "get", workspace_url, check=shapes.check_workspace)
     ).json()
     assert (
-        listed_project["document_count"],
-        listed_project["configuration_version"],
+        listed_workspace["document_count"],
+        listed_workspace["configuration_version"],
     ) == (2, 4)
 
     # Clear the conversation: nothing else changes.
@@ -410,19 +410,19 @@ async def test_a_person_walks_the_whole_studio_flow() -> None:
         await call(me, "get", definition_url, check=shapes.check_saved_definition)
     ).json()["version"] == 4
 
-    # Rename the project; its run cannot be deleted on its own.
+    # Rename the workspace; its run cannot be deleted on its own.
     renamed = (
         await call(
             me,
             "patch",
-            project_url,
+            workspace_url,
             {"name": "Architecture decisions", "description": "Why we chose"},
-            shapes.check_project,
+            shapes.check_workspace,
         )
     ).json()
     assert renamed["name"] == "Architecture decisions"
     refused = await call(me, "delete", run, expect=409)
-    assert refused.json()["code"] == "run_belongs_to_project"
+    assert refused.json()["code"] == "run_belongs_to_workspace"
 
     # A second person sees none of it.
     other = await sync_to_async(UserFactory)()
@@ -452,25 +452,27 @@ async def test_a_person_walks_the_whole_studio_flow() -> None:
         ("get", f"{versions_url}/2", None),
         ("post", f"{versions_url}/2/restore", None),
         ("delete", messages_url, None),
-        ("get", project_url, None),
-        ("patch", project_url, {"name": "Mine now"}),
-        ("delete", project_url, None),
+        ("get", workspace_url, None),
+        ("patch", workspace_url, {"name": "Mine now"}),
+        ("delete", workspace_url, None),
         ("delete", run, None),
     ]
     for method, path, body in attempts:
         denied = await call(other, method, path, body, expect=404)
         assert "code" in denied.json(), f"{method} {path}"
-    nothing = await call(other, "get", f"{API}/projects", check=shapes.check_projects)
+    nothing = await call(
+        other, "get", f"{API}/workspaces", check=shapes.check_workspaces
+    )
     assert nothing.json()["items"] == []
     stranger = await open_socket_refused(other, created["id"])
     assert stranger == 4404
 
-    # Delete the project: it, its run and its socket are gone.
-    await call(me, "delete", project_url, expect=204)
-    await call(me, "get", project_url, expect=404)
+    # Delete the workspace: it, its run and its socket are gone.
+    await call(me, "delete", workspace_url, expect=204)
+    await call(me, "get", workspace_url, expect=404)
     await call(me, "get", run, expect=404)
     gone = (
-        await call(me, "get", f"{API}/projects", check=shapes.check_projects)
+        await call(me, "get", f"{API}/workspaces", check=shapes.check_workspaces)
     ).json()
     assert gone["items"] == []
     closed = await socket.receive_output(timeout=5)  # type: ignore[no-untyped-call]

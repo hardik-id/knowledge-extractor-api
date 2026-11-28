@@ -10,7 +10,7 @@ from agents.testing import (
 
 from apps.assistant.agents.openai_sdk import OpenAIAgent
 from apps.assistant.agents.openai_sdk.tools import propose_definition
-from apps.assistant.tests.fakes import FakeWorkspace
+from apps.assistant.tests.fakes import FakeRunView
 from apps.assistant.tests.openai_sdk.helpers import *  # noqa: F403
 from apps.assistant.tests.openai_sdk.helpers import (
     collect,
@@ -37,9 +37,7 @@ async def test_new_things_get_ids_and_the_definition_is_not_changed() -> None:
     )
     given = Draft.model_validate(bare())
     before = copy.deepcopy(given)
-    events = [
-        e async for e in OpenAIAgent(model).reply("hi", given, [], FakeWorkspace())
-    ]
+    events = [e async for e in OpenAIAgent(model).reply("hi", given, [], FakeRunView())]
     _, [proposal] = split(events)
     assert all(rt.id for rt in proposal.definition.record_types)
     assert all(f.id for rt in proposal.definition.record_types for f in rt.fields)

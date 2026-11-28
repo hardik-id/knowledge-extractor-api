@@ -40,7 +40,7 @@ async def _read(state: ReplyContext, arguments: str) -> str:
         )
     state.reads += 1
     try:
-        text = await state.workspace.read(document_id)
+        text = await state.run_view.read(document_id)
     except ApiError:
         return error("this document cannot be read now.")
     sample = clip(text, SAMPLE_CHARS)

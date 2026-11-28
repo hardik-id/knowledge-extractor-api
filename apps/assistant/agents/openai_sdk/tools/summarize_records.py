@@ -99,7 +99,7 @@ def _lines(types: dict[str, _Type]) -> list[str]:
 
 async def _summarize(state: ReplyContext, arguments: str) -> str:
     try:
-        files = [f for f in await state.workspace.extractions() if f.records]
+        files = [f for f in await state.run_view.extractions() if f.records]
     except ApiError:
         return error("the records of this run cannot be read now.")
     if not files:

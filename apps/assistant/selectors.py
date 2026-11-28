@@ -28,7 +28,7 @@ def list_messages(user: User, run_id: Any) -> list[Message]:
     return list(Message.objects.filter(run_id=run.pk))
 
 
-class OwnerWorkspace:
+class OwnerRunView:
     """One read-only view of a run, as an agent may look at it: as the run's owner.
 
     Only the run's own files can be read or previewed; any other document id is
@@ -102,11 +102,11 @@ def _record_view(record: Any, values: Any) -> RecordView:
     )
 
 
-def run_workspace(message: Message) -> OwnerWorkspace:
-    """The workspace of the run ``message`` belongs to, read as the run's owner."""
-    return workspace_of_run(message.run)
+def run_run_view(message: Message) -> OwnerRunView:
+    """The run view of the run ``message`` belongs to, read as the run's owner."""
+    return run_view_of(message.run)
 
 
-def workspace_of_run(run: Any) -> OwnerWorkspace:
-    """The workspace of ``run``, read as its owner."""
-    return OwnerWorkspace(run)
+def run_view_of(run: Any) -> OwnerRunView:
+    """The run view of ``run``, read as its owner."""
+    return OwnerRunView(run)

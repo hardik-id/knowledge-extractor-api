@@ -115,7 +115,7 @@ class Request:
     text: str
     definition: Draft
     history: list[Turn]
-    workspace: selectors.OwnerWorkspace
+    run_view: selectors.OwnerRunView
 
 
 def start_reply(message_id: Any) -> Request | None:
@@ -154,7 +154,7 @@ def start_reply(message_id: Any) -> Request | None:
         text=asked.text,
         definition=Draft.model_validate(asked.definition),
         history=history,
-        workspace=selectors.run_workspace(message),
+        run_view=selectors.run_run_view(message),
     )
 
 

@@ -55,7 +55,7 @@ async def _stream(
     """Run the agent and store each event. False when someone else closed the reply."""
     agent = get_agent()
     stream = agent.reply(
-        request.text, request.definition, request.history, request.workspace
+        request.text, request.definition, request.history, request.run_view
     )
     async with aclosing(stream) as events:  # type: ignore[type-var]
         async for event in events:

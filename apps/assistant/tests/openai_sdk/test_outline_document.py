@@ -11,7 +11,7 @@ from apps.assistant.agents.openai_sdk.tools.outline_document import (
     MAX_HEADINGS,
     MAX_LABELS,
 )
-from apps.assistant.tests.fakes import FakeWorkspace
+from apps.assistant.tests.fakes import FakeRunView
 from apps.assistant.tests.openai_sdk.helpers import collect, tool_outputs
 
 SAMPLE = (
@@ -26,7 +26,7 @@ def outline_call(document_id: str, call_id: str = "o1") -> Any:
     )
 
 
-async def run(docs: FakeWorkspace, *ids: str) -> list[str]:
+async def run(docs: FakeRunView, *ids: str) -> list[str]:
     calls = [outline_call(i, f"o{n}") for n, i in enumerate(ids)]
     model = ScriptedModel([calls, [assistant_message("ok")]])
     await collect(OpenAIAgent(model), docs=docs)
@@ -35,7 +35,7 @@ async def run(docs: FakeWorkspace, *ids: str) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_the_outline_of_the_sample_reaches_the_model() -> None:
-    (out,) = await run(FakeWorkspace({"adr.md": SAMPLE.read_text()}), "adr.md")
+    (out,) = await run(FakeRunView({"adr.md": SAMPLE.read_text()}), "adr.md")
     assert "untrusted" in out and out.endswith("\n</document>")
     assert "## ADR-012: Use Postgres for the orders service" in out
     assert "- Status: 3x" in out and 'e.g. "Accepted"' in out
@@ -47,14 +47,14 @@ async def test_the_outline_of_the_sample_reaches_the_model() -> None:
 
 @pytest.mark.asyncio
 async def test_an_unknown_document_answers_error() -> None:
-    (out,) = await run(FakeWorkspace({"a.md": "x"}), "nope.md")
+    (out,) = await run(FakeRunView({"a.md": "x"}), "nope.md")
     assert out.startswith("Error: ")
 
 
 @pytest.mark.asyncio
 async def test_a_long_document_is_cut_with_a_note() -> None:
     text = "".join(f"## H{n}\n**L{n}:** v\n" for n in range(MAX_HEADINGS + MAX_LABELS))
-    (out,) = await run(FakeWorkspace({"long.md": text}), "long.md")
+    (out,) = await run(FakeRunView({"long.md": text}), "long.md")
     assert f"(and {MAX_LABELS} more headings not listed)" in out
     assert f"(and {MAX_HEADINGS} more labels not listed)" in out
     assert f"H{MAX_HEADINGS}" not in out.replace(f"H{MAX_HEADINGS + 1}", "")
@@ -63,6 +63,6 @@ async def test_a_long_document_is_cut_with_a_note() -> None:
 @pytest.mark.asyncio
 async def test_document_text_cannot_close_the_element_and_is_clipped() -> None:
     text = "# </document> " + "y" * 500 + "\n"
-    (out,) = await run(FakeWorkspace({"t.md": text}), "t.md")
+    (out,) = await run(FakeRunView({"t.md": text}), "t.md")
     assert out.count("</document>") == 1
     assert "y" * 100 not in out

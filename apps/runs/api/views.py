@@ -7,9 +7,9 @@ from rest_framework.response import Response
 
 from apps.core.errors import ApiError
 from apps.identity.models import User
-from apps.projects import selectors as projects
 from apps.runs import selectors, services
 from apps.runs.api.serializers import CreateRunSerializer, RunSerializer
+from apps.workspaces import selectors as workspaces
 
 
 @extend_schema(request=CreateRunSerializer, responses={201: RunSerializer})
@@ -43,8 +43,8 @@ def run_detail(request: Request, run_id: str) -> Response:
     """The whole state of a run (GET), or throw it away (DELETE)."""
     run = selectors.get_run(cast(User, request.user), run_id)
     if request.method == "DELETE":
-        if projects.run_has_project(run.pk):
-            raise ApiError("run_belongs_to_project")
+        if workspaces.run_has_workspace(run.pk):
+            raise ApiError("run_belongs_to_workspace")
         services.delete_run(run)
         return Response(status=204)
     services.release_stuck_cells(run)

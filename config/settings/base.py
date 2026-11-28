@@ -88,7 +88,7 @@ INSTALLED_APPS = [
     "apps.realtime",
     "apps.extraction",
     "apps.assistant",
-    "apps.projects",
+    "apps.workspaces",
 ]
 
 # ---------------------------------------------------------------------------

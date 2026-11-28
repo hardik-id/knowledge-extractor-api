@@ -21,7 +21,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `method_not_allowed` | 405 | Method not allowed. |
 | `document_not_found` | 404 | Document not found. |
 | `run_not_found` | 404 | Run not found. |
-| `project_not_found` | 404 | Project not found. |
+| `workspace_not_found` | 404 | Workspace not found. |
 | `file_not_found` | 404 | File not found. |
 | `extraction_not_found` | 404 | This file has no extraction yet. |
 | `record_not_found` | 404 | Record not found. |
@@ -47,7 +47,7 @@ The registry is `ERRORS` in `apps/core/errors.py`.
 | `unknown_template` | 422 | This template does not exist. |
 | `assistant_busy` | 409 | The assistant is still answering. |
 | `empty_message` | 422 | Write a message first. |
-| `run_belongs_to_project` | 409 | This run belongs to a project. Delete the project instead. |
+| `run_belongs_to_workspace` | 409 | This run belongs to a workspace. Delete the workspace instead. |
 | `execution_in_progress` | 409 | This stage is already running. |
 | `unknown_file` | 422 | One of the files is not part of this run. |
 | `conflict` | 409 | The request conflicts with the current state. |

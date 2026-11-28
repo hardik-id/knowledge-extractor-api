@@ -47,7 +47,7 @@ async def _outline(state: ReplyContext, arguments: str) -> str:
             "this run has no document with that id. Use an id from the list in the request."
         )
     try:
-        text = await state.workspace.read(document_id)
+        text = await state.run_view.read(document_id)
     except ApiError:
         return error("this document cannot be read now.")
     found = outline(text)

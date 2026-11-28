@@ -1,4 +1,4 @@
-"""/api/v1/projects, through the API."""
+"""/api/v1/workspaces, through the API."""
 
 from typing import Any
 
@@ -9,14 +9,14 @@ from django.test.utils import CaptureQueriesContext
 from apps.assistant.tests.factories import MessageFactory
 from apps.extraction.tests.factories import DefinitionVersionFactory
 from apps.identity.tests.factories import UserFactory
-from apps.projects.models import Project
-from apps.projects.tests.factories import ProjectFactory
 from apps.runs.models import Run
 from apps.runs.tests.test_api import item
+from apps.workspaces.models import Workspace
+from apps.workspaces.tests.factories import WorkspaceFactory
 
 pytestmark = pytest.mark.django_db
 
-URL = "/api/v1/projects"
+URL = "/api/v1/workspaces"
 
 
 @pytest.fixture
@@ -107,22 +107,24 @@ def test_list_makes_a_fixed_number_of_queries(client: Any) -> None:
 
 
 def test_rename_and_describe(client: Any) -> None:
-    project = make(client)
+    workspace = make(client)
     response = client.patch(
-        f"{URL}/{project['id']}", {"name": "Renamed", "description": "d"}, format="json"
+        f"{URL}/{workspace['id']}",
+        {"name": "Renamed", "description": "d"},
+        format="json",
     )
     assert response.status_code == 200
     assert response.json()["name"] == "Renamed"
-    assert client.get(f"{URL}/{project['id']}").json()["description"] == "d"
-    only = client.patch(f"{URL}/{project['id']}", {"name": "Again"}, format="json")
+    assert client.get(f"{URL}/{workspace['id']}").json()["description"] == "d"
+    only = client.patch(f"{URL}/{workspace['id']}", {"name": "Again"}, format="json")
     assert only.json()["description"] == "d"
 
 
 @pytest.mark.parametrize("name", ["", "   ", "x" * 121, None])
 def test_a_bad_name_is_422(client: Any, name: Any) -> None:
     assert client.post(URL, {"name": name}, format="json").status_code == 422
-    project = make(client)
-    response = client.patch(f"{URL}/{project['id']}", {"name": name}, format="json")
+    workspace = make(client)
+    response = client.patch(f"{URL}/{workspace['id']}", {"name": name}, format="json")
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
 
@@ -132,25 +134,25 @@ def test_a_missing_name_is_422(client: Any) -> None:
 
 
 def test_delete_removes_the_run(client: Any) -> None:
-    project = make(client)
-    assert client.delete(f"{URL}/{project['id']}").status_code == 204
-    assert client.get(f"{URL}/{project['id']}").status_code == 404
-    gone = client.get(f"/api/v1/runs/{project['run_id']}")
+    workspace = make(client)
+    assert client.delete(f"{URL}/{workspace['id']}").status_code == 204
+    assert client.get(f"{URL}/{workspace['id']}").status_code == 404
+    gone = client.get(f"/api/v1/runs/{workspace['run_id']}")
     assert gone.status_code == 404
     assert gone.json()["code"] == "run_not_found"
-    assert not Project.objects.exists()
+    assert not Workspace.objects.exists()
 
 
-def test_the_run_of_a_project_cannot_be_deleted_alone(client: Any) -> None:
-    project = make(client)
-    response = client.delete(f"/api/v1/runs/{project['run_id']}")
+def test_the_run_of_a_workspace_cannot_be_deleted_alone(client: Any) -> None:
+    workspace = make(client)
+    response = client.delete(f"/api/v1/runs/{workspace['run_id']}")
     assert response.status_code == 409
-    assert response.json()["code"] == "run_belongs_to_project"
-    assert Run.objects.filter(pk=project["run_id"]).exists()
-    assert client.get(f"{URL}/{project['id']}").status_code == 200
+    assert response.json()["code"] == "run_belongs_to_workspace"
+    assert Run.objects.filter(pk=workspace["run_id"]).exists()
+    assert client.get(f"{URL}/{workspace['id']}").status_code == 200
 
 
-def test_a_run_without_a_project_still_deletes(client: Any, user: Any) -> None:
+def test_a_run_without_a_workspace_still_deletes(client: Any, user: Any) -> None:
     from apps.runs.tests.factories import RunFactory
 
     run = RunFactory(owner=user)
@@ -159,29 +161,29 @@ def test_a_run_without_a_project_still_deletes(client: Any, user: Any) -> None:
 
 def test_someone_else_sees_nothing(client: Any) -> None:
     other = UserFactory()
-    theirs = ProjectFactory(owner=other)
+    theirs = WorkspaceFactory(owner=other)
     assert client.get(URL).json() == {"items": [], "next": None}
     for call in (client.get, client.delete):
         response = call(f"{URL}/{theirs.pk}")
         assert response.status_code == 404
-        assert response.json()["code"] == "project_not_found"
+        assert response.json()["code"] == "workspace_not_found"
     patch = client.patch(f"{URL}/{theirs.pk}", {"name": "x"}, format="json")
     assert patch.status_code == 404
-    assert Project.objects.filter(pk=theirs.pk).exists()
+    assert Workspace.objects.filter(pk=theirs.pk).exists()
 
 
 def test_an_unknown_id_is_404(client: Any) -> None:
     for pk in ("00000000-0000-0000-0000-000000000000", "nope"):
         response = client.get(f"{URL}/{pk}")
         assert response.status_code == 404
-        assert response.json()["code"] == "project_not_found"
+        assert response.json()["code"] == "workspace_not_found"
 
 
 def test_without_a_token_is_401(api_client: Any) -> None:
     assert api_client.get(URL).status_code == 401
 
 
-def test_a_change_to_a_record_moves_the_project_up(client: Any) -> None:
+def test_a_change_to_a_record_moves_the_workspace_up(client: Any) -> None:
     from apps.extraction.tests.factories import (
         ExtractionFactory,
         ExtractionRecordFactory,
@@ -199,46 +201,46 @@ def test_a_change_to_a_record_moves_the_project_up(client: Any) -> None:
     assert two["id"] in [p["id"] for p in client.get(URL).json()["items"]]
 
 
-def versions_of(client: Any, project: dict[str, Any]) -> list[dict[str, Any]]:
-    url = f"/api/v1/runs/{project['run_id']}/stages/extract/definition/versions"
+def versions_of(client: Any, workspace: dict[str, Any]) -> list[dict[str, Any]]:
+    url = f"/api/v1/runs/{workspace['run_id']}/stages/extract/definition/versions"
     return list(client.get(url).json()["items"])
 
 
-def definition_of(client: Any, project: dict[str, Any]) -> dict[str, Any]:
-    url = f"/api/v1/runs/{project['run_id']}/stages/extract/definition"
+def definition_of(client: Any, workspace: dict[str, Any]) -> dict[str, Any]:
+    url = f"/api/v1/runs/{workspace['run_id']}/stages/extract/definition"
     return dict(client.get(url).json())
 
 
-def test_a_project_without_a_template_starts_from_adr(client: Any) -> None:
-    project = make(client)
-    assert project["configuration_version"] == 1
-    assert [v["note"] for v in versions_of(client, project)] == [
+def test_a_workspace_without_a_template_starts_from_adr(client: Any) -> None:
+    workspace = make(client)
+    assert workspace["configuration_version"] == 1
+    assert [v["note"] for v in versions_of(client, workspace)] == [
         "From template: Architecture decision records"
     ]
-    assert [t["name"] for t in definition_of(client, project)["record_types"]] == [
+    assert [t["name"] for t in definition_of(client, workspace)["record_types"]] == [
         "ADR"
     ]
 
 
-def test_a_project_from_a_template_starts_with_its_configuration(client: Any) -> None:
-    project = make(client, template_id="policy-rule")
-    assert project["configuration_version"] == 1
-    (version,) = versions_of(client, project)
+def test_a_workspace_from_a_template_starts_with_its_configuration(client: Any) -> None:
+    workspace = make(client, template_id="policy-rule")
+    assert workspace["configuration_version"] == 1
+    (version,) = versions_of(client, workspace)
     assert version["note"].startswith("From template: ")
-    definition = definition_of(client, project)
+    definition = definition_of(client, workspace)
     assert [t["name"] for t in definition["record_types"]] == ["Rule"]
     assert definition["output"]["format"] == "json"
 
 
-def test_an_unknown_template_is_422_and_leaves_no_project(client: Any) -> None:
+def test_an_unknown_template_is_422_and_leaves_no_workspace(client: Any) -> None:
     response = client.post(URL, {"name": "X", "template_id": "nope"}, format="json")
     assert response.status_code == 422
     assert response.json()["code"] == "unknown_template"
-    assert Project.objects.count() == 0
+    assert Workspace.objects.count() == 0
     assert Run.objects.count() == 0
 
 
-def test_two_projects_from_one_template_share_nothing(client: Any) -> None:
+def test_two_workspaces_from_one_template_share_nothing(client: Any) -> None:
     one = make(client, "One", template_id="skill")
     two = make(client, "Two", template_id="skill")
     draft = definition_of(client, one)
@@ -256,3 +258,31 @@ def test_two_projects_from_one_template_share_nothing(client: Any) -> None:
     assert definition_of(client, other)["prompt"] != "Changed"
     templates = client.get("/api/v1/definition-templates").json()["items"]
     assert all(t["definition"]["prompt"] != "Changed" for t in templates)
+
+
+# --- the old paths, until the UI has moved --------------------------------------------
+
+
+def test_the_old_paths_answer_through_the_same_views(client: Any) -> None:
+    made = client.post("/api/v1/projects", {"name": "Old"}, format="json")
+    assert made.status_code == 201
+    one = made.json()
+    assert client.get(f"{URL}/{one['id']}").json() == one
+    assert [w["id"] for w in client.get("/api/v1/projects").json()["items"]] == [
+        one["id"]
+    ]
+    old = f"/api/v1/projects/{one['id']}"
+    assert client.get(old).json() == one
+    assert client.patch(old, {"name": "New"}, format="json").json()["name"] == "New"
+    assert client.delete(old).status_code == 204
+    assert client.get(f"{URL}/{one['id']}").status_code == 404
+
+
+def test_the_old_paths_are_deprecated_in_the_schema(client: Any) -> None:
+    paths = client.get(
+        "/api/schema", HTTP_ACCEPT="application/vnd.oai.openapi+json"
+    ).json()["paths"]
+    for path in ("/projects", "/projects/{project_id}"):
+        assert all(op["deprecated"] for op in paths[path].values())
+    for path in ("/workspaces", "/workspaces/{workspace_id}"):
+        assert not any(op.get("deprecated") for op in paths[path].values())

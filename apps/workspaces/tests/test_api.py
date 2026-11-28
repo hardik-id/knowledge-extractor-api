@@ -270,6 +270,9 @@ def test_the_projects_paths_answer_404(client: Any) -> None:
     for path in ("/api/v1/projects", "/api/v1/projects/abc"):
         for method in (client.get, client.delete):
             assert method(path).status_code == 404
+    gone = client.get("/api/v1/projects")
+    assert gone["Content-Type"].startswith("application/json")
+    assert gone.json() == {"code": "not_found", "message": "Not found."}
     assert (
         client.post("/api/v1/projects", {"name": "Old"}, format="json").status_code
         == 404
